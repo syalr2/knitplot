@@ -1,0 +1,49 @@
+name: Bug report
+description: Tell us about something in KnitPlot that is not working as expected.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve KnitPlot. Do not include an API key, private chart, or private reference image.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open…
+        2. Choose…
+        3. See…
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Safari 18 on macOS, Chrome 140 on Windows, etc.
+    validations:
+      required: true
+  - type: dropdown
+    id: api
+    attributes:
+      label: Was an AI feature involved?
+      options:
+        - No
+        - Yes
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Add a screenshot if it is safe to share. Remove any private information first.

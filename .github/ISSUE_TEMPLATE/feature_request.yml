@@ -1,0 +1,30 @@
+name: Feature idea
+description: Suggest an improvement for KnitPlot.
+title: "[Idea]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do?
+      description: Describe the knitting or chart-making need in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: How do you handle this now?
+      description: Tell us about any workaround or other tool you currently use.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What might the feature look like?
+      description: A rough idea is enough; it does not need to be a finished design.
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: KnitPlot principles
+      options:
+        - label: This would still leave the core chart maker useful without an API key.
+          required: true
