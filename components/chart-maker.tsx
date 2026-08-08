@@ -25,12 +25,21 @@ const INITIAL_TAB_ID = "chart-initial";
 const MAX_CHART_TABS = 8;
 const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
 
-type ChartTab = { id: string; document: ChartDocument; knitProgress: KnitProgress };
+type RepeatStyle = "normal" | "mirrored";
+type PreviewSettings = {
+  repeatX: number;
+  repeatY: number;
+  repeatStyle: RepeatStyle;
+  renderedRepeatX: number;
+  renderedRepeatY: number;
+  renderedRepeatStyle: RepeatStyle;
+};
+type ChartTab = { id: string; document: ChartDocument; knitProgress: KnitProgress; preview: PreviewSettings };
 type TabHistory = { past: ChartDocument[]; future: ChartDocument[] };
 type SelectionClipboard = { tabId: string; cells: string[][] };
 type WorkspaceSave = {
   format: "knitplot-workspace";
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   activeTabId: string;
   tabs: ChartTab[];
 };
@@ -39,22 +48,44 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function normalizedRepeat(value: number | undefined, fallback = 1) {
+  return typeof value === "number" && Number.isFinite(value) ? clamp(Math.round(value), 1, 3) : fallback;
+}
+
+function createPreviewSettings(saved?: Partial<PreviewSettings>): PreviewSettings {
+  const repeatX = normalizedRepeat(saved?.repeatX);
+  const repeatY = normalizedRepeat(saved?.repeatY);
+  const repeatStyle: RepeatStyle = saved?.repeatStyle === "mirrored" ? "mirrored" : "normal";
+  return {
+    repeatX,
+    repeatY,
+    repeatStyle,
+    renderedRepeatX: normalizedRepeat(saved?.renderedRepeatX, repeatX),
+    renderedRepeatY: normalizedRepeat(saved?.renderedRepeatY, repeatY),
+    renderedRepeatStyle: saved?.renderedRepeatStyle === "mirrored" ? "mirrored" : repeatStyle,
+  };
+}
+
 export function ChartMaker() {
-  const [tabs, setTabs] = useState<ChartTab[]>([{ id: INITIAL_TAB_ID, document: cloneDocument(defaultDocument), knitProgress: { ...defaultKnitProgress } }]);
+  const [tabs, setTabs] = useState<ChartTab[]>([{
+    id: INITIAL_TAB_ID,
+    document: cloneDocument(defaultDocument),
+    knitProgress: { ...defaultKnitProgress },
+    preview: createPreviewSettings(),
+  }]);
   const [activeTabId, setActiveTabId] = useState(INITIAL_TAB_ID);
-  const document = tabs.find((tab) => tab.id === activeTabId)?.document ?? tabs[0].document;
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const document = activeTab.document;
   const [tool, setTool] = useState<Tool>("pencil");
   const [selectedColor, setSelectedColor] = useState(defaultDocument.palette[1].id);
   const [histories, setHistories] = useState<Record<string, TabHistory>>({
     [INITIAL_TAB_ID]: { past: [], future: [] },
   });
-  const [repeatX, setRepeatX] = useState(1);
-  const [repeatY, setRepeatY] = useState(1);
-  const [repeatStyle, setRepeatStyle] = useState<"normal" | "mirrored">("normal");
-  const [previewDocument, setPreviewDocument] = useState<ChartDocument>(() => cloneDocument(defaultDocument));
-  const [previewRepeatX, setPreviewRepeatX] = useState(1);
-  const [previewRepeatY, setPreviewRepeatY] = useState(1);
-  const [previewRepeatStyle, setPreviewRepeatStyle] = useState<"normal" | "mirrored">("normal");
+  const [previewDocuments, setPreviewDocuments] = useState<Record<string, ChartDocument>>({
+    [INITIAL_TAB_ID]: cloneDocument(defaultDocument),
+  });
+  const preview = activeTab.preview;
+  const previewDocument = previewDocuments[activeTabId] ?? document;
   const [chartZoom, setChartZoom] = useState(100);
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [selectionClipboard, setSelectionClipboard] = useState<SelectionClipboard | null>(null);
@@ -83,6 +114,12 @@ export function ChartMaker() {
         : update;
       return { ...tab, document: nextDocument };
     }));
+  }
+
+  function updatePreviewSettings(update: Partial<PreviewSettings>) {
+    setTabs((currentTabs) => currentTabs.map((tab) => tab.id === activeTabId
+      ? { ...tab, preview: { ...tab.preview, ...update } }
+      : tab));
   }
 
   function setHistoryPart(key: "past" | "future", update: SetStateAction<ChartDocument[]>) {
@@ -119,6 +156,7 @@ export function ChartMaker() {
             return {
               id: tab.id,
               document: savedDocument,
+              preview: createPreviewSettings(tab.preview),
               knitProgress: {
                 ...defaultKnitProgress,
                 ...savedProgress,
@@ -133,11 +171,16 @@ export function ChartMaker() {
           setActiveTabId(savedActiveId);
           setHistories(Object.fromEntries(savedTabs.map((tab) => [tab.id, { past: [], future: [] }])));
           setSelectedColor(savedActiveDocument.palette[1]?.id ?? savedActiveDocument.palette[0].id);
-          setPreviewDocument(cloneDocument(savedActiveDocument));
+          setPreviewDocuments(Object.fromEntries(savedTabs.map((tab) => [tab.id, cloneDocument(tab.document)])));
         } else {
           const savedDocument = cloneDocument(parsed as ChartDocument);
-          setTabs([{ id: INITIAL_TAB_ID, document: savedDocument, knitProgress: { ...defaultKnitProgress } }]);
-          setPreviewDocument(cloneDocument(savedDocument));
+          setTabs([{
+            id: INITIAL_TAB_ID,
+            document: savedDocument,
+            knitProgress: { ...defaultKnitProgress },
+            preview: createPreviewSettings(),
+          }]);
+          setPreviewDocuments({ [INITIAL_TAB_ID]: cloneDocument(savedDocument) });
         }
       }
     } catch {
@@ -152,7 +195,7 @@ export function ChartMaker() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       try {
-        const workspace: WorkspaceSave = { format: "knitplot-workspace", version: 3, activeTabId, tabs };
+        const workspace: WorkspaceSave = { format: "knitplot-workspace", version: 4, activeTabId, tabs };
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
       } catch {
         // Private browsing and full storage quotas should not interrupt editing.
@@ -375,10 +418,12 @@ export function ChartMaker() {
   }
 
   function refreshPreview() {
-    setPreviewDocument(cloneDocument(document));
-    setPreviewRepeatX(repeatX);
-    setPreviewRepeatY(repeatY);
-    setPreviewRepeatStyle(repeatStyle);
+    setPreviewDocuments((current) => ({ ...current, [activeTabId]: cloneDocument(document) }));
+    updatePreviewSettings({
+      renderedRepeatX: preview.repeatX,
+      renderedRepeatY: preview.repeatY,
+      renderedRepeatStyle: preview.repeatStyle,
+    });
   }
 
   const draftWidth = clamp(Math.round(Number(dimensionDraft.width) || 0), 1, 100);
@@ -474,13 +519,6 @@ export function ChartMaker() {
     setTool("pencil");
     setSelection(null);
     setChartZoom(100);
-    setRepeatX(1);
-    setRepeatY(1);
-    setRepeatStyle("normal");
-    setPreviewDocument(cloneDocument(nextDocument));
-    setPreviewRepeatX(1);
-    setPreviewRepeatY(1);
-    setPreviewRepeatStyle("normal");
     setResizeDialogOpen(false);
     setSelectionClipboard(null);
   }
@@ -497,7 +535,13 @@ export function ChartMaker() {
     if (tabs.length >= MAX_CHART_TABS) return;
     const id = `chart-${crypto.randomUUID()}`;
     const nextDocument = cloneDocument(defaultDocument);
-    setTabs((current) => [...current, { id, document: nextDocument, knitProgress: { ...defaultKnitProgress } }]);
+    setTabs((current) => [...current, {
+      id,
+      document: nextDocument,
+      knitProgress: { ...defaultKnitProgress },
+      preview: createPreviewSettings(),
+    }]);
+    setPreviewDocuments((current) => ({ ...current, [id]: cloneDocument(nextDocument) }));
     setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
     setActiveTabId(id);
     prepareTabView(nextDocument);
@@ -507,7 +551,16 @@ export function ChartMaker() {
     if (tabs.length >= MAX_CHART_TABS) return;
     const id = `chart-${crypto.randomUUID()}`;
     const nextDocument = cloneDocument({ ...document, name: `${document.name || "Untitled chart"} copy` });
-    setTabs((current) => [...current, { id, document: nextDocument, knitProgress: { ...defaultKnitProgress } }]);
+    setTabs((current) => [...current, {
+      id,
+      document: nextDocument,
+      knitProgress: { ...defaultKnitProgress },
+      preview: { ...preview },
+    }]);
+    setPreviewDocuments((current) => ({
+      ...current,
+      [id]: cloneDocument(current[activeTabId] ?? document),
+    }));
     setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
     setActiveTabId(id);
     prepareTabView(nextDocument);
@@ -546,6 +599,11 @@ export function ChartMaker() {
       delete next[id];
       return next;
     });
+    setPreviewDocuments((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     if (id === activeTabId) {
       const nextTab = remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)];
       setActiveTabId(nextTab.id);
@@ -554,7 +612,10 @@ export function ChartMaker() {
     setClosingTabId(null);
   }
 
-  const previewOutdated = JSON.stringify(document) !== JSON.stringify(previewDocument) || repeatX !== previewRepeatX || repeatY !== previewRepeatY || repeatStyle !== previewRepeatStyle;
+  const previewOutdated = JSON.stringify(document) !== JSON.stringify(previewDocument)
+    || preview.repeatX !== preview.renderedRepeatX
+    || preview.repeatY !== preview.renderedRepeatY
+    || preview.repeatStyle !== preview.renderedRepeatStyle;
   const knitProgress = tabs.find((tab) => tab.id === activeTabId)?.knitProgress ?? defaultKnitProgress;
 
   return (
@@ -736,13 +797,13 @@ export function ChartMaker() {
           <div className="preview-content">
             <div className="repeat-controls">
               <span>Repeats</span>
-              <label className="repeat-style">Style<select value={repeatStyle} onChange={(event) => setRepeatStyle(event.target.value as "normal" | "mirrored")}><option value="normal">Normal</option><option value="mirrored">Mirrored</option></select></label>
-              <label>Across<select value={repeatX} onChange={(event) => setRepeatX(Number(event.target.value))}><option>1</option><option>2</option><option>3</option></select></label>
-              <label>Down<select value={repeatY} onChange={(event) => setRepeatY(Number(event.target.value))}><option>1</option><option>2</option><option>3</option></select></label>
+              <label className="repeat-style">Style<select value={preview.repeatStyle} onChange={(event) => updatePreviewSettings({ repeatStyle: event.target.value as RepeatStyle })}><option value="normal">Normal</option><option value="mirrored">Mirrored</option></select></label>
+              <label>Across<select value={preview.repeatX} onChange={(event) => updatePreviewSettings({ repeatX: Number(event.target.value) })}><option>1</option><option>2</option><option>3</option></select></label>
+              <label>Down<select value={preview.repeatY} onChange={(event) => updatePreviewSettings({ repeatY: Number(event.target.value) })}><option>1</option><option>2</option><option>3</option></select></label>
               <button className="primary-button refresh-preview-button" onClick={refreshPreview}>Refresh preview</button>
             </div>
             {previewOutdated ? <p className="preview-stale-note" role="status">Preview needs a refresh.</p> : null}
-            <KnitPreview document={previewDocument} repeatX={previewRepeatX} repeatY={previewRepeatY} repeatStyle={previewRepeatStyle} canvasRef={previewCanvasRef} />
+            <KnitPreview document={previewDocument} repeatX={preview.renderedRepeatX} repeatY={preview.renderedRepeatY} repeatStyle={preview.renderedRepeatStyle} canvasRef={previewCanvasRef} />
             <p className="preview-note">This is an approximate fabric view using your gauge and colours.</p>
           </div>
         </details>
