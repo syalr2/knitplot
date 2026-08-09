@@ -15,9 +15,12 @@
     "check": "npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.7.1",
+    "@neondatabase/serverless": "^1.1.0",
     "next": "16.3.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

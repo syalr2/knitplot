@@ -2,13 +2,11 @@
 
 KnitPlot is a local-first, open-source colourwork chart maker for knitters. Draw charts stitch by stitch, turn an image into a limited-colour chart, preview the result as knitted fabric, and follow it row by row in Knit Mode.
 
-The core app is free to use and does not need an account, a server, or an API key. Optional image generation and prompt-based editing use your own OpenAI API key.
+The core app is free to use and does not need an account or API key. Optional accounts add private cross-device chart saves. Image generation and prompt-based editing use each user's own OpenAI API key.
 
 ## Use KnitPlot online
 
-Open the hosted chart maker at [knitplot.art](https://knitplot.art). The non-AI tools work without an account and save the current workspace in that browser.
-
-Cloud accounts, cross-device chart syncing, and a secure way to connect a personal OpenAI API key are in development. Until that connection is available, the hosted version does not enable AI requests. The optional AI features remain available when running a private copy with a server-side key as described below.
+Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-AI tool works without an account and saves the current workspace in that browser. An optional account adds a private My Charts library, cross-device saves, and a secure connection for a personal OpenAI API key.
 
 ## What it can do
 
@@ -51,7 +49,7 @@ npm run dev
 
 Open the local address shown in the terminal, usually [http://localhost:3000](http://localhost:3000).
 
-The `.env.local` file is only needed for the optional AI features. To enable them, add your own key:
+Without any environment variables, the full non-AI chart maker works locally. For a private local installation, AI can use a server-side key:
 
 ```dotenv
 OPENAI_API_KEY=your_key_here
@@ -59,19 +57,28 @@ OPENAI_API_KEY=your_key_here
 
 Never commit or share `.env.local`. It is ignored by Git.
 
-## Important API-key safety note
+## Configure hosted accounts
 
-KnitPlot is designed primarily for local, personal use. The OpenAI key stays on the server side and is never sent to the browser, but the included AI routes do not provide user accounts, authentication, quotas, or rate limiting.
+KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart storage. The editor itself does not depend on either service.
 
-Do **not** deploy KnitPlot publicly with your personal `OPENAI_API_KEY` unless you first protect the AI routes with authentication and spending controls. Otherwise, visitors could make requests that are charged to your account. A public deployment without a key is safe to use as the non-AI chart maker.
+1. Create or connect Clerk and Neon resources. Vercel Marketplace can inject their environment variables automatically.
+2. Run [`database/migrations/001_accounts_and_cloud_charts.sql`](database/migrations/001_accounts_and_cloud_charts.sql) against the Neon database.
+3. Set the Clerk and Neon values from `.env.example` in `.env.local` and in Vercel. Generate `OPENAI_KEY_ENCRYPTION_SECRET` with `openssl rand -base64 32` and never change or expose it while saved API keys exist.
+
+`CLERK_SECRET_KEY`, `DATABASE_URL`, and `OPENAI_KEY_ENCRYPTION_SECRET` are server-only secrets. Never prefix them with `NEXT_PUBLIC_` or commit them.
+
+On a public deployment, leave `ENABLE_SHARED_OPENAI_KEY=false`. This requires each signed-in user to connect their own OpenAI key instead of spending the site owner's credits.
 
 ## Saving and privacy
 
 - Your open chart workspace and Knit Mode position are saved automatically in that browser's local storage.
+- Signed-in users can choose **Save to My Charts**. After the first cloud save, that chart is kept in sync while it remains open.
 - **Save chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
 - Ordinary image importing and colour reduction happen in your browser.
-- When you use an AI feature, its prompt and any attached or current-chart image are sent through your local KnitPlot server to OpenAI.
-- KnitPlot has no user accounts, analytics, or remote chart database.
+- When you use an AI feature, its prompt and any attached or current-chart image are sent through KnitPlot's server to OpenAI using your connected key.
+- Connected OpenAI keys are encrypted with AES-256-GCM before Neon storage and are never returned to the browser. Only the final four characters are shown for identification.
+- KnitPlot stores no AI prompts or generated images in the account database. It stores request timestamps only for the 30-per-hour safety limit.
+- KnitPlot has no analytics.
 
 Browser storage is convenient, but it is not a backup. Download important charts as `.knitplot` files.
 

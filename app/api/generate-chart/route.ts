@@ -1,3 +1,5 @@
+import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
+
 type GenerateRequest = {
   prompt?: unknown;
   width?: unknown;
@@ -79,10 +81,11 @@ export async function POST(request: Request) {
     return errorResponse("The reference image was not valid.", 400);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return errorResponse("OpenAI is not configured for this app yet.", 503);
-  }
+  const keyResult = await resolveOpenAIKey();
+  if ("error" in keyResult) return errorResponse(keyResult.error, keyResult.status);
+  const requestClaim = await claimAiRequest(keyResult.userId);
+  if (!requestClaim.allowed) return errorResponse(requestClaim.message, 429);
+  const apiKey = keyResult.key;
 
   const colorRequirement = colorMode === "exact"
     ? `Use exactly ${colorCount} clearly distinct solid colors total, including one single-color background.`

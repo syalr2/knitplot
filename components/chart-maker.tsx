@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { AiChartGenerator } from "@/components/ai-chart-generator";
 import { ChartGrid } from "@/components/chart-grid";
@@ -19,6 +20,7 @@ import {
   scaleCells,
   Tool,
 } from "@/lib/chart";
+import type { Viewer } from "@/lib/auth";
 
 const STORAGE_KEY = "colorwork-chart-v1";
 const INITIAL_TAB_ID = "chart-initial";
@@ -34,7 +36,7 @@ type PreviewSettings = {
   renderedRepeatY: number;
   renderedRepeatStyle: RepeatStyle;
 };
-type ChartTab = { id: string; document: ChartDocument; knitProgress: KnitProgress; preview: PreviewSettings };
+type ChartTab = { id: string; cloudId?: string; document: ChartDocument; knitProgress: KnitProgress; preview: PreviewSettings };
 type TabHistory = { past: ChartDocument[]; future: ChartDocument[] };
 type SelectionClipboard = { tabId: string; cells: string[][] };
 type WorkspaceSave = {
@@ -66,7 +68,13 @@ function createPreviewSettings(saved?: Partial<PreviewSettings>): PreviewSetting
   };
 }
 
-export function ChartMaker() {
+type ChartMakerProps = {
+  viewer: Viewer | null;
+  accountsEnabled: boolean;
+  aiConnected: boolean;
+};
+
+export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerProps) {
   const [tabs, setTabs] = useState<ChartTab[]>([{
     id: INITIAL_TAB_ID,
     document: cloneDocument(defaultDocument),
@@ -99,7 +107,10 @@ export function ChartMaker() {
   const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [cloudSaveState, setCloudSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [cloudSaveMessage, setCloudSaveMessage] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
@@ -155,6 +166,7 @@ export function ChartMaker() {
             const savedDocument = cloneDocument(tab.document);
             return {
               id: tab.id,
+              cloudId: typeof tab.cloudId === "string" ? tab.cloudId : undefined,
               document: savedDocument,
               preview: createPreviewSettings(tab.preview),
               knitProgress: {
@@ -205,6 +217,32 @@ export function ChartMaker() {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [tabs, activeTabId, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !viewer || !activeTab.cloudId) return;
+    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    setCloudSaveState("saving");
+    setCloudSaveMessage("Saving to My Charts…");
+    cloudSaveTimer.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/charts/${encodeURIComponent(activeTab.cloudId!)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ document: activeTab.document, knitProgress: activeTab.knitProgress, preview: activeTab.preview }),
+        });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Cloud save failed.");
+        setCloudSaveState("saved");
+        setCloudSaveMessage("Saved to My Charts");
+      } catch (error) {
+        setCloudSaveState("error");
+        setCloudSaveMessage(error instanceof Error ? error.message : "Cloud save failed.");
+      }
+    }, 1200);
+    return () => {
+      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    };
+  }, [activeTab, loaded, viewer]);
 
   useEffect(() => {
     setDimensionDraft({ width: String(document.width), height: String(document.height) });
@@ -566,6 +604,27 @@ export function ChartMaker() {
     prepareTabView(nextDocument);
   }
 
+  async function saveActiveChartToCloud() {
+    if (!viewer) return;
+    setCloudSaveState("saving");
+    setCloudSaveMessage("Saving to My Charts…");
+    try {
+      const response = await fetch("/api/charts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document, knitProgress: activeTab.knitProgress, preview: activeTab.preview }),
+      });
+      const result = await response.json() as { id?: string; error?: string };
+      if (!response.ok || !result.id) throw new Error(result.error ?? "Cloud save failed.");
+      setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, cloudId: result.id } : tab));
+      setCloudSaveState("saved");
+      setCloudSaveMessage("Saved to My Charts");
+    } catch (error) {
+      setCloudSaveState("error");
+      setCloudSaveMessage(error instanceof Error ? error.message : "Cloud save failed.");
+    }
+  }
+
   function updateKnitProgress(progress: KnitProgress) {
     setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, knitProgress: progress } : tab));
   }
@@ -640,10 +699,17 @@ export function ChartMaker() {
         </div>
         <div className="topbar-actions">
           <button className="primary-button knit-mode-button" onClick={() => setKnitModeOpen(true)}>Knit mode</button>
-          <AiChartGenerator document={document} onImport={importImage} />
+          <AiChartGenerator document={document} onImport={importImage} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
           <ImageImporter document={document} onImport={importImage} />
           <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
           <ExportTools document={document} previewCanvasRef={previewCanvasRef} onOpenProject={openProject} />
+          {accountsEnabled ? <div className="account-actions">
+            {viewer ? <>
+              {activeTab.cloudId ? <span className={`cloud-save-status ${cloudSaveState}`} title={cloudSaveMessage}>{cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Save failed" : "Cloud saved"}</span> : <button onClick={() => void saveActiveChartToCloud()} disabled={cloudSaveState === "saving"}>{cloudSaveState === "saving" ? "Saving…" : "Save to My Charts"}</button>}
+              <Link className="header-link" href="/my-charts">My Charts</Link>
+              <Link className="account-chip" href="/account" title={viewer.email ?? "Account"}>{viewer.email?.slice(0, 1).toUpperCase() ?? "A"}</Link>
+            </> : <Link className="header-link sign-in-link" href="/sign-in">Sign in</Link>}
+          </div> : null}
         </div>
       </header>
 

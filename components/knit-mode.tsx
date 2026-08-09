@@ -39,6 +39,15 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function majorColumnBoundary(column: number, width: number) {
+  return column > 0 && column < width && column % 10 === 0;
+}
+
+function majorRowBoundary(chartRow: number, height: number) {
+  const completedRows = height - chartRow;
+  return chartRow > 0 && chartRow < height && completedRows % 10 === 0;
+}
+
 function isRightToLeft(document: ChartDocument, row: number) {
   if (document.instructions.technique === "duplicate") return false;
   return document.instructions.construction === "round" || row % 2 === 1;
@@ -192,10 +201,26 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
             <rect className="knit-mode-current-row" x="0" y={rowIndex} width={activeDocument.width * aspect} height="1" />
             <g className="knit-mode-grid" shapeRendering="crispEdges" pointerEvents="none">
               {Array.from({ length: activeDocument.width + 1 }, (_, column) => (
-                <line key={`column-${column}`} x1={column * aspect} x2={column * aspect} y1="0" y2={activeDocument.height} vectorEffect="non-scaling-stroke" />
+                <line
+                  key={`column-${column}`}
+                  className={majorColumnBoundary(column, activeDocument.width) ? "major" : undefined}
+                  x1={column * aspect}
+                  x2={column * aspect}
+                  y1="0"
+                  y2={activeDocument.height}
+                  vectorEffect="non-scaling-stroke"
+                />
               ))}
               {Array.from({ length: activeDocument.height + 1 }, (_, chartRow) => (
-                <line key={`row-${chartRow}`} x1="0" x2={activeDocument.width * aspect} y1={chartRow} y2={chartRow} vectorEffect="non-scaling-stroke" />
+                <line
+                  key={`row-${chartRow}`}
+                  className={majorRowBoundary(chartRow, activeDocument.height) ? "major" : undefined}
+                  x1="0"
+                  x2={activeDocument.width * aspect}
+                  y1={chartRow}
+                  y2={chartRow}
+                  vectorEffect="non-scaling-stroke"
+                />
               ))}
             </g>
             {stitch > 0 && progress.markerStyle !== "none" ? (

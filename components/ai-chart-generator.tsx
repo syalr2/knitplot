@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { ColorCountChoice, convertImage } from "@/components/image-importer";
 import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
@@ -7,6 +8,9 @@ import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
 type Props = {
   document: ChartDocument;
   onImport: (palette: PaletteColor[], cells: string[][]) => void;
+  accountsEnabled: boolean;
+  signedIn: boolean;
+  aiConnected: boolean;
 };
 
 type GenerateResponse = {
@@ -53,9 +57,10 @@ async function chartAsImage(document: ChartDocument): Promise<ChartSource> {
   return { image, base64, mimeType: "image/png", url };
 }
 
-export function AiChartGenerator({ document, onImport }: Props) {
+export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn, aiConnected }: Props) {
   const [mode, setMode] = useState<"generate" | "edit-chart">("generate");
   const [open, setOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState("");
@@ -76,6 +81,7 @@ export function AiChartGenerator({ document, onImport }: Props) {
   const generatedImageRef = useRef<HTMLImageElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const loading = operation !== null;
+  const canUseAi = !accountsEnabled || (signedIn && aiConnected);
 
   const chartAspect = (document.width * cellAspectRatio(document)) / document.height;
   const previewAspect = Math.max(1 / 3, Math.min(3, chartAspect));
@@ -329,8 +335,18 @@ export function AiChartGenerator({ document, onImport }: Props) {
 
   return (
     <>
-      <button className="primary-button" onClick={openGenerator}>Generate with AI</button>
-      <button className="secondary-button" onClick={() => void openChartEditor()}>Edit chart with AI</button>
+      <button className="primary-button" onClick={() => canUseAi ? openGenerator() : setAccessOpen(true)}>Generate with AI</button>
+      <button className="secondary-button" onClick={() => canUseAi ? void openChartEditor() : setAccessOpen(true)}>Edit chart with AI</button>
+
+      {accessOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="import-dialog ai-access-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-access-title">
+            <div className="import-dialog-heading"><div><p className="eyebrow">Optional AI tools</p><h1 id="ai-access-title">{signedIn ? "Connect OpenAI to continue" : "Sign in to use AI"}</h1></div><button className="close-dialog" aria-label="Close" onClick={() => setAccessOpen(false)}>×</button></div>
+            <p className="account-intro">{signedIn ? "Add your own OpenAI API key from your account page. KnitPlot encrypts it server-side and uses it only when you ask for an AI generation or edit." : "The chart maker and every non-AI tool work without an account. Sign in only if you want cloud saves or optional AI features."}</p>
+            <div className="import-actions"><button onClick={() => setAccessOpen(false)}>Not now</button><Link className="primary-link" href={signedIn ? "/account" : "/sign-in"}>{signedIn ? "Open account" : "Sign in"}</Link></div>
+          </section>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="modal-backdrop" role="presentation">
