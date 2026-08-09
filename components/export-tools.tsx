@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, RefObject, useEffect, useRef, useState } from "react";
 import { cellAspectRatio, ChartDocument, cloneDocument } from "@/lib/chart";
 
@@ -7,6 +8,12 @@ type Props = {
   document: ChartDocument;
   previewCanvasRef: RefObject<HTMLCanvasElement | null>;
   onOpenProject: (document: ChartDocument) => void;
+  accountsEnabled: boolean;
+  signedIn: boolean;
+  cloudId?: string;
+  cloudSaveState: "idle" | "saving" | "saved" | "error";
+  cloudSaveMessage: string;
+  onSaveToCloud: () => Promise<void>;
 };
 
 type ProjectFile = {
@@ -130,7 +137,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readProject(value: unknown): ChartDocument {
   if (!isRecord(value) || value.format !== "colorwork-chart" || value.version !== 1 || !isRecord(value.document)) {
-    throw new Error("This is not a Colorwork Chart project file.");
+    throw new Error("This is not a KnitPlot file.");
   }
   const candidate = value.document;
   const width = candidate.width;
@@ -183,7 +190,17 @@ function readProject(value: unknown): ChartDocument {
   return cloneDocument(candidate as unknown as ChartDocument);
 }
 
-export function ExportTools({ document, previewCanvasRef, onOpenProject }: Props) {
+export function ExportTools({
+  document,
+  previewCanvasRef,
+  onOpenProject,
+  accountsEnabled,
+  signedIn,
+  cloudId,
+  cloudSaveState,
+  cloudSaveMessage,
+  onSaveToCloud,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -209,9 +226,9 @@ export function ExportTools({ document, previewCanvasRef, onOpenProject }: Props
     const project: ProjectFile = { format: "colorwork-chart", version: 1, document: cloneDocument(document) };
     downloadBlob(
       new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
-      fileName(document.name, "colorwork.json"),
+      fileName(document.name, "knitplot"),
     );
-    setMessage("Project saved.");
+    setMessage("Editable KnitPlot file downloaded.");
   }
 
   async function downloadChart() {
@@ -258,22 +275,39 @@ export function ExportTools({ document, previewCanvasRef, onOpenProject }: Props
   return (
     <div className="file-actions">
       <div className="file-menu" ref={menuRef}>
-        <input ref={inputRef} className="visually-hidden" type="file" accept=".colorwork.json,application/json" onChange={openProject} />
+        <input ref={inputRef} className="visually-hidden" type="file" accept=".knitplot,.colorwork.json,application/json" onChange={openProject} />
         <button className="secondary-button" aria-expanded={open} onClick={() => { setOpen((value) => !value); setMessage(""); }}>
           File
         </button>
         {open ? (
           <div className="file-menu-popover" role="menu" aria-label="Project and export options">
-            <button role="menuitem" onClick={saveProject}>Save editable project</button>
-            <button role="menuitem" onClick={() => inputRef.current?.click()}>Open editable project</button>
+            <p className="file-menu-section-label">On this device</p>
+            <button role="menuitem" onClick={saveProject}>Download editable KnitPlot file</button>
+            <button role="menuitem" onClick={() => inputRef.current?.click()}>Open KnitPlot file</button>
+            {accountsEnabled ? <>
+              <span className="file-menu-divider" />
+              <p className="file-menu-section-label">My Charts</p>
+              {signedIn ? <>
+                {cloudId ? (
+                  <p className={`file-menu-cloud-status ${cloudSaveState}`} role="status" title={cloudSaveMessage}>
+                    {cloudSaveState === "saving" ? "Saving changes…" : cloudSaveState === "error" ? "Save failed" : "Saved · changes save automatically"}
+                  </p>
+                ) : (
+                  <button role="menuitem" onClick={() => void onSaveToCloud()} disabled={cloudSaveState === "saving"}>
+                    {cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Try saving to My Charts again" : "Save to My Charts"}
+                  </button>
+                )}
+                <Link role="menuitem" href="/my-charts">View My Charts</Link>
+              </> : <Link role="menuitem" href="/sign-in">Sign in to use My Charts</Link>}
+            </> : null}
             <span className="file-menu-divider" />
-            <button role="menuitem" onClick={downloadChart}>Download chart PNG</button>
-            <button role="menuitem" onClick={downloadPreview}>Download knitted preview PNG</button>
+            <p className="file-menu-section-label">Export</p>
+            <button role="menuitem" onClick={downloadChart}>Download chart image</button>
+            <button role="menuitem" onClick={downloadPreview}>Download knitted preview</button>
             {message ? <p className="file-menu-message" role="status">{message}</p> : null}
           </div>
         ) : null}
       </div>
-      <button className="primary-button save-chart-button" onClick={saveProject}>Save chart</button>
     </div>
   );
 }

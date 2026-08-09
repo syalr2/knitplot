@@ -27,7 +27,7 @@ export default async function MyChartsPage() {
         <div className="account-nav"><Link className="back-link" href="/">← Back to chart maker</Link><Link href="/account">Account</Link></div>
         <div><p className="eyebrow">Cloud library</p><h1>My Charts</h1><p className="account-intro">Charts you save here are private to your account and available across your computers.</p></div>
         {error ? <p className="account-notice error">KnitPlot could not load your charts.</p> : null}
-        {!error && !charts.length ? <div className="empty-library"><h2>No cloud charts yet</h2><p>Return to the chart maker and choose <strong>Save to My Charts</strong>. Your browser charts stay where they are until you decide to save them.</p><Link className="primary-link" href="/">Create a chart</Link></div> : null}
+        {!error && !charts.length ? <div className="empty-library"><h2>No saved charts yet</h2><p>Return to the chart maker, open <strong>File</strong>, and choose <strong>Save to My Charts</strong>.</p><Link className="primary-link" href="/">Create a chart</Link></div> : null}
         <div className="cloud-chart-list">
           {charts.map((chart) => {
             const doc = chart.document as { width?: number; height?: number } | null;

@@ -702,11 +702,19 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           <AiChartGenerator document={document} onImport={importImage} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
           <ImageImporter document={document} onImport={importImage} />
           <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
-          <ExportTools document={document} previewCanvasRef={previewCanvasRef} onOpenProject={openProject} />
+          <ExportTools
+            document={document}
+            previewCanvasRef={previewCanvasRef}
+            onOpenProject={openProject}
+            accountsEnabled={accountsEnabled}
+            signedIn={Boolean(viewer)}
+            cloudId={activeTab.cloudId}
+            cloudSaveState={cloudSaveState}
+            cloudSaveMessage={cloudSaveMessage}
+            onSaveToCloud={saveActiveChartToCloud}
+          />
           {accountsEnabled ? <div className="account-actions">
             {viewer ? <>
-              {activeTab.cloudId ? <span className={`cloud-save-status ${cloudSaveState}`} title={cloudSaveMessage}>{cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Save failed" : "Cloud saved"}</span> : <button onClick={() => void saveActiveChartToCloud()} disabled={cloudSaveState === "saving"}>{cloudSaveState === "saving" ? "Saving…" : "Save to My Charts"}</button>}
-              <Link className="header-link" href="/my-charts">My Charts</Link>
               <Link className="account-chip" href="/account" title={viewer.email ?? "Account"}>{viewer.email?.slice(0, 1).toUpperCase() ?? "A"}</Link>
             </> : <Link className="header-link sign-in-link" href="/sign-in">Sign in</Link>}
           </div> : null}
