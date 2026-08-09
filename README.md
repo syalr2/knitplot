@@ -6,7 +6,7 @@ The core app is free to use and does not need an account, a server, or an API ke
 
 ## Use KnitPlot online
 
-Open the hosted chart maker at [knitplot.vercel.app](https://knitplot.vercel.app). The non-AI tools work without an account and save the current workspace in that browser.
+Open the hosted chart maker at [knitplot.art](https://knitplot.art). The non-AI tools work without an account and save the current workspace in that browser.
 
 Cloud accounts, cross-device chart syncing, and a secure way to connect a personal OpenAI API key are in development. Until that connection is available, the hosted version does not enable AI requests. The optional AI features remain available when running a private copy with a server-side key as described below.
 
