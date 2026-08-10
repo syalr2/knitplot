@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AccountAvatar } from "@/components/account-avatar";
 import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { AiChartGenerator } from "@/components/ai-chart-generator";
 import { ChartGrid } from "@/components/chart-grid";
@@ -219,7 +220,13 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   }, [tabs, activeTabId, loaded]);
 
   useEffect(() => {
-    if (!loaded || !viewer || !activeTab.cloudId) return;
+    if (!loaded) return;
+    if (!viewer || !activeTab.cloudId) {
+      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+      setCloudSaveState("idle");
+      setCloudSaveMessage("");
+      return;
+    }
     if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
     setCloudSaveState("saving");
     setCloudSaveMessage("Saving to My Charts…");
@@ -677,6 +684,15 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     || preview.repeatStyle !== preview.renderedRepeatStyle;
   const knitProgress = tabs.find((tab) => tab.id === activeTabId)?.knitProgress ?? defaultKnitProgress;
 
+  if (!loaded) {
+    return (
+      <main className="app-shell chart-maker-loading" aria-busy="true" aria-label="Loading your KnitPlot workspace">
+        <span className="brand-mark" aria-hidden="true" />
+        <p>Opening your charts…</p>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -715,7 +731,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           />
           {accountsEnabled ? <div className="account-actions">
             {viewer ? <>
-              <Link className="account-chip" href="/account" title={viewer.email ?? "Account"}>{viewer.email?.slice(0, 1).toUpperCase() ?? "A"}</Link>
+              <Link className="account-chip" href="/account" title={viewer.email ?? "Account"}><AccountAvatar avatar={viewer.avatar} /></Link>
             </> : <Link className="header-link sign-in-link" href="/sign-in">Sign in</Link>}
           </div> : null}
         </div>
@@ -734,12 +750,10 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                 {tab.document.name.trim() || "Untitled chart"}
               </button>
               <button
+                type="button"
                 className="chart-tab-close"
                 aria-label={`Close ${tab.document.name.trim() || "Untitled chart"}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeTab(tab.id);
-                }}
+                onClick={() => closeTab(tab.id)}
                 disabled={tabs.length === 1}
               >×</button>
             </div>
@@ -914,14 +928,14 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           <section className="import-dialog close-tab-dialog" role="dialog" aria-modal="true" aria-labelledby="close-tab-title">
             <div className="import-dialog-heading">
               <div><p className="eyebrow">Close chart</p><h1 id="close-tab-title">Remove this chart tab?</h1></div>
-              <button className="close-dialog" aria-label="Cancel closing chart" onClick={() => setClosingTabId(null)}>×</button>
+              <button type="button" className="close-dialog" aria-label="Cancel closing chart" onClick={() => setClosingTabId(null)}>×</button>
             </div>
             <p className="import-note">
               “{tabs.find((tab) => tab.id === closingTabId)?.document.name || "Untitled chart"}” will be removed from this browser workspace. Save an editable project first if you want to keep a separate copy.
             </p>
             <div className="import-actions">
-              <button onClick={() => setClosingTabId(null)}>Cancel</button>
-              <button className="danger-button" onClick={confirmCloseTab}>Close chart</button>
+              <button type="button" onClick={() => setClosingTabId(null)}>Cancel</button>
+              <button type="button" className="danger-button" onClick={confirmCloseTab}>Close chart</button>
             </div>
           </section>
         </div>

@@ -34,7 +34,7 @@ export function AuthShell({ mode, children }: Props) {
               <path d="M96 44c-16 16-40 22-64 16" stroke="#cfa570" strokeWidth="2.4" strokeLinecap="round" />
             </svg>
             <svg className="auth-yarn-strand" viewBox="0 0 300 800" fill="none" preserveAspectRatio="none">
-              <path d="M96 246 C 96 330, 210 340, 214 420 C 218 500, 120 520, 150 600 C 172 660, 260 650, 300 664" />
+              <path pathLength="1" d="M82 204 C 82 330, 210 340, 214 420 C 218 500, 120 520, 150 600 C 172 660, 260 650, 300 664" />
             </svg>
           </div>
 
@@ -48,14 +48,23 @@ export function AuthShell({ mode, children }: Props) {
             </div>
             <p className="auth-story-heading">One strand, all the way through.</p>
             <p className="auth-story-body">Make colourwork charts, keep your favourites, and pick up wherever you left off.</p>
-            <p className="auth-story-note">optional account · local-first</p>
+            <p className="auth-story-note">
+              today&apos;s colourway —{" "}
+              <span className="auth-colourway-name">
+                <span>Oatmeal &amp; Sage</span>
+                <span>Bone &amp; Oxblood</span>
+                <span>Ash &amp; Indigo</span>
+                <span>Cream &amp; Clay</span>
+                <span>Flax &amp; Moss</span>
+              </span>
+            </p>
           </div>
         </aside>
 
         <div className="auth-form-panel">
           <Link className="auth-back-link" href="/">← Back to chart maker</Link>
           <header className="auth-form-heading">
-            <p className="eyebrow">{signingUp ? "Optional cloud account" : "Your KnitPlot account"}</p>
+            {signingUp ? <p className="eyebrow">Optional cloud account</p> : null}
             <h1>{signingUp ? "Start your first chart." : "Welcome back."}</h1>
             <p>{signingUp ? "Save private charts to your account and use your optional AI connection from any computer." : "Your saved charts are waiting right where you left them."}</p>
           </header>

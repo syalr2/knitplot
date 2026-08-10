@@ -5,6 +5,7 @@ out
 *.log
 *.tsbuildinfo
 coverage
+next-env.d.ts
 .env*
 !.env.example
 AGENTS.md

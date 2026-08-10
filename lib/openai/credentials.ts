@@ -82,12 +82,23 @@ export async function claimAiRequest(userId: string | null) {
   const sql = getDatabase();
   if (!sql) return { allowed: false as const, message: "AI usage controls are not configured." };
   try {
-    await sql`delete from knitplot_ai_request_log where created_at < now() - interval '7 days'`;
-    const rows = await sql`select count(*)::int as count from knitplot_ai_request_log where user_id = ${userId} and created_at >= now() - interval '1 hour'` as Array<Record<string, unknown>>;
-    if (Number(rows[0]?.count ?? 0) >= 30) {
+    const results = await sql.transaction((transaction) => [
+      transaction`select pg_advisory_xact_lock(hashtextextended(${userId}, 0))`,
+      transaction`
+        insert into knitplot_ai_request_log (user_id)
+        select ${userId}
+        where (
+          select count(*) from knitplot_ai_request_log
+          where user_id = ${userId} and created_at >= now() - interval '1 hour'
+        ) < 30
+        returning id
+      `,
+      transaction`delete from knitplot_ai_request_log where created_at < now() - interval '7 days'`,
+    ]);
+    const insertedRows = results[1] as Array<Record<string, unknown>>;
+    if (insertedRows.length === 0) {
       return { allowed: false as const, message: "You have reached KnitPlot’s 30 AI requests per hour safety limit. Try again later." };
     }
-    await sql`insert into knitplot_ai_request_log (user_id) values (${userId})`;
     return { allowed: true as const };
   } catch {
     return { allowed: false as const, message: "KnitPlot could not check the AI request limit." };

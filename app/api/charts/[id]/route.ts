@@ -67,6 +67,36 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!hasValidRequestOrigin(request)) return errorResponse("Invalid request origin.", 403);
+  const { viewer, sql } = await context();
+  if (!viewer) return errorResponse("Please sign in to rename this chart.", 401);
+  if (!sql) return errorResponse("Cloud chart storage is not configured.", 503);
+  const { id } = await params;
+  if (!isUuid(id)) return errorResponse("That chart was not found.", 404);
+  let name = "";
+  try {
+    const body = await request.json() as { name?: unknown };
+    name = typeof body.name === "string" ? body.name.trim() : "";
+  } catch {
+    return errorResponse("The new chart name was not valid.", 400);
+  }
+  if (!name || name.length > 200) return errorResponse("Chart names must be between 1 and 200 characters.", 400);
+  try {
+    const rows = await sql`
+      update knitplot_charts set
+        name = ${name}, document = jsonb_set(document, '{name}', to_jsonb(${name}::text), true), updated_at = now()
+      where id = ${id}::uuid and user_id = ${viewer.id}
+      returning id, name, updated_at
+    ` as Array<Record<string, unknown>>;
+    const data = rows[0];
+    if (!data) return errorResponse("That chart was not found.", 404);
+    return Response.json(data, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return errorResponse("KnitPlot could not rename the chart.", 503);
+  }
+}
+
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!hasValidRequestOrigin(request)) return errorResponse("Invalid request origin.", 403);
   const { viewer, sql } = await context();

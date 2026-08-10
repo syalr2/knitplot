@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 
 const STORAGE_KEY = "colorwork-chart-v1";
 const MAX_TABS = 8;
@@ -15,8 +15,10 @@ type CloudChartResponse = {
 
 export function CloudChartActions({ id, name }: { id: string; name: string }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<"open" | "delete" | null>(null);
+  const [busy, setBusy] = useState<"open" | "rename" | "delete" | null>(null);
   const [error, setError] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(name);
 
   async function openChart() {
     setBusy("open");
@@ -64,6 +66,28 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
     }
   }
 
-  return <div className="cloud-chart-actions"><button className="primary-button" onClick={openChart} disabled={busy !== null}>{busy === "open" ? "Opening…" : "Open"}</button><button onClick={deleteChart} disabled={busy !== null}>{busy === "delete" ? "Deleting…" : "Delete"}</button>{error ? <p role="alert">{error}</p> : null}</div>;
-}
+  async function renameChart(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextName = draftName.trim();
+    if (!nextName || nextName === name) return;
+    setBusy("rename");
+    setError("");
+    try {
+      const response = await fetch(`/api/charts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "The chart could not be renamed.");
+      setRenaming(false);
+      router.refresh();
+      setBusy(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The chart could not be renamed.");
+      setBusy(null);
+    }
+  }
 
+  return <div className="cloud-chart-actions">{renaming ? <form className="cloud-rename-form" onSubmit={renameChart}><input aria-label={`New name for ${name}`} autoFocus maxLength={200} value={draftName} onChange={(event) => setDraftName(event.target.value)} /><button className="primary-button" type="submit" disabled={busy !== null || !draftName.trim()}>{busy === "rename" ? "Saving…" : "Save"}</button><button type="button" disabled={busy !== null} onClick={() => { setDraftName(name); setRenaming(false); }}>Cancel</button></form> : <><button className="primary-button" onClick={openChart} disabled={busy !== null}>{busy === "open" ? "Opening…" : "Open"}</button><button onClick={() => { setDraftName(name); setRenaming(true); setError(""); }} disabled={busy !== null}>Rename</button><button onClick={deleteChart} disabled={busy !== null}>{busy === "delete" ? "Deleting…" : "Delete"}</button></>}{error ? <p role="alert">{error}</p> : null}</div>;
+}

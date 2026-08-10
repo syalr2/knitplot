@@ -1,4 +1,5 @@
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
+import { hasValidRequestOrigin } from "@/lib/security/origin";
 
 type GenerateRequest = {
   prompt?: unknown;
@@ -40,6 +41,8 @@ function imageSizeForAspect(inputAspect: number) {
 }
 
 export async function POST(request: Request) {
+  if (!hasValidRequestOrigin(request)) return errorResponse("Invalid request origin.", 403);
+
   let body: GenerateRequest;
   try {
     body = await request.json() as GenerateRequest;
