@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { ColorCountChoice, convertImage } from "@/components/image-importer";
 import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
 
 type Props = {
@@ -14,19 +13,41 @@ type Props = {
 };
 
 type GenerateResponse = {
-  image?: string;
-  mimeType?: string;
+  palette?: string[];
+  rows?: string[];
   error?: string;
 };
 
-type ChartSource = {
-  image: HTMLImageElement;
-  base64: string;
-  mimeType: string;
-  url: string;
+type ChartDraft = {
+  palette: PaletteColor[];
+  cells: string[][];
 };
 
-async function chartAsImage(document: ChartDocument): Promise<ChartSource> {
+function documentAsDraft(document: ChartDocument): ChartDraft {
+  return {
+    palette: document.palette.map((color) => ({ ...color })),
+    cells: document.cells.map((row) => [...row]),
+  };
+}
+
+function responseAsDraft(result: GenerateResponse, width: number, height: number): ChartDraft | null {
+  if (!Array.isArray(result.palette) || !Array.isArray(result.rows) || result.rows.length !== height) return null;
+  if (result.palette.length < 2 || result.palette.length > 8) return null;
+  const palette = result.palette.map((hex, index) => ({ id: `ai-${Date.now()}-${index}`, hex }));
+  const cells = result.rows.map((row) => Array.from(row, (character) => palette[Number(character)]?.id ?? ""));
+  if (cells.some((row) => row.length !== width || row.some((cell) => !cell))) return null;
+  return { palette, cells };
+}
+
+function draftAsIndexedGrid(draft: ChartDraft) {
+  const indexes = new Map(draft.palette.map((color, index) => [color.id, index]));
+  return {
+    palette: draft.palette.map((color) => color.hex),
+    rows: draft.cells.map((row) => row.map((colorId) => indexes.get(colorId) ?? 0).join("")),
+  };
+}
+
+function draftAsImage(draft: ChartDraft, document: ChartDocument) {
   const aspect = cellAspectRatio(document);
   const scale = Math.max(2, Math.min(18, 1200 / (document.width * aspect), 900 / document.height));
   const cellHeight = scale;
@@ -36,8 +57,8 @@ async function chartAsImage(document: ChartDocument): Promise<ChartSource> {
   canvas.height = Math.max(1, Math.round(document.height * cellHeight));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("The current chart could not be prepared for editing.");
-  const palette = new Map(document.palette.map((color) => [color.id, color.hex]));
-  document.cells.forEach((row, rowIndex) => row.forEach((colorId, columnIndex) => {
+  const palette = new Map(draft.palette.map((color) => [color.id, color.hex]));
+  draft.cells.forEach((row, rowIndex) => row.forEach((colorId, columnIndex) => {
     context.fillStyle = palette.get(colorId) ?? "#ffffff";
     context.fillRect(
       Math.round(columnIndex * cellWidth),
@@ -46,15 +67,7 @@ async function chartAsImage(document: ChartDocument): Promise<ChartSource> {
       Math.ceil(cellHeight),
     );
   }));
-  const url = canvas.toDataURL("image/png");
-  const base64 = url.slice(url.indexOf(",") + 1);
-  const image = new Image();
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("The current chart could not be prepared for editing."));
-    image.src = url;
-  });
-  return { image, base64, mimeType: "image/png", url };
+  return canvas.toDataURL("image/png");
 }
 
 export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn, aiConnected }: Props) {
@@ -68,6 +81,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
   const [referenceName, setReferenceName] = useState("");
   const [referenceUrl, setReferenceUrl] = useState("");
   const [referenceUse, setReferenceUse] = useState<"subject" | "style">("subject");
+  const [layoutMode, setLayoutMode] = useState<"motif" | "repeat">("motif");
   const [colorMode, setColorMode] = useState<"exact" | "range">("exact");
   const [colorCount, setColorCount] = useState(Math.min(5, Math.max(2, document.palette.length)));
   const [minimumColors, setMinimumColors] = useState(2);
@@ -75,19 +89,14 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
   const [operation, setOperation] = useState<"generate" | "edit" | null>(null);
   const [error, setError] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
-  const [generatedImage, setGeneratedImage] = useState("");
-  const [generatedMimeType, setGeneratedMimeType] = useState("image/png");
-  const [originalChartSource, setOriginalChartSource] = useState<ChartSource | null>(null);
-  const generatedImageRef = useRef<HTMLImageElement | null>(null);
+  const [generatedDraft, setGeneratedDraft] = useState<ChartDraft | null>(null);
+  const [originalChartDraft, setOriginalChartDraft] = useState<ChartDraft | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const loading = operation !== null;
   const canUseAi = !accountsEnabled || (signedIn && aiConnected);
 
   const chartAspect = (document.width * cellAspectRatio(document)) / document.height;
   const previewAspect = Math.max(1 / 3, Math.min(3, chartAspect));
-  const colorChoice: ColorCountChoice = colorMode === "exact"
-    ? colorCount
-    : { min: minimumColors, max: maximumColors };
   const colorDescription = colorMode === "exact"
     ? `${colorCount} colours`
     : `${minimumColors}–${maximumColors} colours`;
@@ -99,17 +108,15 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
     setOperation(null);
     setError("");
     setGeneratedUrl("");
-    setGeneratedImage("");
-    setGeneratedMimeType("image/png");
+    setGeneratedDraft(null);
     setEditPrompt("");
     setReferenceImage("");
     setReferenceMimeType("image/png");
     setReferenceName("");
     setReferenceUrl("");
     setReferenceUse("subject");
-    setOriginalChartSource(null);
+    setOriginalChartDraft(null);
     setMode("generate");
-    generatedImageRef.current = null;
   }
 
   function stopOperation() {
@@ -125,17 +132,15 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
     setError("");
   }
 
-  async function openChartEditor() {
+  function openChartEditor() {
     try {
-      const source = await chartAsImage(document);
+      const source = documentAsDraft(document);
       setMode("edit-chart");
       setColorMode("exact");
       setColorCount(Math.min(8, Math.max(2, document.palette.length)));
-      setOriginalChartSource(source);
-      generatedImageRef.current = source.image;
-      setGeneratedImage(source.base64);
-      setGeneratedMimeType(source.mimeType);
-      setGeneratedUrl(source.url);
+      setOriginalChartDraft(source);
+      setGeneratedDraft(source);
+      setGeneratedUrl(draftAsImage(source, document));
       setEditPrompt("");
       setError("");
       setOpen(true);
@@ -145,11 +150,9 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
   }
 
   function resetChartEdit() {
-    if (!originalChartSource) return;
-    generatedImageRef.current = originalChartSource.image;
-    setGeneratedImage(originalChartSource.base64);
-    setGeneratedMimeType(originalChartSource.mimeType);
-    setGeneratedUrl(originalChartSource.url);
+    if (!originalChartDraft) return;
+    setGeneratedDraft(originalChartDraft);
+    setGeneratedUrl(draftAsImage(originalChartDraft, document));
     setEditPrompt("");
     setError("");
   }
@@ -191,7 +194,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
           colorMode,
           minimumColors,
           maximumColors,
-          chartAspect,
+          layoutMode,
           referenceImage: referenceImage || undefined,
           referenceMimeType: referenceImage ? referenceMimeType : undefined,
           referenceUse: referenceImage ? referenceUse : undefined,
@@ -199,25 +202,16 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
         signal: controller.signal,
       });
       const result = await response.json() as GenerateResponse;
-      if (!response.ok || !result.image) {
-        throw new Error(result.error || "The image could not be generated.");
+      if (!response.ok) {
+        throw new Error(result.error || "The chart could not be generated.");
       }
-
-      const nextMimeType = result.mimeType || "image/png";
-      const url = `data:${nextMimeType};base64,${result.image}`;
-      const image = new Image();
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error("The generated image could not be opened."));
-        image.src = url;
-      });
-      generatedImageRef.current = image;
-      setGeneratedImage(result.image);
-      setGeneratedMimeType(nextMimeType);
-      setGeneratedUrl(url);
+      const draft = responseAsDraft(result, document.width, document.height);
+      if (!draft) throw new Error("OpenAI returned an invalid stitch chart. Please try again.");
+      setGeneratedDraft(draft);
+      setGeneratedUrl(draftAsImage(draft, document));
     } catch (nextError) {
       if (nextError instanceof Error && nextError.name === "AbortError") return;
-      setError(nextError instanceof Error ? nextError.message : "The image could not be generated.");
+      setError(nextError instanceof Error ? nextError.message : "The chart could not be generated.");
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -263,7 +257,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
   async function editGenerated(event: FormEvent) {
     event.preventDefault();
     const cleanEditPrompt = editPrompt.trim();
-    if (cleanEditPrompt.length < 3 || !generatedImage) {
+    if (cleanEditPrompt.length < 3 || !generatedDraft) {
       setError("Add a little more detail about what you want to change.");
       return;
     }
@@ -275,44 +269,36 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
     setError("");
 
     try {
+      const indexed = draftAsIndexedGrid(generatedDraft);
       const response = await fetch("/api/edit-chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: cleanEditPrompt,
-          image: generatedImage,
-          mimeType: generatedMimeType,
           width: document.width,
           height: document.height,
           colorCount,
           colorMode,
           minimumColors,
           maximumColors,
-          chartAspect,
+          layoutMode,
+          palette: indexed.palette,
+          rows: indexed.rows,
         }),
         signal: controller.signal,
       });
       const result = await response.json() as GenerateResponse;
-      if (!response.ok || !result.image) {
-        throw new Error(result.error || "The image could not be edited.");
+      if (!response.ok) {
+        throw new Error(result.error || "The chart could not be edited.");
       }
-
-      const nextMimeType = result.mimeType || "image/png";
-      const url = `data:${nextMimeType};base64,${result.image}`;
-      const image = new Image();
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error("The edited image could not be opened."));
-        image.src = url;
-      });
-      generatedImageRef.current = image;
-      setGeneratedImage(result.image);
-      setGeneratedMimeType(nextMimeType);
-      setGeneratedUrl(url);
+      const draft = responseAsDraft(result, document.width, document.height);
+      if (!draft) throw new Error("OpenAI returned an invalid stitch chart. Please try again.");
+      setGeneratedDraft(draft);
+      setGeneratedUrl(draftAsImage(draft, document));
       setEditPrompt("");
     } catch (nextError) {
       if (nextError instanceof Error && nextError.name === "AbortError") return;
-      setError(nextError instanceof Error ? nextError.message : "The image could not be edited.");
+      setError(nextError instanceof Error ? nextError.message : "The chart could not be edited.");
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -322,21 +308,15 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
   }
 
   function useGeneratedChart() {
-    const image = generatedImageRef.current;
-    if (!image) return;
-    try {
-      const result = convertImage(image, document, colorChoice, "cover", { x: 50, y: 50 }, 1);
-      onImport(result.palette, result.cells);
-      closeDialog();
-    } catch {
-      setError("The generated image could not be converted into a chart.");
-    }
+    if (!generatedDraft) return;
+    onImport(generatedDraft.palette, generatedDraft.cells);
+    closeDialog();
   }
 
   return (
     <>
       <button className="primary-button" onClick={() => canUseAi ? openGenerator() : setAccessOpen(true)}>Generate with AI</button>
-      <button className="secondary-button" onClick={() => canUseAi ? void openChartEditor() : setAccessOpen(true)}>Edit chart with AI</button>
+      <button className="secondary-button" onClick={() => canUseAi ? openChartEditor() : setAccessOpen(true)}>Edit chart with AI</button>
 
       {accessOpen ? (
         <div className="modal-backdrop" role="presentation">
@@ -363,10 +343,10 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
               <>
                 <div className="ai-preview" style={{ aspectRatio: previewAspect }}>
                   {/* The generated data URL is temporary and never stored outside this browser session. */}
-                  <img src={generatedUrl} alt="AI-generated colorwork motif preview" />
+                  <img src={generatedUrl} alt="AI-generated colorwork chart preview" />
                 </div>
                 <p className="import-note">
-                  {mode === "edit-chart" ? "AI will adapt your current chart" : "This draft will become a chart"} at {document.width} × {document.height} stitches using {colorDescription}. Every stitch remains editable. Each AI edit uses API credits.
+                  This is the exact {document.width} × {document.height} stitch grid using {generatedDraft?.palette.length ?? colorDescription} colours. Every visible block is one editable stitch. Each AI edit uses API credits.
                 </p>
                 <form className="ai-edit-panel" onSubmit={editGenerated}>
                   <label>What would you like to change?
@@ -390,7 +370,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
                 {error ? <p className="import-error" role="alert">{error}</p> : null}
                 <div className="import-actions">
                   {loading ? <button onClick={stopOperation}>Stop</button> : null}
-                  <button onClick={mode === "edit-chart" ? resetChartEdit : () => { setGeneratedUrl(""); setGeneratedImage(""); generatedImageRef.current = null; setEditPrompt(""); }} disabled={loading}>
+                  <button onClick={mode === "edit-chart" ? resetChartEdit : () => { setGeneratedUrl(""); setGeneratedDraft(null); setEditPrompt(""); }} disabled={loading}>
                     {mode === "edit-chart" ? "Reset to current chart" : "Start over"}
                   </button>
                   {mode === "generate" ? <button onClick={() => void generate()} disabled={loading}>
@@ -451,6 +431,17 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
                     <small>Gauge shape included automatically</small>
                   </div>
                 </div>
+                <div className="ai-layout-control">
+                  <span>Design type</span>
+                  <div className="ai-layout-options" role="group" aria-label="Design type">
+                    <button type="button" className={layoutMode === "motif" ? "selected" : ""} aria-pressed={layoutMode === "motif"} onClick={() => setLayoutMode("motif")} disabled={loading}>
+                      <strong>Single motif</strong><small>One centered design</small>
+                    </button>
+                    <button type="button" className={layoutMode === "repeat" ? "selected" : ""} aria-pressed={layoutMode === "repeat"} onClick={() => setLayoutMode("repeat")} disabled={loading}>
+                      <strong>Repeating tile</strong><small>Edges join as a pattern</small>
+                    </button>
+                  </div>
+                </div>
                 <div className="ai-reference">
                   <div className="ai-reference-heading">
                     <div><strong>Reference image</strong><span>Optional — use a photo, sketch, or style example</span></div>
@@ -471,7 +462,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
                     </div>
                   ) : null}
                 </div>
-                <p className="import-note">Each draft uses your OpenAI API credits. Generation can take up to two minutes.</p>
+                <p className="import-note">AI will design directly inside the current {document.width} × {document.height} stitch grid. Each draft uses your OpenAI API credits and can take up to two minutes.</p>
                 {loading ? <p className="ai-loading" role="status">Generating your motif…</p> : null}
                 {error ? <p className="import-error" role="alert">{error}</p> : null}
                 <div className="import-actions">
