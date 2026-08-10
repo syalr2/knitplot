@@ -1,5 +1,6 @@
 import { generateChartGrid, ChartGridApiError } from "@/lib/openai/chart-grid";
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
+import { generateSourceArtwork, SourceArtworkApiError } from "@/lib/openai/source-artwork";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
 
 type GenerateRequest = {
@@ -10,6 +11,7 @@ type GenerateRequest = {
   colorMode?: unknown;
   minimumColors?: unknown;
   maximumColors?: unknown;
+  chartAspect?: unknown;
   layoutMode?: unknown;
   referenceImage?: unknown;
   referenceMimeType?: unknown;
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
   const colorMode = body.colorMode === "range" ? "range" : "exact";
   const minimumColors = body.minimumColors;
   const maximumColors = body.maximumColors;
+  const chartAspect = body.chartAspect;
   const layoutMode = body.layoutMode === "repeat" ? "repeat" : "motif";
   const referenceImage = typeof body.referenceImage === "string" ? body.referenceImage : "";
   const referenceMimeType = typeof body.referenceMimeType === "string" ? body.referenceMimeType : "image/png";
@@ -55,7 +58,8 @@ export async function POST(request: Request) {
   if (
     !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > 100 ||
     !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > 100 ||
-    (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid)
+    (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid) ||
+    typeof chartAspect !== "number" || !Number.isFinite(chartAspect) || chartAspect <= 0
   ) {
     return errorResponse("The chart settings were not valid.", 400);
   }
@@ -72,20 +76,36 @@ export async function POST(request: Request) {
   if (!requestClaim.allowed) return errorResponse(requestClaim.message, 429);
 
   try {
-    const chart = await generateChartGrid({
+    const minimum = colorMode === "exact" ? colorCount as number : minimumColors as number;
+    const maximum = colorMode === "exact" ? colorCount as number : maximumColors as number;
+    const operationSignal = AbortSignal.any([request.signal, AbortSignal.timeout(150_000)]);
+    const sourceArtwork = await generateSourceArtwork({
       apiKey: keyResult.key,
       prompt,
       width,
       height,
-      minimumColors: colorMode === "exact" ? colorCount as number : minimumColors as number,
-      maximumColors: colorMode === "exact" ? colorCount as number : maximumColors as number,
+      chartAspect,
+      minimumColors: minimum,
+      maximumColors: maximum,
       layoutMode,
       reference: referenceImage ? { base64: referenceImage, mimeType: referenceMimeType, use: referenceUse } : undefined,
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(150_000)]),
+      signal: operationSignal,
+    });
+    const chart = await generateChartGrid({
+      apiKey: keyResult.key,
+      prompt: `Translate the supplied source design into the clearest possible ${width} by ${height} knitting chart. Preserve its main silhouette and identity, but remove any detail that cannot be expressed cleanly in this stitch budget. The original request was: ${prompt}`,
+      width,
+      height,
+      minimumColors: minimum,
+      maximumColors: maximum,
+      layoutMode,
+      reference: { base64: sourceArtwork, mimeType: "image/png", use: "subject" },
+      signal: operationSignal,
     });
     return Response.json(chart, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof ChartGridApiError) return errorResponse(error.message, error.status);
+    if (error instanceof SourceArtworkApiError) return errorResponse(error.message, error.status);
     if (error instanceof Error && error.name === "TimeoutError") {
       return errorResponse("Chart generation took too long. Please try again.", 504);
     }

@@ -194,6 +194,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
           colorMode,
           minimumColors,
           maximumColors,
+          chartAspect,
           layoutMode,
           referenceImage: referenceImage || undefined,
           referenceMimeType: referenceImage ? referenceMimeType : undefined,
@@ -462,7 +463,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
                     </div>
                   ) : null}
                 </div>
-                <p className="import-note">AI will design directly inside the current {document.width} × {document.height} stitch grid. Each draft uses your OpenAI API credits and can take up to two minutes.</p>
+                <p className="import-note">AI will first compose a simple design, then translate it into the exact {document.width} × {document.height} stitch grid. Each draft uses two AI steps and your OpenAI API credits.</p>
                 {loading ? <p className="ai-loading" role="status">Generating your motif…</p> : null}
                 {error ? <p className="import-error" role="alert">{error}</p> : null}
                 <div className="import-actions">
