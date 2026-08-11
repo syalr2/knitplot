@@ -215,7 +215,7 @@ export function ExportTools({
   }
 
   return (
-    <div className="file-actions">
+    <div className="file-actions" data-tour="file-menu">
       <div className="file-menu" ref={menuRef}>
         <input ref={inputRef} className="visually-hidden" type="file" accept=".knitplot,.colorwork.json,application/json" onChange={openProject} />
         <button className="secondary-button" aria-expanded={open} onClick={() => { setOpen((value) => !value); setMessage(""); }}>

@@ -92,7 +92,7 @@ export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSe
   } : null;
 
   return (
-    <div className="chart-frame">
+    <div className="chart-frame" data-tour="chart-canvas">
       <div className="chart-content" style={{ width: `${zoom}%` }}>
         <div
           className="chart-column-numbers"

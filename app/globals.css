@@ -64,6 +64,7 @@ button { color: inherit; }
 .project-identity { display: grid; gap: 3px; min-width: 0; }
 .project-identity label { color: #96907f; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 .topbar-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.workflow-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
 .file-actions { align-items: center; display: flex; gap: 8px; margin-left: auto; }
 .account-actions { align-items: center; display: flex; gap: 8px; }
 .header-link { color: var(--accent-deep); font-size: 12px; font-weight: 600; padding: 8px 4px; text-decoration: none; white-space: nowrap; }
@@ -71,6 +72,7 @@ button { color: inherit; }
 .sign-in-link { border: 1px solid var(--line); border-radius: 9px; padding: 8px 13px; }
 .account-chip { align-items: center; background: var(--accent); border-radius: 50%; color: #fff; display: flex; font-size: 12px; font-weight: 700; height: 32px; justify-content: center; text-decoration: none; width: 32px; }
 .account-chip .account-avatar { height: 100%; width: 100%; }
+.help-button { align-items: center; background: #f6f3eb; border-radius: 50%; color: var(--accent-deep); display: flex; font-family: Georgia, serif; font-size: 17px; height: 32px; justify-content: center; min-height: 32px; padding: 0; width: 32px; }
 @keyframes cloud-pulse { 50% { opacity: .35; } }
 
 .chart-tabs-bar { align-items: flex-end; background: #ebe6dc; border-bottom: 1px solid var(--line); display: flex; gap: 8px; min-width: 0; padding: 9px 18px 0; }
@@ -147,6 +149,35 @@ button:disabled { cursor: default; opacity: 0.42; }
 .file-menu-message { color: var(--muted); font-size: 11px; line-height: 1.4; margin: 5px 7px 4px; max-width: 210px; }
 
 .modal-backdrop { align-items: center; background: rgba(51, 48, 42, .52); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 20; }
+.tutorial-backdrop { align-items: center; background: rgba(35, 40, 37, .66); display: flex; inset: 0; justify-content: center; overflow: auto; padding: 24px; position: fixed; z-index: 45; }
+.tutorial-welcome { background: var(--panel); border: 1px solid rgba(255,255,255,.65); border-radius: 18px; box-shadow: 0 28px 90px rgba(31, 37, 33, .32); display: grid; gap: 24px; grid-template-columns: minmax(240px, .82fr) minmax(420px, 1.4fr); max-height: calc(100vh - 48px); max-width: 940px; overflow: auto; padding: 28px; position: relative; width: 100%; }
+.tutorial-close { position: absolute; right: 18px; top: 16px; z-index: 1; }
+.tutorial-welcome-copy { align-content: center; display: grid; padding: 12px 6px; }
+.tutorial-yarn-mark { background: var(--accent); border: 2px solid #f5f1e7; border-radius: 50%; box-shadow: 0 0 0 1px var(--accent), inset 0 0 0 5px rgba(255,255,255,.15); height: 36px; margin-bottom: 18px; position: relative; width: 36px; }
+.tutorial-yarn-mark::after { border-bottom: 2px solid var(--accent); border-radius: 50%; content: ""; height: 21px; left: 28px; position: absolute; top: 17px; transform: rotate(10deg); width: 42px; }
+.tutorial-welcome-copy h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px, 3.4vw, 42px); font-weight: 400; letter-spacing: -.025em; line-height: 1.02; margin: 3px 0 14px; }
+.tutorial-welcome-copy > p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0; max-width: 360px; }
+.tutorial-welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.tutorial-examples { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.tutorial-example-card { background: #f4f1e9; border: 1px solid var(--line); border-radius: 12px; display: grid; grid-template-rows: 160px 1fr; overflow: hidden; }
+.tutorial-example-card canvas { background: #f5f1e8; display: block; height: 160px; image-rendering: pixelated; width: 100%; }
+.tutorial-example-card > div { align-content: start; border-top: 1px solid var(--line); display: grid; padding: 14px; }
+.tutorial-example-card span { color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+.tutorial-example-card h2 { font-family: Georgia, "Times New Roman", serif; font-size: 19px; font-weight: 400; margin: 4px 0 5px; }
+.tutorial-example-card p { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 0 0 12px; }
+.tutorial-example-card button { align-self: end; justify-self: start; margin-top: auto; }
+.tutorial-limit-note { color: #943f32; font-size: 11px; grid-column: 1 / -1; margin: -12px 0 0; text-align: right; }
+.tour-layer { inset: 0; pointer-events: none; position: fixed; z-index: 60; }
+.tour-dim { background: rgba(31, 36, 33, .62); inset: 0; position: absolute; }
+.tour-highlight { border: 2px solid #9bc09a; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(31, 36, 33, .64), 0 0 0 5px rgba(155,192,154,.26); position: fixed; transition: height .2s ease, left .2s ease, top .2s ease, width .2s ease; }
+.tour-card { background: var(--panel); border: 1px solid #c9d9c7; border-radius: 13px; box-shadow: 0 18px 48px rgba(28, 34, 30, .28); display: grid; padding: 17px; pointer-events: auto; position: fixed; }
+.tour-card-progress { align-items: center; color: var(--muted); display: flex; font-size: 10px; justify-content: space-between; margin-bottom: 8px; }
+.tour-card-progress button { background: transparent; border: 0; box-shadow: none; color: var(--muted); font-size: 20px; line-height: 1; min-height: 22px; padding: 0 2px; }
+.tour-card h2 { font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 400; line-height: 1.1; margin: 2px 0 8px; }
+.tour-card > p:not(.eyebrow) { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0; }
+.tour-card-actions { align-items: center; display: flex; gap: 10px; justify-content: space-between; margin-top: 17px; }
+.tour-card-actions > button { background: transparent; border: 0; box-shadow: none; color: var(--muted); padding-left: 0; }
+.tour-card-actions > div { display: flex; gap: 7px; }
 .import-dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(60, 50, 35, .28); display: grid; gap: 16px; max-height: calc(100vh - 40px); max-width: 560px; overflow: auto; padding: 22px; width: 100%; }
 .import-dialog-heading { align-items: flex-start; display: flex; justify-content: space-between; }
 .close-tab-dialog { max-width: 440px; }
@@ -746,6 +777,8 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
   .save-status { margin-left: 0; width: 100%; }
   .topbar-actions { align-items: stretch; display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .topbar-actions > *, .topbar-actions > * > button { width: 100%; }
+  .workflow-actions { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+  .help-button { grid-column: 2; justify-self: end; width: 32px !important; }
   .chart-tabs-bar { padding-left: 10px; padding-right: 10px; }
   .chart-tab { max-width: 165px; }
   .file-actions { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr; margin-left: 0; width: 100%; }
@@ -789,6 +822,14 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
   .auth-form-heading h1 { font-size: 35px; }
   .auth-guest-route { align-items: stretch; flex-direction: column; gap: 10px; }
   .auth-guest-route a { text-align: center; }
+  .tutorial-backdrop { align-items: flex-start; padding: 12px; }
+  .tutorial-welcome { gap: 20px; grid-template-columns: 1fr; max-height: none; padding: 22px 18px; }
+  .tutorial-welcome-copy { padding-right: 28px; }
+  .tutorial-examples { grid-template-columns: 1fr; }
+  .tutorial-example-card { grid-template-columns: 42% 1fr; grid-template-rows: minmax(150px, auto); }
+  .tutorial-example-card canvas { height: 100%; min-height: 150px; }
+  .tutorial-example-card > div { border-left: 1px solid var(--line); border-top: 0; }
+  .tour-card { max-height: calc(100vh - 24px); overflow: auto; width: auto; }
 }
 
 @media (max-width: 460px) {
@@ -800,6 +841,9 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
   .tool-group { flex-basis: 100%; }
   .repeat-controls { justify-content: flex-start; }
   .repeat-controls > span { flex-basis: 100%; }
+  .tutorial-example-card { grid-template-columns: 1fr; grid-template-rows: 145px auto; }
+  .tutorial-example-card canvas { min-height: 145px; }
+  .tutorial-example-card > div { border-left: 0; border-top: 1px solid var(--line); }
 }
 
 @media print {
@@ -818,4 +862,5 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
 
 @media (prefers-reduced-motion: reduce) {
   .auth-yarn-ball, .auth-yarn-strand path, .auth-form-panel { animation: none; }
+  .tour-highlight { transition: none; }
 }

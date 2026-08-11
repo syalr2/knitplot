@@ -10,6 +10,7 @@ import { ImageImporter } from "@/components/image-importer";
 import { InstructionsView } from "@/components/instructions-view";
 import { KnitPreview } from "@/components/knit-preview";
 import { defaultKnitProgress, KnitMode, KnitProgress } from "@/components/knit-mode";
+import { OnboardingTour } from "@/components/onboarding-tour";
 import {
   CellSelection,
   ChartDocument,
@@ -22,6 +23,7 @@ import {
   Tool,
 } from "@/lib/chart";
 import type { Viewer } from "@/lib/auth";
+import { tutorialExampleDocument, type TutorialExample } from "@/lib/tutorial-examples";
 
 const STORAGE_KEY = "colorwork-chart-v1";
 const INITIAL_TAB_ID = "chart-initial";
@@ -611,6 +613,29 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     prepareTabView(nextDocument);
   }
 
+  function openTutorialExample(exampleId: TutorialExample["id"]) {
+    if (tabs.length >= MAX_CHART_TABS) return;
+    const example = tutorialExampleDocument(exampleId);
+    if (!example) return;
+    const id = `chart-${crypto.randomUUID()}`;
+    const nextPreview = createPreviewSettings({
+      repeatX: example.previewRepeats.x,
+      repeatY: example.previewRepeats.y,
+      renderedRepeatX: example.previewRepeats.x,
+      renderedRepeatY: example.previewRepeats.y,
+    });
+    setTabs((current) => [...current, {
+      id,
+      document: example.document,
+      knitProgress: { ...defaultKnitProgress },
+      preview: nextPreview,
+    }]);
+    setPreviewDocuments((current) => ({ ...current, [id]: cloneDocument(example.document) }));
+    setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
+    setActiveTabId(id);
+    prepareTabView(example.document);
+  }
+
   async function saveActiveChartToCloud() {
     if (!viewer) return;
     setCloudSaveState("saving");
@@ -714,10 +739,12 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           </div>
         </div>
         <div className="topbar-actions">
-          <button className="primary-button knit-mode-button" onClick={() => setKnitModeOpen(true)}>Knit mode</button>
-          <AiChartGenerator document={document} onImport={importImage} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
-          <ImageImporter document={document} onImport={importImage} />
-          <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
+          <div className="workflow-actions" data-tour="workflow-actions">
+            <button className="primary-button knit-mode-button" onClick={() => setKnitModeOpen(true)}>Knit mode</button>
+            <AiChartGenerator document={document} onImport={importImage} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
+            <ImageImporter document={document} onImport={importImage} />
+            <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
+          </div>
           <ExportTools
             document={document}
             previewCanvasRef={previewCanvasRef}
@@ -729,6 +756,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             cloudSaveMessage={cloudSaveMessage}
             onSaveToCloud={saveActiveChartToCloud}
           />
+          <OnboardingTour tabsFull={tabs.length >= MAX_CHART_TABS} onOpenExample={openTutorialExample} />
           {accountsEnabled ? <div className="account-actions">
             {viewer ? <>
               <Link className="account-chip" href="/account" title={viewer.email ?? "Account"}><AccountAvatar avatar={viewer.avatar} /></Link>
@@ -737,7 +765,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         </div>
       </header>
 
-      <div className="chart-tabs-bar">
+      <div className="chart-tabs-bar" data-tour="chart-tabs">
         <div className="chart-tabs" role="tablist" aria-label="Open charts">
           {tabs.map((tab) => (
             <div className={`chart-tab ${tab.id === activeTabId ? "active" : ""}`} key={tab.id}>
@@ -767,7 +795,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
 
       <div className="workspace">
         <aside className="sidebar panel">
-          <details className="settings-group" open>
+          <details className="settings-group" data-tour="colours" open>
             <summary>Colours <span aria-hidden="true">⌄</span></summary>
             <div className="settings-content">
               <div className="compact-section-action"><button className="text-button" onClick={addColor} disabled={document.palette.length >= 8}>+ Add colour</button></div>
@@ -789,7 +817,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             </div>
           </details>
 
-          <details className="settings-group" open>
+          <details className="settings-group" data-tour="chart-size" open>
             <summary>Chart size <span aria-hidden="true">⌄</span></summary>
             <div className="settings-content">
               <div className="two-fields">
@@ -838,7 +866,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           <div className="panel-heading editor-heading">
             <h1 className="visually-hidden">Chart editor</h1>
             <div className="editor-actions">
-              <div className="tool-group" aria-label="Drawing tools">
+              <div className="tool-group" data-tour="drawing-tools" aria-label="Drawing tools">
                 <button className={tool === "pencil" ? "active" : ""} onClick={() => setTool("pencil")}>Draw</button>
                 <button className={tool === "fill" ? "active" : ""} onClick={() => setTool("fill")}>Fill</button>
                 <button className={tool === "eraser" ? "active" : ""} onClick={() => setTool("eraser")}>Erase</button>
@@ -877,7 +905,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           <ChartGrid document={document} tool={tool} selectedColor={selectedColor} zoom={chartZoom} selection={selection} onSelectionChange={setSelection} onStrokeStart={rememberCurrent} onPaint={paint} />
         </section>
 
-        <details className="preview panel" open>
+        <details className="preview panel" data-tour="knitted-preview" open>
           <summary className="panel-heading collapsible-heading">
             <div className="preview-heading-copy"><h1>Knitted up</h1><span>approximate fabric at your gauge</span></div>
             <span className="collapse-label">Show / hide <span aria-hidden="true">⌄</span></span>
