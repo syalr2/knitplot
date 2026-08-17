@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
+import { ColorCountChoice, convertImage } from "@/components/image-importer";
 
 type Props = {
   document: ChartDocument;
@@ -15,6 +16,8 @@ type Props = {
 type GenerateResponse = {
   palette?: string[];
   rows?: string[];
+  image?: string;
+  mimeType?: string;
   error?: string;
 };
 
@@ -37,6 +40,40 @@ function responseAsDraft(result: GenerateResponse, width: number, height: number
   const cells = result.rows.map((row) => Array.from(row, (character) => palette[Number(character)]?.id ?? ""));
   if (cells.some((row) => row.length !== width || row.some((cell) => !cell))) return null;
   return { palette, cells };
+}
+
+function sourceArtworkAsDraft(
+  result: GenerateResponse,
+  document: ChartDocument,
+  colorCount: ColorCountChoice,
+  signal: AbortSignal,
+) {
+  return new Promise<ChartDraft>((resolve, reject) => {
+    if (!result.image || !result.mimeType?.startsWith("image/")) {
+      reject(new Error("OpenAI did not return a usable source design. Please try again."));
+      return;
+    }
+
+    const image = new Image();
+    const stop = () => {
+      image.src = "";
+      reject(new DOMException("Generation stopped.", "AbortError"));
+    };
+    signal.addEventListener("abort", stop, { once: true });
+    image.onload = () => {
+      signal.removeEventListener("abort", stop);
+      try {
+        resolve(convertImage(image, document, colorCount, "cover", { x: 50, y: 50 }, 1));
+      } catch {
+        reject(new Error("The generated design could not be converted into stitches. Please try again."));
+      }
+    };
+    image.onerror = () => {
+      signal.removeEventListener("abort", stop);
+      reject(new Error("The generated design could not be opened. Please try again."));
+    };
+    image.src = `data:${result.mimeType};base64,${result.image}`;
+  });
 }
 
 function draftAsIndexedGrid(draft: ChartDraft) {
@@ -206,8 +243,10 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
       if (!response.ok) {
         throw new Error(result.error || "The chart could not be generated.");
       }
-      const draft = responseAsDraft(result, document.width, document.height);
-      if (!draft) throw new Error("OpenAI returned an invalid stitch chart. Please try again.");
+      const requestedColors: ColorCountChoice = colorMode === "exact"
+        ? colorCount
+        : { min: minimumColors, max: maximumColors };
+      const draft = await sourceArtworkAsDraft(result, document, requestedColors, controller.signal);
       setGeneratedDraft(draft);
       setGeneratedUrl(draftAsImage(draft, document));
     } catch (nextError) {
@@ -463,7 +502,7 @@ export function AiChartGenerator({ document, onImport, accountsEnabled, signedIn
                     </div>
                   ) : null}
                 </div>
-                <p className="import-note">AI will first compose a simple design, then translate it into the exact {document.width} × {document.height} stitch grid. Each draft uses two AI steps and your OpenAI API credits.</p>
+                <p className="import-note">AI will compose a clear source design, then KnitPlot will convert it in your browser into the exact {document.width} × {document.height} stitch grid. Each draft uses one AI image generation and your OpenAI API credits.</p>
                 {loading ? <p className="ai-loading" role="status">Generating your motif…</p> : null}
                 {error ? <p className="import-error" role="alert">{error}</p> : null}
                 <div className="import-actions">

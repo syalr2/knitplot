@@ -24,6 +24,11 @@ type OpenAIImageResponse = {
   error?: { code?: string; message?: string };
 };
 
+export type SourceArtwork = {
+  base64: string;
+  mimeType: "image/webp";
+};
+
 export class SourceArtworkApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -40,14 +45,20 @@ function imageSizeForAspect(inputAspect: number) {
   return `${roundTo16(width)}x${roundTo16(height)}`;
 }
 
-function smallChartGuidance(width: number, height: number) {
-  if (Math.min(width, height) <= 18 || width * height <= 350) {
-    return "The stitch budget is tiny. Use only a few large shapes, make essential features visually chunky, and remove nearly all decorative detail.";
+function chartComplexityGuidance(width: number, height: number) {
+  const smallerSide = Math.min(width, height);
+  const stitchCount = width * height;
+
+  if (smallerSide <= 18 || stitchCount <= 350) {
+    return "This exact chart has a tiny stitch budget. Treat it like a clear icon: use a chunky silhouette, make essential features at least two stitches thick where possible, and omit decorative detail.";
   }
-  if (Math.min(width, height) <= 30 || width * height <= 900) {
-    return "The stitch budget is small. Use a bold silhouette and only a few large internal details.";
+  if (smallerSide <= 30 || stitchCount <= 900) {
+    return "This exact chart has a small stitch budget. Use a bold silhouette, a limited number of connected internal shapes, and no fine texture or fragile one-stitch detail.";
   }
-  return "Keep all important features large enough to remain clear when translated into individual stitches.";
+  if (smallerSide <= 50 || stitchCount <= 2_500) {
+    return "This exact chart has a medium stitch budget. Moderate internal detail is appropriate, but every feature must still remain legible at the stated stitch dimensions.";
+  }
+  return "This exact chart has a generous stitch budget, so richer detail is appropriate. Still design at the stated stitch resolution and avoid details smaller than a stitch.";
 }
 
 export async function generateSourceArtwork(input: SourceArtworkInput) {
@@ -65,9 +76,11 @@ ${input.reference ? `Use the supplied image as a ${input.reference.use === "styl
 
 Hard requirements:
 - Think in the very limited budget of ${input.width} × ${input.height} logical stitch blocks before composing the design.
-- ${smallChartGuidance(input.width, input.height)}
+- ${chartComplexityGuidance(input.width, input.height)}
 - ${layoutRequirement}
 - ${colorRequirement}
+- Make the requested subject unmistakably recognizable at first glance. Preserve its familiar silhouette, proportions, and defining features.
+- Use a straightforward, literal depiction. Do not turn the subject into an abstract symbol, decorative geometry, or unrelated object unless the request explicitly asks for that.
 - Use flat, crisp pixel-art-like shapes with a bold, immediately readable silhouette.
 - The finished physical width-to-height ratio is ${input.chartAspect.toFixed(3)} because knit stitches are rectangular.
 - No gradients, lighting, shadows, texture, transparency, blur, antialiasing, lettering, numbers, borders, mockups, or visible grid lines.
@@ -85,8 +98,10 @@ Hard requirements:
     form.append("image", new Blob([imageBytes], { type: input.reference.mimeType }), "colorwork-reference.png");
     form.append("prompt", artworkPrompt);
     form.append("n", "1");
-    form.append("quality", "low");
+    form.append("quality", "medium");
     form.append("size", imageSizeForAspect(input.chartAspect));
+    form.append("output_format", "webp");
+    form.append("output_compression", "85");
     response = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       headers: { Authorization: `Bearer ${input.apiKey}` },
@@ -105,8 +120,10 @@ Hard requirements:
         model: "gpt-image-2",
         prompt: artworkPrompt,
         n: 1,
-        quality: "low",
+        quality: "medium",
         size: imageSizeForAspect(input.chartAspect),
+        output_format: "webp",
+        output_compression: 85,
       }),
       cache: "no-store",
       signal: input.signal,
@@ -129,5 +146,5 @@ Hard requirements:
   }
   const image = result.data?.[0]?.b64_json;
   if (!image) throw new SourceArtworkApiError("OpenAI did not return a source design. Please try again.", 502);
-  return image;
+  return { base64: image, mimeType: "image/webp" } satisfies SourceArtwork;
 }

@@ -1,4 +1,3 @@
-import { generateChartGrid, ChartGridApiError } from "@/lib/openai/chart-grid";
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
 import { generateSourceArtwork, SourceArtworkApiError } from "@/lib/openai/source-artwork";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
@@ -91,20 +90,11 @@ export async function POST(request: Request) {
       reference: referenceImage ? { base64: referenceImage, mimeType: referenceMimeType, use: referenceUse } : undefined,
       signal: operationSignal,
     });
-    const chart = await generateChartGrid({
-      apiKey: keyResult.key,
-      prompt: `Translate the supplied source design into the clearest possible ${width} by ${height} knitting chart. Preserve its main silhouette and identity, but remove any detail that cannot be expressed cleanly in this stitch budget. The original request was: ${prompt}`,
-      width,
-      height,
-      minimumColors: minimum,
-      maximumColors: maximum,
-      layoutMode,
-      reference: { base64: sourceArtwork, mimeType: "image/png", use: "subject" },
-      signal: operationSignal,
-    });
-    return Response.json(chart, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      { image: sourceArtwork.base64, mimeType: sourceArtwork.mimeType },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    if (error instanceof ChartGridApiError) return errorResponse(error.message, error.status);
     if (error instanceof SourceArtworkApiError) return errorResponse(error.message, error.status);
     if (error instanceof Error && error.name === "TimeoutError") {
       return errorResponse("Chart generation took too long. Please try again.", 504);
