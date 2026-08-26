@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { cellAspectRatio, ChartDocument, InstructionSettings } from "@/lib/chart";
+import {
+  cellAspectRatio,
+  ChartDocument,
+  contrastTextColor,
+  hasStructuralStitches,
+  InstructionSettings,
+  rowStitchMath,
+  rowStitchSteps,
+  stitchActionAt,
+  stitchActionLabel,
+  stitchActionMath,
+  stitchActionSymbol,
+  stitchDisplayColor,
+} from "@/lib/chart";
 
 export type KnitProgress = {
   row: number;
@@ -54,14 +67,18 @@ function isRightToLeft(document: ChartDocument, row: number) {
 }
 
 function rowSequence(document: ChartDocument, rowNumber: number) {
-  const source = document.cells[document.height - rowNumber] ?? [];
+  const source = rowStitchSteps(document, rowNumber);
   const ordered = isRightToLeft(document, rowNumber) ? [...source].reverse() : source;
   const labels = new Map(document.palette.map((color, index) => [color.id, index === 0 ? "MC" : `CC${index}`]));
   if (document.instructions.technique === "duplicate") labels.set(document.palette[0].id, "Skip");
-  return ordered.reduce<Array<{ colorId: string; label: string; count: number }>>((runs, colorId) => {
+  return ordered.reduce<Array<{ key: string; colorId: string; label: string; count: number }>>((runs, step) => {
+    if (step.action !== "knit") {
+      runs.push({ key: `${step.action}-${step.column}`, colorId: step.colorId, label: stitchActionLabel(step.action), count: 1 });
+      return runs;
+    }
     const previous = runs[runs.length - 1];
-    if (previous?.colorId === colorId) previous.count += 1;
-    else runs.push({ colorId, label: labels.get(colorId) ?? "?", count: 1 });
+    if (previous?.key === step.colorId) previous.count += 1;
+    else runs.push({ key: step.colorId, colorId: step.colorId, label: labels.get(step.colorId) ?? "?", count: 1 });
     return runs;
   }, []);
 }
@@ -75,7 +92,7 @@ function knitRegion(document: ChartDocument, shouldTrim: boolean) {
   let maximumColumn = -1;
 
   document.cells.forEach((chartRow, rowIndex) => chartRow.forEach((colorId, columnIndex) => {
-    if (colorId === backgroundId) return;
+    if (colorId === backgroundId && stitchActionAt(document, rowIndex, columnIndex) === "knit") return;
     minimumRow = Math.min(minimumRow, rowIndex);
     maximumRow = Math.max(maximumRow, rowIndex);
     minimumColumn = Math.min(minimumColumn, columnIndex);
@@ -92,6 +109,9 @@ function knitRegion(document: ChartDocument, shouldTrim: boolean) {
       width,
       height,
       cells: document.cells.slice(minimumRow, maximumRow + 1).map((chartRow) => chartRow.slice(minimumColumn, maximumColumn + 1)),
+      stitchActions: document.stitchActions
+        ?.slice(minimumRow, maximumRow + 1)
+        .map((chartRow) => chartRow.slice(minimumColumn, maximumColumn + 1)),
     },
     trimmed: true,
   };
@@ -103,10 +123,16 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
   const aspect = cellAspectRatio(activeDocument);
   const palette = new Map(activeDocument.palette.map((color) => [color.id, color.hex]));
   const row = clamp(progress.row, 1, activeDocument.height);
-  const stitch = clamp(progress.stitch, 0, activeDocument.width);
+  const structural = hasStructuralStitches(activeDocument);
+  const rowSteps = rowStitchSteps(activeDocument, row);
+  const rowMath = rowStitchMath(activeDocument, row);
+  const orderedRowSteps = isRightToLeft(activeDocument, row) ? [...rowSteps].reverse() : rowSteps;
+  const stitch = clamp(progress.stitch, 0, orderedRowSteps.length);
+  const activeStep = stitch > 0 ? orderedRowSteps[stitch - 1] : undefined;
+  const activeStepMath = activeStep ? stitchActionMath(activeStep.action) : undefined;
   const rowIndex = activeDocument.height - row;
   const rightToLeft = isRightToLeft(activeDocument, row);
-  const markerColumn = stitch > 0 ? (rightToLeft ? activeDocument.width - stitch : stitch - 1) : -1;
+  const markerColumn = stitch > 0 ? orderedRowSteps[stitch - 1]?.column ?? -1 : -1;
   const markerX = (markerColumn + 0.5) * aspect;
   const marker = MARKERS.find((choice) => choice.id === progress.markerStyle) ?? MARKERS[1];
   const sequence = useMemo(() => rowSequence(activeDocument, row), [activeDocument, row]);
@@ -120,10 +146,12 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
   const rowStep = activeDocument.height <= 24 ? 1 : 5;
 
   function update(nextRow: number, nextStitch: number) {
+    const clampedRow = clamp(nextRow, 1, activeDocument.height);
+    const maximumStep = rowStitchSteps(activeDocument, clampedRow).length;
     onProgressChange({
       ...progress,
-      row: clamp(nextRow, 1, activeDocument.height),
-      stitch: clamp(nextStitch, 0, activeDocument.width),
+      row: clampedRow,
+      stitch: clamp(nextStitch, 0, maximumStep),
     });
   }
 
@@ -133,8 +161,8 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
 
   function changeStitch(amount: number) {
     const next = stitch + amount;
-    if (next > activeDocument.width && row < activeDocument.height) update(row + 1, 0);
-    else if (next < 0 && row > 1) update(row - 1, activeDocument.width);
+    if (next > orderedRowSteps.length && row < activeDocument.height) update(row + 1, 0);
+    else if (next < 0 && row > 1) update(row - 1, rowStitchSteps(activeDocument, row - 1).length);
     else update(row, next);
   }
 
@@ -162,8 +190,10 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
         <div className="knit-mode-status">
           <strong>{unitName} {row} of {activeDocument.height}</strong>
           <span>{stitch > 0
-            ? progress.markerStyle === "none" ? `Stitch ${stitch} of ${activeDocument.width} selected` : `Marker on stitch ${stitch} of ${activeDocument.width}`
-            : "Click a stitch to mark your place"}</span>
+            ? progress.markerStyle === "none"
+              ? `${structural ? "Step" : "Stitch"} ${stitch} of ${orderedRowSteps.length} selected`
+              : `Marker on ${structural ? "step" : "stitch"} ${stitch} of ${orderedRowSteps.length}`
+            : `Click a ${structural ? "step" : "stitch"} to mark your place`}</span>
         </div>
         <button className="secondary-button" onClick={onClose}>Exit knit mode</button>
       </header>
@@ -178,23 +208,36 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
             aria-label={`Chart with row ${row} highlighted${stitch > 0 && progress.markerStyle !== "none" ? ` and a marker on stitch ${stitch}` : ""}`}
           >
             <g shapeRendering="crispEdges">
-              {activeDocument.cells.flatMap((chartRow, chartRowIndex) => chartRow.map((colorId, columnIndex) => (
-                <rect
-                  key={`${chartRowIndex}-${columnIndex}`}
-                  x={columnIndex * aspect}
-                  y={chartRowIndex}
-                  width={aspect}
-                  height="1"
-                  fill={palette.get(colorId) ?? "#fff"}
-                  onClick={() => {
-                    const nextRow = activeDocument.height - chartRowIndex;
-                    const selectedStitch = isRightToLeft(activeDocument, nextRow)
-                      ? activeDocument.width - columnIndex
-                      : columnIndex + 1;
-                    update(nextRow, selectedStitch);
-                  }}
-                />
-              )))}
+              {activeDocument.cells.flatMap((chartRow, chartRowIndex) => chartRow.map((colorId, columnIndex) => {
+                const action = stitchActionAt(activeDocument, chartRowIndex, columnIndex);
+                return (
+                  <rect
+                    key={`${chartRowIndex}-${columnIndex}`}
+                    className={action === "no-stitch" ? "knit-mode-no-stitch" : undefined}
+                    x={columnIndex * aspect}
+                    y={chartRowIndex}
+                    width={aspect}
+                    height="1"
+                    fill={action === "knit" ? palette.get(colorId) ?? "#fff" : stitchDisplayColor(activeDocument, action)}
+                    onClick={() => {
+                      if (action === "no-stitch") return;
+                      const nextRow = activeDocument.height - chartRowIndex;
+                      const steps = rowStitchSteps(activeDocument, nextRow);
+                      const orderedSteps = isRightToLeft(activeDocument, nextRow) ? [...steps].reverse() : steps;
+                      const selectedStitch = orderedSteps.findIndex((step) => step.column === columnIndex) + 1;
+                      if (selectedStitch > 0) update(nextRow, selectedStitch);
+                    }}
+                  />
+                );
+              }))}
+            </g>
+            <g className="knit-mode-action-symbols" pointerEvents="none">
+              {activeDocument.cells.flatMap((chartRow, chartRowIndex) => chartRow.map((_, columnIndex) => {
+                const action = stitchActionAt(activeDocument, chartRowIndex, columnIndex);
+                if (action === "knit") return null;
+                const background = stitchDisplayColor(activeDocument, action);
+                return <text key={`${chartRowIndex}-${columnIndex}`} style={{ fill: contrastTextColor(background) }} x={(columnIndex + 0.5) * aspect} y={chartRowIndex + 0.7} textAnchor="middle" fontSize={Math.min(0.48, aspect * 0.38)}>{stitchActionSymbol(action)}</text>;
+              }))}
             </g>
             <rect className="knit-mode-row-dimmer top" x="0" y="0" width={activeDocument.width * aspect} height={rowIndex} />
             <rect className="knit-mode-row-dimmer bottom" x="0" y={rowIndex + 1} width={activeDocument.width * aspect} height={activeDocument.height - rowIndex - 1} />
@@ -281,10 +324,26 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
           </div>
           <p className="knit-direction">{isDuplicate
             ? "Follow each chart row from left to right, or work the duplicate stitches in any order that feels comfortable."
-            : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`} Click any stitch to place your marker there.</p>
+            : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`} {structural ? "Skip the no-stitch cells; shaping actions are counted separately from ordinary stitches." : "Click any stitch to place your marker there."}</p>
+          {structural ? (
+            <div className="knit-row-math" aria-label={`${unitName} stitch count`}>
+              <div><span>Start</span><strong>{rowMath.startingStitches}</strong></div>
+              <div className={rowMath.change > 0 ? "increase" : rowMath.change < 0 ? "decrease" : ""}><span>Change</span><strong>{rowMath.change > 0 ? `+${rowMath.change}` : rowMath.change}</strong></div>
+              <div><span>End</span><strong>{rowMath.endingStitches}</strong></div>
+            </div>
+          ) : null}
+          {activeStep ? (
+            <div className={`knit-current-step ${activeStep.action !== "knit" ? "shaping" : ""}`}>
+              <span>Current {structural ? "step" : "stitch"}</span>
+              <strong>{activeStep.action === "knit"
+                ? `Work ${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId) === 0 ? "MC" : `CC${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId)}`}`
+                : stitchActionLabel(activeStep.action)}</strong>
+              {activeStep.action !== "knit" && activeStepMath ? <small>{activeStepMath.consumes} stitch{activeStepMath.consumes === 1 ? "" : "es"} in → {activeStepMath.produces} out. This is not an MC stitch.</small> : null}
+            </div>
+          ) : null}
           <div className="knit-sequence" aria-label="Current row colour sequence">
             {sequence.map((run, index) => (
-              <span key={`${run.colorId}-${index}`}><i style={{ background: palette.get(run.colorId) }} />{run.label} {run.count}</span>
+              <span key={`${run.key}-${index}`} className={run.key === run.colorId ? "" : "stitch-action"}>{run.key === run.colorId ? <i style={{ background: palette.get(run.colorId) }} /> : null}{run.label} {run.key === run.colorId ? run.count : ""}</span>
             ))}
           </div>
           <div className="knit-row-controls">
@@ -292,11 +351,11 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
             <button className="primary-button" onClick={() => changeRow(1)} disabled={row === activeDocument.height}>Next row</button>
           </div>
           <div className="knit-step-controls">
-            <button onClick={() => changeStitch(-1)} disabled={row === 1 && stitch === 0}>Previous stitch</button>
-            <button onClick={() => changeStitch(1)} disabled={row === activeDocument.height && stitch === activeDocument.width}>Next stitch</button>
+            <button onClick={() => changeStitch(-1)} disabled={row === 1 && stitch === 0}>Previous {structural ? "step" : "stitch"}</button>
+            <button onClick={() => changeStitch(1)} disabled={row === activeDocument.height && stitch === orderedRowSteps.length}>Next {structural ? "step" : "stitch"}</button>
           </div>
           <button className="knit-reset" onClick={() => update(1, 0)}>Start again from row 1</button>
-          <p className="knit-keyboard-hint">Use the left and right arrow keys for stitches, the up and down arrow keys for rows, or press Space for the next stitch. Your place is remembered for this chart.</p>
+          <p className="knit-keyboard-hint">Use the left and right arrow keys for {structural ? "steps" : "stitches"}, the up and down arrow keys for rows, or press Space for the next {structural ? "step" : "stitch"}. Your place is remembered for this chart.</p>
         </aside>
       </div>
     </section>

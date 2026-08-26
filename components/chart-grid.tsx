@@ -1,11 +1,12 @@
 "use client";
 
 import { PointerEvent, useRef } from "react";
-import { cellAspectRatio, CellSelection, ChartDocument, Tool } from "@/lib/chart";
+import { cellAspectRatio, CellSelection, ChartDocument, contrastTextColor, stitchActionAt, stitchActionLabel, stitchActionSymbol, stitchDisplayColor, StitchAction, Tool } from "@/lib/chart";
 
 type Props = {
   document: ChartDocument;
   tool: Tool;
+  structureAction: StitchAction | null;
   selectedColor: string;
   zoom: number;
   selection: CellSelection | null;
@@ -14,7 +15,7 @@ type Props = {
   onPaint: (row: number, column: number, flood: boolean) => void;
 };
 
-export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSelectionChange, onStrokeStart, onPaint }: Props) {
+export function ChartGrid({ document, tool, structureAction, selectedColor, zoom, selection, onSelectionChange, onStrokeStart, onPaint }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drawing = useRef(false);
   const selecting = useRef(false);
@@ -41,6 +42,7 @@ export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSe
   }
 
   function handlePointerDown(event: PointerEvent<SVGSVGElement>) {
+    event.preventDefault();
     const cell = cellFromPointer(event);
     if (!cell) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -58,6 +60,7 @@ export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSe
   }
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    if (drawing.current || selecting.current) event.preventDefault();
     if (selecting.current && selectionStart.current) {
       const cell = cellFromPointer(event);
       if (!cell) return;
@@ -129,17 +132,29 @@ export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSe
           >
             <g shapeRendering="crispEdges">
               {document.cells.flatMap((row, rowIndex) =>
-                row.map((colorId, columnIndex) => (
-                  <rect
-                    key={`${rowIndex}-${columnIndex}`}
-                    x={columnIndex * aspect}
-                    y={rowIndex}
-                    width={aspect}
-                    height="1"
-                    fill={palette.get(colorId) ?? "#ffffff"}
-                  />
-                )),
+                row.map((colorId, columnIndex) => {
+                  const action = stitchActionAt(document, rowIndex, columnIndex);
+                  return (
+                    <rect
+                      key={`${rowIndex}-${columnIndex}`}
+                      className={action === "no-stitch" ? "chart-no-stitch" : undefined}
+                      x={columnIndex * aspect}
+                      y={rowIndex}
+                      width={aspect}
+                      height="1"
+                      fill={action === "knit" ? palette.get(colorId) ?? "#ffffff" : stitchDisplayColor(document, action)}
+                    />
+                  );
+                }),
               )}
+            </g>
+            <g className="chart-action-symbols" pointerEvents="none">
+              {document.cells.flatMap((row, rowIndex) => row.map((_, columnIndex) => {
+                const action = stitchActionAt(document, rowIndex, columnIndex);
+                if (action === "knit") return null;
+                const background = stitchDisplayColor(document, action);
+                return <text key={`${rowIndex}-${columnIndex}`} style={{ fill: contrastTextColor(background) }} x={(columnIndex + 0.5) * aspect} y={rowIndex + 0.69} textAnchor="middle" fontSize={Math.min(0.45, aspect * 0.35)}>{stitchActionSymbol(action)}</text>;
+              }))}
             </g>
             <g className="grid-lines" shapeRendering="crispEdges" pointerEvents="none">
               {Array.from({ length: document.width + 1 }, (_, column) => (
@@ -185,7 +200,9 @@ export function ChartGrid({ document, tool, selectedColor, zoom, selection, onSe
           </svg>
         </div>
         <p className="chart-hint">
-          {tool === "fill" ? "Click an area to fill it." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, or move it." : `Click and drag to ${tool === "eraser" ? "erase" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}
+          {structureAction
+            ? `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
+            : tool === "fill" ? "Click an area to fill it. Clicking a stitch symbol replaces it with the selected colour." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action." : `Click and drag to ${tool === "eraser" ? "erase" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}{document.stitchActions && !structureAction ? " Painting over a stitch symbol turns it into a regular colour stitch." : ""}
         </p>
       </div>
     </div>

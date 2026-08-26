@@ -4,9 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import {
   cellAspectRatio,
   ChartDocument,
+  contrastTextColor,
   defaultInstructionSettings,
   finishedSize,
+  hasStructuralStitches,
   InstructionSettings,
+  rowStitchMath,
+  rowStitchSteps,
+  stitchActionAt,
+  stitchActionLabel,
+  stitchActionSymbol,
+  stitchDisplayColor,
 } from "@/lib/chart";
 
 type Props = {
@@ -33,7 +41,7 @@ function instructionRegion(document: ChartDocument, shouldTrim: boolean): Instru
 
   document.cells.forEach((row, rowIndex) => {
     row.forEach((colorId, columnIndex) => {
-      if (colorId === backgroundId) return;
+      if (colorId === backgroundId && stitchActionAt(document, rowIndex, columnIndex) === "knit") return;
       minimumRow = Math.min(minimumRow, rowIndex);
       maximumRow = Math.max(maximumRow, rowIndex);
       minimumColumn = Math.min(minimumColumn, columnIndex);
@@ -51,9 +59,12 @@ function instructionRegion(document: ChartDocument, shouldTrim: boolean): Instru
   const cells = document.cells
     .slice(minimumRow, maximumRow + 1)
     .map((row) => row.slice(minimumColumn, maximumColumn + 1));
+  const stitchActions = document.stitchActions
+    ?.slice(minimumRow, maximumRow + 1)
+    .map((row) => row.slice(minimumColumn, maximumColumn + 1));
 
   return {
-    document: { ...document, width, height, cells },
+    document: { ...document, width, height, cells, stitchActions },
     hasDesign,
     trimmed: width !== document.width || height !== document.height,
     leftOffset: minimumColumn,
@@ -83,20 +94,35 @@ function writtenRows(document: ChartDocument, settings: InstructionSettings) {
   if (settings.technique === "duplicate") labels.set(document.palette[0].id, "Skip");
   return Array.from({ length: document.height }, (_, index) => {
     const number = index + 1;
-    const source = document.cells[document.height - number] ?? [];
+    const source = rowStitchSteps(document, number);
     const isDuplicate = settings.technique === "duplicate";
     const isRound = !isDuplicate && settings.construction === "round";
     const rightSide = number % 2 === 1;
     const readRightToLeft = !isDuplicate && (isRound || rightSide);
     const ordered = readRightToLeft ? [...source].reverse() : source;
-    const sequence = compressRow(ordered, labels)
-      .map((run) => `${run.label} ${run.count}`)
-      .join(", ");
+    const sequenceParts: string[] = [];
+    let knitRun: string[] = [];
+    const flushKnitRun = () => {
+      if (!knitRun.length) return;
+      sequenceParts.push(...compressRow(knitRun, labels).map((run) => `${run.label} ${run.count}`));
+      knitRun = [];
+    };
+    ordered.forEach((step) => {
+      if (step.action === "knit") knitRun.push(step.colorId);
+      else {
+        flushKnitRun();
+        sequenceParts.push(stitchActionLabel(step.action));
+      }
+    });
+    flushKnitRun();
+    const sequence = sequenceParts.join(", ");
+    const math = rowStitchMath(document, number);
 
     return {
       number,
       side: isDuplicate || isRound ? "" : rightSide ? "RS" : "WS",
       sequence,
+      ...math,
     };
   });
 }
@@ -137,26 +163,16 @@ function PrintableChart({ document, showSymbols }: { document: ChartDocument; sh
 
   return (
     <svg className="instructions-chart" viewBox={`${-leftMargin} ${-topMargin} ${width + leftMargin} ${height + topMargin + bottomMargin}`} role="img" aria-label={`${document.width} stitch by ${document.height} row chart`}>
-      {document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => (
-        <rect
-          key={`${rowIndex}-${columnIndex}`}
-          x={columnIndex * stitchWidth}
-          y={rowIndex}
-          width={stitchWidth}
-          height={1}
-          fill={palette.get(colorId) ?? "#ffffff"}
-        />
-      )))}
-      {showSymbols ? document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => (
-        <text
-          className="instruction-cell-symbol"
-          key={`symbol-${rowIndex}-${columnIndex}`}
-          x={(columnIndex + 0.5) * stitchWidth}
-          y={rowIndex + 0.69}
-          textAnchor="middle"
-          fontSize={Math.min(0.68, stitchWidth * 0.55)}
-        >{symbols.get(colorId)}</text>
-      ))) : null}
+      {document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => {
+        const action = stitchActionAt(document, rowIndex, columnIndex);
+        return <rect key={`${rowIndex}-${columnIndex}`} x={columnIndex * stitchWidth} y={rowIndex} width={stitchWidth} height={1} fill={action === "knit" ? palette.get(colorId) ?? "#ffffff" : stitchDisplayColor(document, action)} />;
+      }))}
+      {document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => {
+        const action = stitchActionAt(document, rowIndex, columnIndex);
+        const symbol = action !== "knit" ? stitchActionSymbol(action) : showSymbols ? symbols.get(colorId) : "";
+        const symbolColor = action !== "knit" ? contrastTextColor(stitchDisplayColor(document, action)) : undefined;
+        return symbol ? <text className="instruction-cell-symbol" style={symbolColor ? { fill: symbolColor } : undefined} key={`symbol-${rowIndex}-${columnIndex}`} x={(columnIndex + 0.5) * stitchWidth} y={rowIndex + 0.69} textAnchor="middle" fontSize={Math.min(action === "knit" ? 0.68 : 0.42, stitchWidth * (action === "knit" ? 0.55 : 0.34))}>{symbol}</text> : null;
+      }))}
       {verticalLines}
       {horizontalLines}
       {Array.from({ length: document.width }, (_, index) => (
@@ -188,6 +204,7 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
   const rows = useMemo(() => writtenRows(instructionDocument, settings), [instructionDocument, settings]);
   const size = useMemo(() => finishedSize(instructionDocument), [instructionDocument]);
   const isDuplicate = settings.technique === "duplicate";
+  const showStitchMath = !isDuplicate && hasStructuralStitches(instructionDocument);
   const unitName = isDuplicate ? "Row" : settings.construction === "round" ? "Round" : "Row";
 
   useEffect(() => {
@@ -307,12 +324,19 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
                 <p className="instruction-note">
                   {settings.technique === "duplicate"
                     ? "Sequences are written in chart-reading order. Skip counts are base stitches left unembroidered; other counts are duplicate stitches worked in that colour."
-                    : "Sequences are written in working order. Each number is the number of stitches to work in that colour."}
+                    : showStitchMath
+                      ? "Sequences are written in working order. Colour counts show ordinary stitches; shaping actions show their own abbreviations. The count beneath each row accounts for stitches consumed and produced by those actions."
+                      : "Sequences are written in working order. Each number is the number of stitches to work in that colour."}
                 </p>
                 <ol className="written-row-list">
                   {rows.map((row) => (
                     <li key={row.number}>
                       <strong>{unitName} {row.number}{row.side ? ` (${row.side})` : ""}:</strong> {row.sequence}
+                      {showStitchMath ? (
+                        <small className="written-row-math">
+                          {row.startingStitches} sts in → {row.endingStitches} sts out ({row.change > 0 ? `+${row.change}` : row.change})
+                        </small>
+                      ) : null}
                     </li>
                   ))}
                 </ol>

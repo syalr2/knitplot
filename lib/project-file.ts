@@ -5,7 +5,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function readProject(value: unknown): ChartDocument {
-  if (!isRecord(value) || value.format !== "colorwork-chart" || value.version !== 1 || !isRecord(value.document)) {
+  if (!isRecord(value) || value.format !== "colorwork-chart" || ![1, 2].includes(Number(value.version)) || !isRecord(value.document)) {
     throw new Error("This is not a KnitPlot file.");
   }
   const candidate = value.document;
@@ -15,6 +15,9 @@ export function readProject(value: unknown): ChartDocument {
   const cells = candidate.cells;
   const instructions = candidate.instructions;
   const guides = candidate.guides;
+  const stitchActions = candidate.stitchActions;
+  const stitchPalette = candidate.stitchPalette;
+  const stitchColors = candidate.stitchColors;
   const validNumber = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0 && number <= 100;
 
   if (
@@ -37,6 +40,23 @@ export function readProject(value: unknown): ChartDocument {
   const validCells = cells.every((row) =>
     Array.isArray(row) && row.length === width && row.every((colorId) => typeof colorId === "string" && colorIds.has(colorId)),
   );
+  const validStitchActions = stitchActions === undefined || (
+    Array.isArray(stitchActions) && stitchActions.length === height && stitchActions.every((row) =>
+      Array.isArray(row) && row.length === width && row.every((action) =>
+        ["knit", "no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)),
+      ),
+    )
+  );
+  const validStitchPalette = stitchPalette === undefined || (
+    Array.isArray(stitchPalette) && stitchPalette.length <= 9 && new Set(stitchPalette).size === stitchPalette.length &&
+    stitchPalette.every((action) => ["no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)))
+  );
+  const validStitchColors = stitchColors === undefined || (
+    isRecord(stitchColors) && Object.entries(stitchColors).every(([action, color]) =>
+      ["no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(action) &&
+      typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
+    )
+  );
   const validInstructions = instructions === undefined || (
     isRecord(instructions) &&
     ["stranded", "intarsia", "duplicate"].includes(String(instructions.technique)) &&
@@ -52,7 +72,7 @@ export function readProject(value: unknown): ChartDocument {
     Number.isInteger(guides.repeatWidth) && Number(guides.repeatWidth) >= 1 && Number(guides.repeatWidth) <= Number(width) &&
     Number.isInteger(guides.repeatHeight) && Number(guides.repeatHeight) >= 1 && Number(guides.repeatHeight) <= Number(height)
   );
-  if (!colors || colorIds.size !== palette.length || !validCells || !validInstructions || !validGuides) {
+  if (!colors || colorIds.size !== palette.length || !validCells || !validStitchActions || !validStitchPalette || !validStitchColors || !validInstructions || !validGuides) {
     throw new Error("This project file contains invalid colours or stitches.");
   }
 

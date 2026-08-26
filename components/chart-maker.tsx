@@ -11,15 +11,26 @@ import { InstructionsView } from "@/components/instructions-view";
 import { KnitPreview } from "@/components/knit-preview";
 import { defaultKnitProgress, KnitMode, KnitProgress } from "@/components/knit-mode";
 import { OnboardingTour } from "@/components/onboarding-tour";
+import { PatternChartImporter } from "@/components/pattern-chart-importer";
 import {
   CellSelection,
   ChartDocument,
   cloneDocument,
+  contrastTextColor,
+  createStitchActions,
   defaultDocument,
   finishedSize,
-  floodFill,
+  floodFillActive,
   resizeCellsCentered,
+  resizeStitchActionsCentered,
   scaleCells,
+  scaleStitchActions,
+  stitchActionAt,
+  stitchActionOptions,
+  stitchDisplayColor,
+  stitchPaletteFromActions,
+  StitchAction,
+  StitchPaletteAction,
   Tool,
 } from "@/lib/chart";
 import type { Viewer } from "@/lib/auth";
@@ -41,7 +52,7 @@ type PreviewSettings = {
 };
 type ChartTab = { id: string; cloudId?: string; document: ChartDocument; knitProgress: KnitProgress; preview: PreviewSettings };
 type TabHistory = { past: ChartDocument[]; future: ChartDocument[] };
-type SelectionClipboard = { tabId: string; cells: string[][] };
+type SelectionClipboard = { tabId: string; cells: string[][]; stitchActions: StitchAction[][] };
 type WorkspaceSave = {
   format: "knitplot-workspace";
   version: 1 | 2 | 3 | 4;
@@ -88,6 +99,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const document = activeTab.document;
   const [tool, setTool] = useState<Tool>("pencil");
+  const [structureAction, setStructureAction] = useState<StitchAction | null>(null);
+  const [stitchPickerOpen, setStitchPickerOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState(defaultDocument.palette[1].id);
   const [histories, setHistories] = useState<Record<string, TabHistory>>({
     [INITIAL_TAB_ID]: { past: [], future: [] },
@@ -101,6 +114,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [selectionClipboard, setSelectionClipboard] = useState<SelectionClipboard | null>(null);
   const [knitModeOpen, setKnitModeOpen] = useState(false);
+  const [patternImporterOpen, setPatternImporterOpen] = useState(false);
   const [dimensionDraft, setDimensionDraft] = useState({ width: String(defaultDocument.width), height: String(defaultDocument.height) });
   const [gaugeDraft, setGaugeDraft] = useState({
     stitches: String(defaultDocument.gaugeStitches),
@@ -266,6 +280,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   }, [document.gaugeStitches, document.gaugeRows, document.gaugeMeasure]);
 
   const size = useMemo(() => finishedSize(document), [document]);
+  const stitchPalette = document.stitchPalette ?? stitchPaletteFromActions(document.stitchActions);
 
   function rememberCurrent() {
     setHistoryPart("past", (items) => [...items.slice(-39), cloneDocument(document)]);
@@ -294,10 +309,51 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   }
 
   function paint(row: number, column: number, shouldFill: boolean) {
+    if (structureAction) {
+      setDocument((current) => {
+        const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height))
+          .map((currentRow) => [...currentRow]);
+        const targets = new Set([`${row}:${column}`]);
+        if (current.guides.symmetry === "horizontal" || current.guides.symmetry === "both") targets.add(`${row}:${current.width - column - 1}`);
+        if (current.guides.symmetry === "vertical" || current.guides.symmetry === "both") targets.add(`${current.height - row - 1}:${column}`);
+        if (current.guides.symmetry === "both") targets.add(`${current.height - row - 1}:${current.width - column - 1}`);
+        let changed = false;
+        for (const target of targets) {
+          const [targetRow, targetColumn] = target.split(":").map(Number);
+          if (stitchActions[targetRow][targetColumn] !== structureAction) {
+            stitchActions[targetRow][targetColumn] = structureAction;
+            changed = true;
+          }
+        }
+        if (!changed) return current;
+        return {
+          ...current,
+          stitchActions: stitchActions.some((currentRow) => currentRow.some((action) => action !== "knit"))
+            ? stitchActions
+            : undefined,
+        };
+      });
+      return;
+    }
     const colorId = tool === "eraser" ? document.palette[0].id : selectedColor;
     setDocument((current) => {
-      if (shouldFill) return { ...current, cells: floodFill(current.cells, row, column, colorId) };
+      if (shouldFill) {
+        const startingAction = stitchActionAt(current, row, column);
+        if (startingAction !== "knit") {
+          const cells = current.cells.map((currentRow) => [...currentRow]);
+          const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((currentRow) => [...currentRow]);
+          cells[row][column] = colorId;
+          stitchActions[row][column] = "knit";
+          return {
+            ...current,
+            cells,
+            stitchActions: stitchActions.some((currentRow) => currentRow.some((action) => action !== "knit")) ? stitchActions : undefined,
+          };
+        }
+        return { ...current, cells: floodFillActive(current.cells, current.stitchActions, row, column, colorId) };
+      }
       const cells = current.cells.map((currentRow) => [...currentRow]);
+      const stitchActions = current.stitchActions?.map((currentRow) => [...currentRow]);
       const targets = new Set([`${row}:${column}`]);
       if (current.guides.symmetry === "horizontal" || current.guides.symmetry === "both") {
         targets.add(`${row}:${current.width - column - 1}`);
@@ -311,13 +367,21 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       let changed = false;
       for (const target of targets) {
         const [targetRow, targetColumn] = target.split(":").map(Number);
+        if (stitchActions && stitchActions[targetRow][targetColumn] !== "knit") {
+          stitchActions[targetRow][targetColumn] = "knit";
+          changed = true;
+        }
         if (cells[targetRow][targetColumn] !== colorId) {
           cells[targetRow][targetColumn] = colorId;
           changed = true;
         }
       }
       if (!changed) return current;
-      return { ...current, cells };
+      return {
+        ...current,
+        cells,
+        stitchActions: stitchActions?.some((currentRow) => currentRow.some((action) => action !== "knit")) ? stitchActions : undefined,
+      };
     });
   }
 
@@ -338,10 +402,39 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const endColumn = Math.max(selection.startColumn, selection.endColumn);
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = startRow; row <= endRow; row += 1) {
-        for (let column = startColumn; column <= endColumn; column += 1) cells[row][column] = selectedColor;
+        for (let column = startColumn; column <= endColumn; column += 1) {
+          cells[row][column] = selectedColor;
+          stitchActions[row][column] = "knit";
+        }
       }
-      return { ...current, cells };
+      return {
+        ...current,
+        cells,
+        stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined,
+      };
+    });
+    setSelection(null);
+  }
+
+  function applyStructureToSelection() {
+    const bounds = selectionBounds();
+    if (!bounds || !structureAction) return;
+    commit((current) => {
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height))
+        .map((row) => [...row]);
+      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+          stitchActions[row][column] = structureAction;
+        }
+      }
+      return {
+        ...current,
+        stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit"))
+          ? stitchActions
+          : undefined,
+      };
     });
     setSelection(null);
   }
@@ -364,6 +457,11 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       cells: document.cells
         .slice(bounds.startRow, bounds.endRow + 1)
         .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1)),
+      stitchActions: Array.from({ length: bounds.endRow - bounds.startRow + 1 }, (_, rowOffset) =>
+        Array.from({ length: bounds.endColumn - bounds.startColumn + 1 }, (_, columnOffset) =>
+          stitchActionAt(document, bounds.startRow + rowOffset, bounds.startColumn + columnOffset),
+        ),
+      ),
     });
   }
 
@@ -373,12 +471,14 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     copySelection();
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
         for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
           cells[row][column] = current.palette[0].id;
+          stitchActions[row][column] = "knit";
         }
       }
-      return { ...current, cells };
+      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
   }
 
@@ -389,14 +489,16 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const startColumn = bounds?.startColumn ?? 0;
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       selectionClipboard.cells.forEach((clipboardRow, rowOffset) => {
         clipboardRow.forEach((colorId, columnOffset) => {
           if (cells[startRow + rowOffset]?.[startColumn + columnOffset] !== undefined) {
             cells[startRow + rowOffset][startColumn + columnOffset] = colorId;
+            stitchActions[startRow + rowOffset][startColumn + columnOffset] = selectionClipboard.stitchActions[rowOffset]?.[columnOffset] ?? "knit";
           }
         });
       });
-      return { ...current, cells };
+      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
     const pastedHeight = Math.min(selectionClipboard.cells.length, document.height - startRow);
     const pastedWidth = Math.min(selectionClipboard.cells[0]?.length ?? 0, document.width - startColumn);
@@ -422,14 +524,24 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       const block = current.cells
         .slice(bounds.startRow, bounds.endRow + 1)
         .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
+      const actionBlock = Array.from({ length: bounds.endRow - bounds.startRow + 1 }, (_, rowOffset) =>
+        Array.from({ length: bounds.endColumn - bounds.startColumn + 1 }, (_, columnOffset) =>
+          stitchActionAt(current, bounds.startRow + rowOffset, bounds.startColumn + columnOffset),
+        ),
+      );
       const cells = current.cells.map((row) => [...row]);
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) cells[row][column] = current.palette[0].id;
+        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+          cells[row][column] = current.palette[0].id;
+          stitchActions[row][column] = "knit";
+        }
       }
       block.forEach((blockRow, rowOffset) => blockRow.forEach((colorId, columnOffset) => {
         cells[nextStartRow + rowOffset][nextStartColumn + columnOffset] = colorId;
+        stitchActions[nextStartRow + rowOffset][nextStartColumn + columnOffset] = actionBlock[rowOffset][columnOffset];
       }));
-      return { ...current, cells };
+      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
     setSelection({ startRow: nextStartRow, endRow: nextEndRow, startColumn: nextStartColumn, endColumn: nextEndColumn });
   }
@@ -440,6 +552,9 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       cells: direction === "horizontal"
         ? current.cells.map((row) => [...row].reverse())
         : [...current.cells].reverse().map((row) => [...row]),
+      stitchActions: !current.stitchActions ? undefined : direction === "horizontal"
+        ? current.stitchActions.map((row) => [...row].reverse())
+        : [...current.stitchActions].reverse().map((row) => [...row]),
     }));
     setSelection(null);
   }
@@ -459,6 +574,11 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
           current.cells[current.height - 1 - column][row],
         ),
       ),
+      stitchActions: current.stitchActions ? Array.from({ length: current.width }, (_, row) =>
+        Array.from({ length: current.height }, (_, column) =>
+          current.stitchActions![current.height - 1 - column][row],
+        ),
+      ) : undefined,
     }));
     clampActiveKnitProgress(document.height, document.width);
     setSelection(null);
@@ -480,6 +600,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
 
   function applyResize(mode: "canvas" | "scale") {
     if (!dimensionsValid || !dimensionsChanged) return;
+    if (mode === "scale" && document.stitchActions) return;
     commit((current) => ({
       ...current,
       width: draftWidth,
@@ -487,6 +608,9 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       cells: mode === "scale"
         ? scaleCells(current.cells, draftWidth, draftHeight)
         : resizeCellsCentered(current.cells, draftWidth, draftHeight, current.palette[0].id),
+      stitchActions: mode === "scale"
+        ? scaleStitchActions(current.stitchActions, draftWidth, draftHeight)
+        : resizeStitchActionsCentered(current.stitchActions, current.width, current.height, draftWidth, draftHeight),
       guides: {
         ...current.guides,
         repeatWidth: Math.min(current.guides.repeatWidth, draftWidth),
@@ -511,6 +635,39 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const hex = colorDefaults[(document.palette.length - 3) % colorDefaults.length];
     commit((current) => ({ ...current, palette: [...current.palette, { id, hex }] }));
     setSelectedColor(id);
+    setStructureAction(null);
+    setStitchPickerOpen(false);
+  }
+
+  function selectStitchAction(action: StitchAction) {
+    setStructureAction(action);
+    setTool("pencil");
+  }
+
+  function addStitchToPalette(action: StitchPaletteAction) {
+    commit((current) => ({
+      ...current,
+      stitchPalette: current.stitchPalette?.includes(action)
+        ? current.stitchPalette
+        : [...(current.stitchPalette ?? stitchPaletteFromActions(current.stitchActions)), action],
+    }));
+    selectStitchAction(action);
+    setStitchPickerOpen(false);
+  }
+
+  function removeStitchFromPalette(action: StitchPaletteAction) {
+    commit((current) => ({
+      ...current,
+      stitchPalette: (current.stitchPalette ?? stitchPaletteFromActions(current.stitchActions)).filter((item) => item !== action),
+    }));
+    if (structureAction === action) setStructureAction(null);
+  }
+
+  function changeStitchColor(action: StitchPaletteAction, hex: string) {
+    commit((current) => ({
+      ...current,
+      stitchColors: { ...current.stitchColors, [action]: hex },
+    }));
   }
 
   function removeColor(id: string) {
@@ -540,6 +697,9 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       height,
       palette,
       cells,
+      stitchActions: undefined,
+      stitchPalette: [],
+      stitchColors: {},
       guides: {
         ...current.guides,
         repeatWidth: Math.min(current.guides.repeatWidth, width),
@@ -549,6 +709,60 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     clampActiveKnitProgress(width, height);
     setSelectedColor(palette[1]?.id ?? palette[0].id);
     setTool("pencil");
+    setStructureAction(null);
+    setStitchPickerOpen(false);
+    setSelection(null);
+  }
+
+  function importAiChart(palette: ChartDocument["palette"], cells: string[][]) {
+    const width = cells[0]?.length ?? document.width;
+    const height = cells.length;
+    const preservedActions = width === document.width && height === document.height ? document.stitchActions : undefined;
+    const preservedStitchPalette = width === document.width && height === document.height ? document.stitchPalette : undefined;
+    const preservedStitchColors = width === document.width && height === document.height ? document.stitchColors : undefined;
+    importImage(palette, cells);
+    if (preservedActions) setDocument((current) => ({
+      ...current,
+      stitchActions: preservedActions.map((row) => [...row]),
+      stitchPalette: preservedStitchPalette ? [...preservedStitchPalette] : stitchPaletteFromActions(preservedActions),
+      stitchColors: { ...preservedStitchColors },
+    }));
+  }
+
+  function importPatternChart(
+    palette: ChartDocument["palette"],
+    cells: string[][],
+    stitchActions: StitchAction[][],
+    construction: ChartDocument["instructions"]["construction"],
+    name?: string,
+  ) {
+    const width = cells[0]?.length ?? document.width;
+    const height = cells.length;
+    commit((current) => ({
+      ...current,
+      name: name?.trim() || current.name,
+      width,
+      height,
+      palette,
+      cells,
+      stitchActions,
+      stitchPalette: stitchPaletteFromActions(stitchActions),
+      stitchColors: {},
+      instructions: {
+        ...current.instructions,
+        technique: "stranded",
+        construction,
+        patternUse: "repeat",
+        trimBackground: false,
+      },
+      guides: { ...current.guides, repeatWidth: width, repeatHeight: height },
+    }));
+    clampActiveKnitProgress(width, height);
+    setSelectedColor(palette[1]?.id ?? palette[0].id);
+    setTool("pencil");
+    setStructureAction(null);
+    setStitchPickerOpen(false);
+    setChartZoom(100);
     setSelection(null);
   }
 
@@ -556,6 +770,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     commit(() => cloneDocument(nextDocument));
     setSelectedColor(nextDocument.palette[1]?.id ?? nextDocument.palette[0].id);
     setTool("pencil");
+    setStructureAction(null);
+    setStitchPickerOpen(false);
     setChartZoom(100);
     setSelection(null);
     clampActiveKnitProgress(nextDocument.width, nextDocument.height);
@@ -564,6 +780,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   function prepareTabView(nextDocument: ChartDocument) {
     setSelectedColor(nextDocument.palette[1]?.id ?? nextDocument.palette[0].id);
     setTool("pencil");
+    setStructureAction(null);
+    setStitchPickerOpen(false);
     setSelection(null);
     setChartZoom(100);
     setResizeDialogOpen(false);
@@ -741,7 +959,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         <div className="topbar-actions">
           <div className="workflow-actions" data-tour="workflow-actions">
             <button className="primary-button knit-mode-button" onClick={() => setKnitModeOpen(true)}>Knit mode</button>
-            <AiChartGenerator document={document} onImport={importImage} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
+            <AiChartGenerator document={document} onImport={importAiChart} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
             <ImageImporter document={document} onImport={importImage} />
             <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
           </div>
@@ -755,6 +973,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             cloudSaveState={cloudSaveState}
             cloudSaveMessage={cloudSaveMessage}
             onSaveToCloud={saveActiveChartToCloud}
+            onImportPattern={() => setPatternImporterOpen(true)}
           />
           <OnboardingTour tabsFull={tabs.length >= MAX_CHART_TABS} onOpenExample={openTutorialExample} />
           {accountsEnabled ? <div className="account-actions">
@@ -801,8 +1020,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
               <div className="compact-section-action"><button className="text-button" onClick={addColor} disabled={document.palette.length >= 8}>+ Add colour</button></div>
               <div className="palette-list">
                 {document.palette.map((color, index) => (
-                  <div className={`palette-row ${selectedColor === color.id ? "selected" : ""}`} key={color.id}>
-                    <button className="swatch-button" aria-label={`Use colour ${index + 1}`} onClick={() => setSelectedColor(color.id)}>
+                  <div className={`palette-row ${selectedColor === color.id && !structureAction ? "selected" : ""}`} key={color.id}>
+                    <button className="swatch-button" aria-label={`Use colour ${index + 1}`} onClick={() => { setSelectedColor(color.id); setStructureAction(null); setStitchPickerOpen(false); }}>
                       <span className="swatch" style={{ background: color.hex }} />
                       <span className="palette-name">
                         <span>{index === 0 ? "Background" : `Colour ${index + 1}`}</span>
@@ -814,6 +1033,53 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                   </div>
                 ))}
               </div>
+            </div>
+          </details>
+
+          <details className="settings-group stitch-settings" data-tour="stitches" open>
+            <summary>Stitches <span aria-hidden="true">⌄</span></summary>
+            <div className="settings-content">
+              <div className="compact-section-action">
+                <button
+                  className={`text-button ${stitchPickerOpen ? "active" : ""}`}
+                  onClick={() => {
+                    if (stitchPickerOpen) setStructureAction(null);
+                    setStitchPickerOpen((open) => !open);
+                  }}
+                >+ Add stitch</button>
+              </div>
+              {stitchPickerOpen ? (
+                <div className="stitch-picker" aria-label="Stitch tools">
+                  <p>Add a stitch type to this chart’s palette.</p>
+                  <div>
+                    {stitchActionOptions.filter((option): option is typeof option & { value: StitchPaletteAction } => option.value !== "knit" && !stitchPalette.includes(option.value as StitchPaletteAction)).map((option) => (
+                      <button key={option.value} title={option.help} onClick={() => addStitchToPalette(option.value)}>{option.shortLabel}</button>
+                    ))}
+                    {stitchPalette.length === stitchActionOptions.filter((option) => option.value !== "knit").length ? <span>All stitch types have been added.</span> : null}
+                  </div>
+                </div>
+              ) : null}
+              <div className="palette-list">
+                {stitchPalette.map((action) => {
+                  const option = stitchActionOptions.find((item) => item.value === action);
+                  const displayColor = stitchDisplayColor(document, action);
+                  return (
+                    <div className={`palette-row ${structureAction === action ? "selected" : ""}`} key={action}>
+                      <button className="swatch-button" aria-label={`Draw ${option?.label ?? action}`} onClick={() => selectStitchAction(action)}>
+                        <span className="stitch-swatch" style={{ background: displayColor, color: contrastTextColor(displayColor) }}>{action === "no-stitch" ? "—" : option?.shortLabel}</span>
+                        <span className="palette-name">
+                          <span>{option?.label ?? action}</span>
+                          <span className="palette-hex">{displayColor.toUpperCase()}</span>
+                        </span>
+                      </button>
+                      <input type="color" value={displayColor} aria-label={`Change ${option?.label ?? action} display colour`} onChange={(event) => changeStitchColor(action, event.target.value)} />
+                      <button className="remove-button" aria-label={`Remove ${option?.label ?? action} from stitch palette`} title="Remove from palette; existing chart symbols will stay" onClick={() => removeStitchFromPalette(action)}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+              {!stitchPalette.length ? <p className="empty-stitch-palette">Add increases, decreases, or no-stitch cells to draw them onto your chart.</p> : null}
+              {stitchPalette.length ? <button className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`} onClick={() => selectStitchAction("knit")}>Remove a stitch symbol</button> : null}
             </div>
           </details>
 
@@ -867,11 +1133,12 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             <h1 className="visually-hidden">Chart editor</h1>
             <div className="editor-actions">
               <div className="tool-group" data-tour="drawing-tools" aria-label="Drawing tools">
-                <button className={tool === "pencil" ? "active" : ""} onClick={() => setTool("pencil")}>Draw</button>
-                <button className={tool === "fill" ? "active" : ""} onClick={() => setTool("fill")}>Fill</button>
-                <button className={tool === "eraser" ? "active" : ""} onClick={() => setTool("eraser")}>Erase</button>
+                <button className={tool === "pencil" && !structureAction ? "active" : ""} onClick={() => { setTool("pencil"); setStructureAction(null); setStitchPickerOpen(false); }}>Draw</button>
+                <button className={tool === "fill" && !structureAction ? "active" : ""} onClick={() => { setTool("fill"); setStructureAction(null); setStitchPickerOpen(false); }}>Fill</button>
+                <button className={tool === "eraser" && !structureAction ? "active" : ""} onClick={() => { setTool("eraser"); setStructureAction(null); setStitchPickerOpen(false); }}>Erase</button>
                 <button className={tool === "select" ? "active" : ""} onClick={() => setTool("select")}>Select</button>
-                {selection ? <button className="selection-fill-button" onClick={fillSelection}>Fill selection</button> : null}
+                {selection && !structureAction ? <button className="selection-fill-button" onClick={fillSelection}>Fill selection</button> : null}
+                {selection && structureAction ? <button className="selection-fill-button" onClick={applyStructureToSelection}>Apply {stitchActionOptions.find((option) => option.value === structureAction)?.shortLabel}</button> : null}
                 {selection ? <button onClick={copySelection}>Copy</button> : null}
                 {selection ? <button onClick={cutSelection}>Cut</button> : null}
                 {selectionClipboard?.tabId === activeTabId ? <button onClick={pasteSelection} title="Paste at the top-left corner of the current selection">Paste</button> : null}
@@ -902,7 +1169,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
               </div>
             </div>
           </div>
-          <ChartGrid document={document} tool={tool} selectedColor={selectedColor} zoom={chartZoom} selection={selection} onSelectionChange={setSelection} onStrokeStart={rememberCurrent} onPaint={paint} />
+          <ChartGrid document={document} tool={tool} structureAction={structureAction} selectedColor={selectedColor} zoom={chartZoom} selection={selection} onSelectionChange={setSelection} onStrokeStart={rememberCurrent} onPaint={paint} />
         </section>
 
         <details className="preview panel" data-tour="knitted-preview" open>
@@ -920,7 +1187,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             </div>
             {previewOutdated ? <p className="preview-stale-note" role="status">Preview needs a refresh.</p> : null}
             <KnitPreview document={previewDocument} repeatX={preview.renderedRepeatX} repeatY={preview.renderedRepeatY} repeatStyle={preview.renderedRepeatStyle} canvasRef={previewCanvasRef} />
-            <p className="preview-note">This is an approximate fabric view using your gauge and colours.</p>
+            <p className="preview-note">{document.stitchActions ? "This approximate shaped view compacts unworked cells and widens or narrows the fabric around shaping instructions." : "This is an approximate fabric view using your gauge and colours."}</p>
           </div>
         </details>
       </div>
@@ -939,9 +1206,9 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                 <span>Keeps every stitch the same size and centres the design. New space uses the background colour.</span>
                 <small>Recommended</small>
               </button>
-              <button className="resize-choice" onClick={() => applyResize("scale")}>
+              <button className="resize-choice" onClick={() => applyResize("scale")} disabled={Boolean(document.stitchActions)}>
                 <strong>Scale design to fit</strong>
-                <span>Stretches or shrinks the whole design to fill the new chart size.</span>
+                <span>{document.stitchActions ? "Unavailable for imported instruction charts because stretching could duplicate or remove increases." : "Stretches or shrinks the whole design to fill the new chart size."}</span>
               </button>
             </div>
             <div className="import-actions"><button onClick={() => setResizeDialogOpen(false)}>Cancel</button></div>
@@ -950,6 +1217,14 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       ) : null}
 
       {knitModeOpen ? <KnitMode document={document} progress={knitProgress} onProgressChange={updateKnitProgress} onSettingsChange={updateInstructionSettings} onClose={() => setKnitModeOpen(false)} /> : null}
+
+      <PatternChartImporter
+        open={patternImporterOpen}
+        document={document}
+        onClose={() => setPatternImporterOpen(false)}
+        onOpenKnitMode={() => setKnitModeOpen(true)}
+        onImport={importPatternChart}
+      />
 
       {closingTabId ? (
         <div className="modal-backdrop" role="presentation">

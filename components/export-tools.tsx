@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ChangeEvent, RefObject, useEffect, useRef, useState } from "react";
-import { cellAspectRatio, ChartDocument, cloneDocument } from "@/lib/chart";
+import { cellAspectRatio, ChartDocument, cloneDocument, contrastTextColor, hasStructuralStitches, stitchActionAt, stitchActionSymbol, stitchDisplayColor } from "@/lib/chart";
 import { readProject } from "@/lib/project-file";
 
 type Props = {
@@ -15,11 +15,12 @@ type Props = {
   cloudSaveState: "idle" | "saving" | "saved" | "error";
   cloudSaveMessage: string;
   onSaveToCloud: () => Promise<void>;
+  onImportPattern: () => void;
 };
 
 type ProjectFile = {
   format: "colorwork-chart";
-  version: 1;
+  version: 2;
   document: ChartDocument;
 };
 
@@ -86,8 +87,16 @@ function renderChart(document: ChartDocument) {
   const palette = new Map(document.palette.map((color) => [color.id, color.hex]));
   for (let row = 0; row < document.height; row += 1) {
     for (let column = 0; column < document.width; column += 1) {
-      context.fillStyle = palette.get(document.cells[row][column]) ?? "#ffffff";
+      const action = stitchActionAt(document, row, column);
+      context.fillStyle = action === "knit" ? palette.get(document.cells[row][column]) ?? "#ffffff" : stitchDisplayColor(document, action);
       context.fillRect(left + column * cellWidth, top + row * cellHeight, cellWidth, cellHeight);
+      if (action !== "knit") {
+        context.fillStyle = contrastTextColor(stitchDisplayColor(document, action));
+        context.font = `bold ${Math.max(6, Math.min(10, cellHeight * 0.4))}px Arial, sans-serif`;
+        context.textAlign = "center";
+        context.fillText(stitchActionSymbol(action), left + (column + 0.5) * cellWidth, top + (row + 0.68) * cellHeight);
+        context.textAlign = "left";
+      }
     }
   }
 
@@ -128,7 +137,7 @@ function renderChart(document: ChartDocument) {
 
   context.textAlign = "left";
   context.fillStyle = "#69716c";
-  context.fillText("Each square represents one stitch.", left, top + chartHeight + 25);
+  context.fillText(hasStructuralStitches(document) ? "Shaded squares are not stitches; increase symbols are worked as shown." : "Each square represents one stitch.", left, top + chartHeight + 25);
   return canvas;
 }
 
@@ -142,6 +151,7 @@ export function ExportTools({
   cloudSaveState,
   cloudSaveMessage,
   onSaveToCloud,
+  onImportPattern,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -165,7 +175,7 @@ export function ExportTools({
   }, [open]);
 
   function saveProject() {
-    const project: ProjectFile = { format: "colorwork-chart", version: 1, document: cloneDocument(document) };
+    const project: ProjectFile = { format: "colorwork-chart", version: 2, document: cloneDocument(document) };
     downloadBlob(
       new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
       fileName(document.name, "knitplot"),
@@ -224,6 +234,7 @@ export function ExportTools({
         {open ? (
           <div className="file-menu-popover" role="menu" aria-label="Project and export options">
             <p className="file-menu-section-label">On this device</p>
+            <button role="menuitem" onClick={() => { setOpen(false); onImportPattern(); }}>Import chart from pattern PDF or image</button>
             <button role="menuitem" onClick={saveProject}>Download editable KnitPlot file</button>
             <button role="menuitem" onClick={() => inputRef.current?.click()}>Open KnitPlot file</button>
             {accountsEnabled ? <>

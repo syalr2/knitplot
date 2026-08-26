@@ -12,6 +12,47 @@ export type PaletteColor = {
   hex: string;
 };
 
+export type StitchAction = "knit" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
+export type StitchPaletteAction = Exclude<StitchAction, "knit">;
+export type StitchDisplayColors = Partial<Record<StitchPaletteAction, string>>;
+
+export const stitchActionOptions: Array<{ value: StitchAction; label: string; shortLabel: string; help: string }> = [
+  { value: "knit", label: "Normal stitch", shortLabel: "Knit", help: "Remove a shaping symbol and work this cell normally." },
+  { value: "no-stitch", label: "No stitch", shortLabel: "No stitch", help: "Mark a chart placeholder that is not worked on this row." },
+  { value: "m1l", label: "Make 1 left", shortLabel: "M1L", help: "Add a left-leaning increase." },
+  { value: "m1r", label: "Make 1 right", shortLabel: "M1R", help: "Add a right-leaning increase." },
+  { value: "kfb", label: "Knit front and back", shortLabel: "kfb", help: "Increase one stitch by knitting into the front and back." },
+  { value: "inc", label: "Generic increase", shortLabel: "Inc", help: "Add an increase when the exact method is specified elsewhere." },
+  { value: "ssk", label: "Slip, slip, knit", shortLabel: "SSK", help: "Add a left-leaning decrease." },
+  { value: "k2tog", label: "Knit 2 together", shortLabel: "k2tog", help: "Add a right-leaning decrease." },
+  { value: "cdd", label: "Centred double decrease", shortLabel: "CDD", help: "Decrease three stitches to one, removing two stitches." },
+  { value: "dec", label: "Generic decrease", shortLabel: "Dec", help: "Add a decrease when the exact method is specified elsewhere." },
+];
+
+export function stitchActionLabel(action: StitchAction) {
+  return stitchActionOptions.find((option) => option.value === action)?.shortLabel ?? "Knit";
+}
+
+export function stitchActionSymbol(action: StitchPaletteAction) {
+  return action === "no-stitch" ? "—" : stitchActionLabel(action);
+}
+
+export function isShapingAction(action: StitchAction) {
+  return action !== "knit" && action !== "no-stitch";
+}
+
+export type StitchActionMath = { consumes: number; produces: number; change: number };
+
+export function stitchActionMath(action: StitchAction): StitchActionMath {
+  const counts = action === "no-stitch" ? { consumes: 0, produces: 0 }
+    : action === "m1l" || action === "m1r" ? { consumes: 0, produces: 1 }
+      : action === "kfb" || action === "inc" ? { consumes: 1, produces: 2 }
+        : action === "ssk" || action === "k2tog" || action === "dec" ? { consumes: 2, produces: 1 }
+          : action === "cdd" ? { consumes: 3, produces: 1 }
+            : { consumes: 1, produces: 1 };
+  return { ...counts, change: counts.produces - counts.consumes };
+}
+
 export type ColorworkTechnique = "stranded" | "intarsia" | "duplicate";
 export type ChartConstruction = "flat" | "round";
 export type PatternUse = "single" | "repeat";
@@ -52,6 +93,9 @@ export type ChartDocument = {
   guides: ChartGuideSettings;
   palette: PaletteColor[];
   cells: string[][];
+  stitchActions?: StitchAction[][];
+  stitchPalette?: StitchPaletteAction[];
+  stitchColors?: StitchDisplayColors;
 };
 
 export const defaultDocument: ChartDocument = {
@@ -75,10 +119,75 @@ export const defaultDocument: ChartDocument = {
     { id: "accent", hex: "#c86f52" },
   ],
   cells: createCells(18, 14, "background"),
+  stitchPalette: [],
+  stitchColors: {},
 };
 
 export function createCells(width: number, height: number, colorId: string) {
   return Array.from({ length: height }, () => Array.from({ length: width }, () => colorId));
+}
+
+export function createStitchActions(width: number, height: number, action: StitchAction = "knit") {
+  return Array.from({ length: height }, () => Array.from({ length: width }, () => action));
+}
+
+export function stitchActionAt(document: ChartDocument, row: number, column: number): StitchAction {
+  return document.stitchActions?.[row]?.[column] ?? "knit";
+}
+
+export function hasStructuralStitches(document: ChartDocument) {
+  return document.stitchActions?.some((row) => row.some((action) => action !== "knit")) ?? false;
+}
+
+export function stitchPaletteFromActions(actions: StitchAction[][] | undefined): StitchPaletteAction[] {
+  if (!actions) return [];
+  const found = new Set<StitchPaletteAction>();
+  actions.forEach((row) => row.forEach((action) => {
+    if (action !== "knit") found.add(action);
+  }));
+  return stitchActionOptions
+    .map((option) => option.value)
+    .filter((action): action is StitchPaletteAction => action !== "knit" && found.has(action));
+}
+
+export function defaultStitchColor(action: StitchPaletteAction) {
+  return action === "no-stitch" ? "#303632" : "#ffffff";
+}
+
+export function stitchDisplayColor(document: ChartDocument, action: StitchPaletteAction) {
+  return document.stitchColors?.[action] ?? defaultStitchColor(action);
+}
+
+export function contrastTextColor(hex: string) {
+  const value = hex.replace("#", "");
+  const normalized = value.length === 3
+    ? value.split("").map((character) => character + character).join("")
+    : value;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+  return luminance > 0.52 ? "#17211d" : "#ffffff";
+}
+
+export function rowStitchSteps(document: ChartDocument, rowNumber: number) {
+  const rowIndex = document.height - rowNumber;
+  const source = document.cells[rowIndex] ?? [];
+  return source.flatMap((colorId, column) => {
+    const action = stitchActionAt(document, rowIndex, column);
+    return action === "no-stitch" ? [] : [{ column, colorId, action }];
+  });
+}
+
+export function rowStitchMath(document: ChartDocument, rowNumber: number) {
+  const steps = rowStitchSteps(document, rowNumber);
+  const startingStitches = steps.reduce((total, step) => total + stitchActionMath(step.action).consumes, 0);
+  const endingStitches = steps.reduce((total, step) => total + stitchActionMath(step.action).produces, 0);
+  return {
+    startingStitches,
+    endingStitches,
+    change: endingStitches - startingStitches,
+  };
 }
 
 export function resizeCells(
@@ -110,6 +219,21 @@ export function resizeCellsCentered(
   );
 }
 
+export function resizeStitchActionsCentered(
+  actions: StitchAction[][] | undefined,
+  oldWidth: number,
+  oldHeight: number,
+  width: number,
+  height: number,
+) {
+  if (!actions) return undefined;
+  const offsetX = Math.floor((width - oldWidth) / 2);
+  const offsetY = Math.floor((height - oldHeight) / 2);
+  return Array.from({ length: height }, (_, row) =>
+    Array.from({ length: width }, (_, column) => actions[row - offsetY]?.[column - offsetX] ?? "knit" as StitchAction),
+  );
+}
+
 export function scaleCells(cells: string[][], width: number, height: number) {
   const oldHeight = cells.length;
   const oldWidth = cells[0]?.length ?? 0;
@@ -120,6 +244,20 @@ export function scaleCells(cells: string[][], width: number, height: number) {
     return Array.from({ length: width }, (_, column) => {
       const sourceColumn = Math.min(oldWidth - 1, Math.floor((column * oldWidth) / width));
       return cells[sourceRow][sourceColumn];
+    });
+  });
+}
+
+export function scaleStitchActions(actions: StitchAction[][] | undefined, width: number, height: number) {
+  if (!actions) return undefined;
+  const oldHeight = actions.length;
+  const oldWidth = actions[0]?.length ?? 0;
+  if (!oldWidth || !oldHeight) return undefined;
+  return Array.from({ length: height }, (_, row) => {
+    const sourceRow = Math.min(oldHeight - 1, Math.floor((row * oldHeight) / height));
+    return Array.from({ length: width }, (_, column) => {
+      const sourceColumn = Math.min(oldWidth - 1, Math.floor((column * oldWidth) / width));
+      return actions[sourceRow][sourceColumn];
     });
   });
 }
@@ -159,6 +297,35 @@ export function floodFill(
   return next;
 }
 
+export function floodFillActive(
+  cells: string[][],
+  actions: StitchAction[][] | undefined,
+  startRow: number,
+  startColumn: number,
+  replacement: string,
+) {
+  if ((actions?.[startRow]?.[startColumn] ?? "knit") === "no-stitch") return cells;
+  const target = cells[startRow]?.[startColumn];
+  if (!target || target === replacement) return cells;
+
+  const next = cells.map((row) => [...row]);
+  const queue: Array<[number, number]> = [[startRow, startColumn]];
+  let queueIndex = 0;
+  next[startRow][startColumn] = replacement;
+
+  while (queueIndex < queue.length) {
+    const [row, column] = queue[queueIndex];
+    queueIndex += 1;
+    for (const [nextRow, nextColumn] of [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]] as Array<[number, number]>) {
+      if (next[nextRow]?.[nextColumn] === target && (actions?.[nextRow]?.[nextColumn] ?? "knit") !== "no-stitch") {
+        next[nextRow][nextColumn] = replacement;
+        queue.push([nextRow, nextColumn]);
+      }
+    }
+  }
+  return next;
+}
+
 export function cellAspectRatio(document: ChartDocument) {
   return document.gaugeRows / document.gaugeStitches;
 }
@@ -182,5 +349,10 @@ export function cloneDocument(document: ChartDocument): ChartDocument {
     },
     palette: document.palette.map((color) => ({ ...color })),
     cells: document.cells.map((row) => [...row]),
+    stitchActions: document.stitchActions?.map((row) => [...row]),
+    stitchPalette: document.stitchPalette === undefined
+      ? stitchPaletteFromActions(document.stitchActions)
+      : [...document.stitchPalette],
+    stitchColors: { ...document.stitchColors },
   };
 }

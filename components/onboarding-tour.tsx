@@ -21,6 +21,12 @@ const steps: TourStep[] = [
     body: "Click a colour to draw with it, change any swatch, or add up to eight colours. The first colour is always the chart background.",
   },
   {
+    target: "stitches",
+    eyebrow: "Add chart instructions",
+    title: "Keep stitches separate",
+    body: "Add increases, decreases, and no-stitch cells here. Each instruction has its own editable display colour and works like a drawing swatch.",
+  },
+  {
     target: "chart-size",
     eyebrow: "Shape the chart",
     title: "Set stitches, rows, and gauge",
