@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   cellAspectRatio,
   ChartDocument,
@@ -118,6 +118,9 @@ function knitRegion(document: ChartDocument, shouldTrim: boolean) {
 }
 
 export function KnitMode({ document, progress, onProgressChange, onSettingsChange, onClose }: Props) {
+  const [keepScreenAwake, setKeepScreenAwake] = useState(false);
+  const [wakeLockSupported, setWakeLockSupported] = useState(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const region = useMemo(() => knitRegion(document, progress.trimBorder), [document, progress.trimBorder]);
   const activeDocument = region.document;
   const aspect = cellAspectRatio(activeDocument);
@@ -144,6 +147,47 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
   const topMargin = labelSize * 1.8;
   const columnStep = activeDocument.width <= 24 ? 1 : activeDocument.width <= 50 ? 5 : 10;
   const rowStep = activeDocument.height <= 24 ? 1 : 5;
+
+  useEffect(() => {
+    setWakeLockSupported("wakeLock" in navigator);
+  }, []);
+
+  useEffect(() => {
+    if (!keepScreenAwake || !wakeLockSupported) return;
+    let cancelled = false;
+
+    async function requestWakeLock() {
+      if (cancelled || window.document.visibilityState !== "visible" || wakeLockRef.current) return;
+      try {
+        const wakeLock = await navigator.wakeLock.request("screen");
+        if (cancelled) {
+          await wakeLock.release();
+          return;
+        }
+        wakeLockRef.current = wakeLock;
+        wakeLock.addEventListener("release", () => {
+          if (wakeLockRef.current === wakeLock) wakeLockRef.current = null;
+        });
+      } catch {
+        // Wake locks are advisory and the browser may decline a request. Keep
+        // the user's preference enabled and try again when the page is active.
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (window.document.visibilityState === "visible") void requestWakeLock();
+    }
+
+    void requestWakeLock();
+    window.document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      window.document.removeEventListener("visibilitychange", handleVisibilityChange);
+      const wakeLock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (wakeLock && !wakeLock.released) void wakeLock.release().catch(() => undefined);
+    };
+  }, [keepScreenAwake, wakeLockSupported]);
 
   function update(nextRow: number, nextStitch: number) {
     const clampedRow = clamp(nextRow, 1, activeDocument.height);
@@ -195,7 +239,9 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
               : `Marker on ${structural ? "step" : "stitch"} ${stitch} of ${orderedRowSteps.length}`
             : `Click a ${structural ? "step" : "stitch"} to mark your place`}</span>
         </div>
-        <button className="secondary-button" onClick={onClose}>Exit knit mode</button>
+        <div className="knit-mode-header-actions">
+          <button className="secondary-button" onClick={onClose}>Exit knit mode</button>
+        </div>
       </header>
 
       <div className="knit-mode-body">
@@ -289,6 +335,15 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
         </div>
 
         <aside className="knit-mode-controls">
+          {wakeLockSupported ? (
+            <div className="knit-wake-row">
+              <label className="knit-wake-toggle">
+                <span>Keep screen awake</span>
+                <input type="checkbox" role="switch" checked={keepScreenAwake} onChange={(event) => setKeepScreenAwake(event.target.checked)} />
+                <span className="knit-toggle-track" aria-hidden="true" />
+              </label>
+            </div>
+          ) : null}
           <div className="knit-mode-options">
             <div className={`knit-mode-settings-grid ${isDuplicate ? "single" : ""}`}>
               <label>Technique

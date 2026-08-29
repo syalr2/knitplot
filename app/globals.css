@@ -736,6 +736,15 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
 .knit-mode-status { display: grid; gap: 2px; text-align: right; }
 .knit-mode-status strong { font-size: 14px; }
 .knit-mode-status span { color: var(--muted); font-size: 12px; }
+.knit-mode-header-actions { align-items: center; display: flex; gap: 12px; }
+.knit-wake-row { background: #fff; border: 1px solid var(--line-soft); border-radius: 9px; padding: 9px 11px; }
+.knit-wake-toggle { align-items: center; color: var(--ink); cursor: pointer; display: flex; font-size: 11px; font-weight: 600; gap: 8px; justify-content: space-between; white-space: nowrap; width: 100%; }
+.knit-wake-toggle input { height: 1px; opacity: 0; position: absolute; width: 1px; }
+.knit-toggle-track { background: #c9c5bb; border-radius: 999px; display: inline-block; height: 20px; position: relative; transition: background .15s ease; width: 36px; }
+.knit-toggle-track::after { background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(36,31,25,.28); content: ""; height: 16px; left: 2px; position: absolute; top: 2px; transition: transform .15s ease; width: 16px; }
+.knit-wake-toggle input:checked + .knit-toggle-track { background: var(--accent); }
+.knit-wake-toggle input:checked + .knit-toggle-track::after { transform: translateX(16px); }
+.knit-wake-toggle input:focus-visible + .knit-toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .knit-mode-body { display: grid; flex: 1; gap: 20px; grid-template-columns: minmax(0, 1fr) 290px; min-height: 0; padding: 20px; }
 .knit-mode-chart-frame { align-items: center; display: flex; justify-content: center; min-height: 0; overflow: auto; }
 .knit-mode-chart { background: transparent; cursor: pointer; display: block; max-height: 100%; max-width: 100%; overflow: visible; }
@@ -909,6 +918,7 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
   .ai-reference-selected select { min-width: 0; }
   .knit-mode-header { gap: 10px; grid-template-columns: 1fr auto; }
   .knit-mode-status { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+  .knit-mode-header-actions { gap: 8px; }
   .knit-mode-body { display: flex; flex-direction: column; overflow: auto; }
   .knit-mode-chart-frame { flex: 1 0 48vh; }
   .knit-mode-controls { flex: none; }
