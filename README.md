@@ -14,7 +14,7 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-A
 
 - Draw, erase, flood-fill, and fill rectangular selections
 - Choose up to eight custom colours
-- Work with charts up to 100 stitches by 100 rows
+- Work with charts up to 200 stitches by 150 rows
 - Set stitch gauge, row gauge, and centimetres or inches
 - Zoom the editable chart and use optional live-symmetry guides
 - Flip, rotate, undo, and redo chart changes

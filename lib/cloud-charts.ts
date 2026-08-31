@@ -1,4 +1,4 @@
-import { ChartDocument, cloneDocument } from "@/lib/chart";
+import { ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
 
 export type CloudChartPayload = {
   document: ChartDocument;
@@ -19,13 +19,13 @@ export function readCloudChartPayload(value: unknown): CloudChartPayload {
   const cells = candidate.cells;
   const instructions = candidate.instructions;
   const guides = candidate.guides;
-  const validNumber = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0 && number <= 100;
+  const validMeasurement = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0 && number <= 100;
 
   if (
     typeof candidate.name !== "string" || candidate.name.length > 200 ||
-    !Number.isInteger(width) || !validNumber(width) ||
-    !Number.isInteger(height) || !validNumber(height) ||
-    !validNumber(candidate.gaugeStitches) || !validNumber(candidate.gaugeRows) || !validNumber(candidate.gaugeMeasure) ||
+    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > MAX_CHART_STITCHES ||
+    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > MAX_CHART_ROWS ||
+    !validMeasurement(candidate.gaugeStitches) || !validMeasurement(candidate.gaugeRows) || !validMeasurement(candidate.gaugeMeasure) ||
     (candidate.gaugeUnit !== "cm" && candidate.gaugeUnit !== "in") ||
     !Array.isArray(palette) || palette.length < 2 || palette.length > 8 ||
     !Array.isArray(cells) || cells.length !== height
@@ -49,11 +49,10 @@ export function readCloudChartPayload(value: unknown): CloudChartPayload {
   }
 
   const serialized = JSON.stringify(value);
-  if (serialized.length > 500_000) throw new Error("The chart data was too large.");
+  if (serialized.length > 2_000_000) throw new Error("The chart data was too large.");
   return {
     document: cloneDocument(candidate as unknown as ChartDocument),
     knitProgress: isRecord(value.knitProgress) ? value.knitProgress : {},
     preview: isRecord(value.preview) ? value.preview : {},
   };
 }
-

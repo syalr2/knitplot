@@ -1,7 +1,7 @@
 "use client";
 
 import { PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { ChartDocument, PaletteColor, StitchAction } from "@/lib/chart";
+import { MAX_CHART_ROWS, MAX_CHART_STITCHES, type ChartDocument, type PaletteColor, type StitchAction } from "@/lib/chart";
 
 type SymbolMeaning = "main" | "pattern" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
 type CropRect = { x: number; y: number; width: number; height: number };
@@ -526,7 +526,7 @@ export function PatternChartImporter({ open, document, onClose, onOpenKnitMode, 
     setMessage("Looking for continuous grid lines…");
     try {
       const detected = await detectGrid(source, crop);
-      if (detected.columns < 2 || detected.columns > 100 || detected.rows < 2 || detected.rows > 100) {
+      if (detected.columns < 2 || detected.columns > MAX_CHART_STITCHES || detected.rows < 2 || detected.rows > MAX_CHART_ROWS) {
         setMessage("KnitPlot could not confidently count this grid. Enter its stitch and row count manually.");
       } else {
         setColumns(detected.columns);
@@ -547,7 +547,7 @@ export function PatternChartImporter({ open, document, onClose, onOpenKnitMode, 
     try {
       const detected = await detectGrid(source, crop);
       const suggestionKey = `${detected.columns}x${detected.rows}`;
-      const detectedLooksValid = detected.columns >= 2 && detected.columns <= 100 && detected.rows >= 2 && detected.rows <= 100;
+      const detectedLooksValid = detected.columns >= 2 && detected.columns <= MAX_CHART_STITCHES && detected.rows >= 2 && detected.rows <= MAX_CHART_ROWS;
       if (detectedLooksValid && (detected.columns !== columns || detected.rows !== rows) && gridSuggestion !== suggestionKey) {
         setColumns(detected.columns);
         setRows(detected.rows);
@@ -717,8 +717,8 @@ export function PatternChartImporter({ open, document, onClose, onOpenKnitMode, 
             <aside className="pattern-grid-controls">
               <label>Chart name<input value={fileName} maxLength={200} onChange={(event) => setFileName(event.target.value)} /></label>
               <div className="two-fields">
-                <label>Stitches<input type="number" min="2" max="100" value={columns} onChange={(event) => setColumns(clamp(Number(event.target.value), 2, 100))} /></label>
-                <label>Rows<input type="number" min="2" max="100" value={rows} onChange={(event) => setRows(clamp(Number(event.target.value), 2, 100))} /></label>
+                <label>Stitches<input type="number" min="2" max={MAX_CHART_STITCHES} value={columns} onChange={(event) => setColumns(clamp(Number(event.target.value), 2, MAX_CHART_STITCHES))} /></label>
+                <label>Rows<input type="number" min="2" max={MAX_CHART_ROWS} value={rows} onChange={(event) => setRows(clamp(Number(event.target.value), 2, MAX_CHART_ROWS))} /></label>
               </div>
               <button onClick={() => void autoDetectGrid()} disabled={busy}>Try automatic grid count</button>
               <button onClick={() => void rotateSource()} disabled={busy}>Rotate page 90°</button>

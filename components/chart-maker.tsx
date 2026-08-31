@@ -21,6 +21,8 @@ import {
   defaultDocument,
   finishedSize,
   floodFillActive,
+  MAX_CHART_ROWS,
+  MAX_CHART_STITCHES,
   resizeCellsCentered,
   resizeStitchActionsCentered,
   scaleCells,
@@ -560,6 +562,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   }
 
   function rotateChartClockwise() {
+    if (document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES) return;
     commit((current) => ({
       ...current,
       width: current.height,
@@ -593,10 +596,12 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     });
   }
 
-  const draftWidth = clamp(Math.round(Number(dimensionDraft.width) || 0), 1, 100);
-  const draftHeight = clamp(Math.round(Number(dimensionDraft.height) || 0), 1, 100);
+  const draftWidth = clamp(Math.round(Number(dimensionDraft.width) || 0), 1, MAX_CHART_STITCHES);
+  const draftHeight = clamp(Math.round(Number(dimensionDraft.height) || 0), 1, MAX_CHART_ROWS);
   const dimensionsChanged = draftWidth !== document.width || draftHeight !== document.height;
-  const dimensionsValid = Number(dimensionDraft.width) >= 1 && Number(dimensionDraft.height) >= 1;
+  const dimensionsValid =
+    Number(dimensionDraft.width) >= 1 && Number(dimensionDraft.width) <= MAX_CHART_STITCHES &&
+    Number(dimensionDraft.height) >= 1 && Number(dimensionDraft.height) <= MAX_CHART_ROWS;
 
   function applyResize(mode: "canvas" | "scale") {
     if (!dimensionsValid || !dimensionsChanged) return;
@@ -1087,8 +1092,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             <summary>Chart size <span aria-hidden="true">⌄</span></summary>
             <div className="settings-content">
               <div className="two-fields">
-                <label>Stitches<input type="number" min="1" max="100" value={dimensionDraft.width} onChange={(event) => setDimensionDraft((current) => ({ ...current, width: event.target.value }))} /></label>
-                <label>Rows<input type="number" min="1" max="100" value={dimensionDraft.height} onChange={(event) => setDimensionDraft((current) => ({ ...current, height: event.target.value }))} /></label>
+                <label>Stitches<input type="number" min="1" max={MAX_CHART_STITCHES} value={dimensionDraft.width} onChange={(event) => setDimensionDraft((current) => ({ ...current, width: event.target.value }))} /></label>
+                <label>Rows<input type="number" min="1" max={MAX_CHART_ROWS} value={dimensionDraft.height} onChange={(event) => setDimensionDraft((current) => ({ ...current, height: event.target.value }))} /></label>
               </div>
               <button className="resize-chart-button" onClick={() => setResizeDialogOpen(true)} disabled={!dimensionsValid || !dimensionsChanged}>Resize chart</button>
             </div>
@@ -1155,7 +1160,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
               <div className="transform-controls" aria-label="Transform chart">
                 <button aria-label="Mirror chart left to right" onClick={() => flipChart("horizontal")} title="Mirror chart left to right">↔</button>
                 <button aria-label="Flip chart upside down" onClick={() => flipChart("vertical")} title="Flip chart upside down">↕</button>
-                <button className="rotate-chart-button" aria-label="Rotate chart 90 degrees clockwise" onClick={rotateChartClockwise} title="Rotate chart 90° clockwise">90°</button>
+                <button className="rotate-chart-button" aria-label="Rotate chart 90 degrees clockwise" onClick={rotateChartClockwise} disabled={document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES} title={document.width > MAX_CHART_ROWS ? `Rotation would exceed ${MAX_CHART_ROWS} rows` : "Rotate chart 90° clockwise"}>90°</button>
               </div>
               <span className="toolbar-divider" aria-hidden="true" />
               <div className="undo-controls" aria-label="Edit history">

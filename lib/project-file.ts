@@ -1,4 +1,4 @@
-import { type ChartDocument, cloneDocument } from "@/lib/chart";
+import { type ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -18,13 +18,13 @@ export function readProject(value: unknown): ChartDocument {
   const stitchActions = candidate.stitchActions;
   const stitchPalette = candidate.stitchPalette;
   const stitchColors = candidate.stitchColors;
-  const validNumber = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0 && number <= 100;
+  const validMeasurement = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number > 0 && number <= 100;
 
   if (
     typeof candidate.name !== "string" || candidate.name.length > 200 ||
-    !Number.isInteger(width) || !validNumber(width) ||
-    !Number.isInteger(height) || !validNumber(height) ||
-    !validNumber(candidate.gaugeStitches) || !validNumber(candidate.gaugeRows) || !validNumber(candidate.gaugeMeasure) ||
+    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > MAX_CHART_STITCHES ||
+    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > MAX_CHART_ROWS ||
+    !validMeasurement(candidate.gaugeStitches) || !validMeasurement(candidate.gaugeRows) || !validMeasurement(candidate.gaugeMeasure) ||
     (candidate.gaugeUnit !== "cm" && candidate.gaugeUnit !== "in") ||
     !Array.isArray(palette) || palette.length < 2 || palette.length > 8 ||
     !Array.isArray(cells) || cells.length !== height

@@ -1,6 +1,7 @@
 import { generateChartGrid, ChartGridApiError, validateChartGrid } from "@/lib/openai/chart-grid";
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
+import { MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
 
 type EditRequest = {
   prompt?: unknown;
@@ -49,8 +50,8 @@ export async function POST(request: Request) {
     Number.isInteger(minimumColors) && typeof minimumColors === "number" && minimumColors >= 2 && minimumColors <= 8 &&
     Number.isInteger(maximumColors) && typeof maximumColors === "number" && maximumColors >= minimumColors && maximumColors <= 8;
   if (
-    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > 100 ||
-    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > 100 ||
+    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > MAX_CHART_STITCHES ||
+    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > MAX_CHART_ROWS ||
     (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid)
   ) {
     return errorResponse("The chart settings were not valid.", 400);

@@ -1,6 +1,7 @@
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
 import { generateSourceArtwork, SourceArtworkApiError } from "@/lib/openai/source-artwork";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
+import { MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
 
 type GenerateRequest = {
   prompt?: unknown;
@@ -55,8 +56,8 @@ export async function POST(request: Request) {
     Number.isInteger(minimumColors) && typeof minimumColors === "number" && minimumColors >= 2 && minimumColors <= 8 &&
     Number.isInteger(maximumColors) && typeof maximumColors === "number" && maximumColors >= minimumColors && maximumColors <= 8;
   if (
-    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > 100 ||
-    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > 100 ||
+    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > MAX_CHART_STITCHES ||
+    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > MAX_CHART_ROWS ||
     (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid) ||
     typeof chartAspect !== "number" || !Number.isFinite(chartAspect) || chartAspect <= 0
   ) {

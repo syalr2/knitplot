@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
+import { cellAspectRatio, ChartDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES, PaletteColor } from "@/lib/chart";
 
 export type FitMode = "cover" | "contain";
 export type ColorCountChoice = number | { min: number; max: number };
@@ -452,9 +452,9 @@ export function ImageImporter({ document, onImport }: Props) {
   }
 
   const imageAspect = image ? image.naturalWidth / image.naturalHeight : 1;
-  const finalWidth = sizeMode === "image" ? Math.max(1, Math.min(100, Math.round(targetWidth))) : document.width;
+  const finalWidth = sizeMode === "image" ? Math.max(1, Math.min(MAX_CHART_STITCHES, Math.round(targetWidth))) : document.width;
   const matchedHeight = Math.round((finalWidth * cellAspectRatio(document)) / imageAspect);
-  const finalHeight = sizeMode === "image" ? Math.max(1, Math.min(100, matchedHeight)) : document.height;
+  const finalHeight = sizeMode === "image" ? Math.max(1, Math.min(MAX_CHART_ROWS, matchedHeight)) : document.height;
   const physicalAspect = (finalWidth * cellAspectRatio(document)) / finalHeight;
 
   return (
@@ -511,7 +511,7 @@ export function ImageImporter({ document, onImport }: Props) {
               </label>
               {sizeMode === "image" ? (
                 <label>Stitches wide
-                  <input type="number" min="1" max="100" value={targetWidth} onChange={(event) => setTargetWidth(Number(event.target.value) || 1)} />
+                  <input type="number" min="1" max={MAX_CHART_STITCHES} value={targetWidth} onChange={(event) => setTargetWidth(Number(event.target.value) || 1)} />
                 </label>
               ) : null}
             </div>
