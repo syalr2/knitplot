@@ -20,11 +20,13 @@ import {
   createStitchActions,
   defaultDocument,
   finishedSize,
+  flipGrid,
   floodFillActive,
   MAX_CHART_ROWS,
   MAX_CHART_STITCHES,
   resizeCellsCentered,
   resizeStitchActionsCentered,
+  rotateGridClockwise,
   scaleCells,
   scaleStitchActions,
   stitchActionAt,
@@ -548,20 +550,73 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     setSelection({ startRow: nextStartRow, endRow: nextEndRow, startColumn: nextStartColumn, endColumn: nextEndColumn });
   }
 
+  function selectionRotationFits() {
+    const bounds = selectionBounds();
+    if (!bounds) return false;
+    const selectionWidth = bounds.endColumn - bounds.startColumn + 1;
+    const selectionHeight = bounds.endRow - bounds.startRow + 1;
+    return bounds.startRow + selectionWidth <= document.height && bounds.startColumn + selectionHeight <= document.width;
+  }
+
+  function transformSelection(transform: "horizontal" | "vertical" | "rotate") {
+    const bounds = selectionBounds();
+    if (!bounds || (transform === "rotate" && !selectionRotationFits())) return;
+    const block = document.cells
+      .slice(bounds.startRow, bounds.endRow + 1)
+      .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
+    const actionBlock = Array.from({ length: bounds.endRow - bounds.startRow + 1 }, (_, rowOffset) =>
+      Array.from({ length: bounds.endColumn - bounds.startColumn + 1 }, (_, columnOffset) =>
+        stitchActionAt(document, bounds.startRow + rowOffset, bounds.startColumn + columnOffset),
+      ),
+    );
+    const transformedCells = transform === "rotate" ? rotateGridClockwise(block) : flipGrid(block, transform);
+    const transformedActions = transform === "rotate" ? rotateGridClockwise(actionBlock) : flipGrid(actionBlock, transform);
+
+    commit((current) => {
+      const cells = current.cells.map((row) => [...row]);
+      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
+      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+          cells[row][column] = current.palette[0].id;
+          stitchActions[row][column] = "knit";
+        }
+      }
+      transformedCells.forEach((blockRow, rowOffset) => blockRow.forEach((colorId, columnOffset) => {
+        cells[bounds.startRow + rowOffset][bounds.startColumn + columnOffset] = colorId;
+        stitchActions[bounds.startRow + rowOffset][bounds.startColumn + columnOffset] = transformedActions[rowOffset][columnOffset];
+      }));
+      return {
+        ...current,
+        cells,
+        stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined,
+      };
+    });
+    setSelection({
+      startRow: bounds.startRow,
+      startColumn: bounds.startColumn,
+      endRow: bounds.startRow + transformedCells.length - 1,
+      endColumn: bounds.startColumn + (transformedCells[0]?.length ?? 1) - 1,
+    });
+  }
+
   function flipChart(direction: "horizontal" | "vertical") {
+    if (selection) {
+      transformSelection(direction);
+      return;
+    }
     commit((current) => ({
       ...current,
-      cells: direction === "horizontal"
-        ? current.cells.map((row) => [...row].reverse())
-        : [...current.cells].reverse().map((row) => [...row]),
-      stitchActions: !current.stitchActions ? undefined : direction === "horizontal"
-        ? current.stitchActions.map((row) => [...row].reverse())
-        : [...current.stitchActions].reverse().map((row) => [...row]),
+      cells: flipGrid(current.cells, direction),
+      stitchActions: current.stitchActions ? flipGrid(current.stitchActions, direction) : undefined,
     }));
     setSelection(null);
   }
 
   function rotateChartClockwise() {
+    if (selection) {
+      transformSelection("rotate");
+      return;
+    }
     if (document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES) return;
     commit((current) => ({
       ...current,
@@ -572,16 +627,8 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         repeatWidth: Math.min(current.height, current.guides.repeatHeight),
         repeatHeight: Math.min(current.width, current.guides.repeatWidth),
       },
-      cells: Array.from({ length: current.width }, (_, row) =>
-        Array.from({ length: current.height }, (_, column) =>
-          current.cells[current.height - 1 - column][row],
-        ),
-      ),
-      stitchActions: current.stitchActions ? Array.from({ length: current.width }, (_, row) =>
-        Array.from({ length: current.height }, (_, column) =>
-          current.stitchActions![current.height - 1 - column][row],
-        ),
-      ) : undefined,
+      cells: rotateGridClockwise(current.cells),
+      stitchActions: current.stitchActions ? rotateGridClockwise(current.stitchActions) : undefined,
     }));
     clampActiveKnitProgress(document.height, document.width);
     setSelection(null);
@@ -1157,10 +1204,18 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                 <button onClick={clearChart}>Clear</button>
               </div>
               <span className="toolbar-divider" aria-hidden="true" />
-              <div className="transform-controls" aria-label="Transform chart">
-                <button aria-label="Mirror chart left to right" onClick={() => flipChart("horizontal")} title="Mirror chart left to right">↔</button>
-                <button aria-label="Flip chart upside down" onClick={() => flipChart("vertical")} title="Flip chart upside down">↕</button>
-                <button className="rotate-chart-button" aria-label="Rotate chart 90 degrees clockwise" onClick={rotateChartClockwise} disabled={document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES} title={document.width > MAX_CHART_ROWS ? `Rotation would exceed ${MAX_CHART_ROWS} rows` : "Rotate chart 90° clockwise"}>90°</button>
+              <div className="transform-controls" aria-label={selection ? "Transform selection" : "Transform chart"}>
+                <button aria-label={selection ? "Mirror selection left to right" : "Mirror chart left to right"} onClick={() => flipChart("horizontal")} title={selection ? "Mirror selection left to right" : "Mirror chart left to right"}>↔</button>
+                <button aria-label={selection ? "Flip selection upside down" : "Flip chart upside down"} onClick={() => flipChart("vertical")} title={selection ? "Flip selection upside down" : "Flip chart upside down"}>↕</button>
+                <button
+                  className="rotate-chart-button"
+                  aria-label={selection ? "Rotate selection 90 degrees clockwise" : "Rotate chart 90 degrees clockwise"}
+                  onClick={rotateChartClockwise}
+                  disabled={selection ? !selectionRotationFits() : document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES}
+                  title={selection
+                    ? selectionRotationFits() ? "Rotate selection 90° clockwise" : "The rotated selection would extend beyond the chart"
+                    : document.width > MAX_CHART_ROWS ? `Rotation would exceed ${MAX_CHART_ROWS} rows` : "Rotate chart 90° clockwise"}
+                >90°</button>
               </div>
               <span className="toolbar-divider" aria-hidden="true" />
               <div className="undo-controls" aria-label="Edit history">

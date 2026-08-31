@@ -134,6 +134,20 @@ export function createStitchActions(width: number, height: number, action: Stitc
   return Array.from({ length: height }, () => Array.from({ length: width }, () => action));
 }
 
+export function flipGrid<T>(grid: T[][], direction: "horizontal" | "vertical") {
+  return direction === "horizontal"
+    ? grid.map((row) => [...row].reverse())
+    : [...grid].reverse().map((row) => [...row]);
+}
+
+export function rotateGridClockwise<T>(grid: T[][]) {
+  const height = grid.length;
+  const width = grid[0]?.length ?? 0;
+  return Array.from({ length: width }, (_, row) =>
+    Array.from({ length: height }, (_, column) => grid[height - 1 - column][row]),
+  );
+}
+
 export function stitchActionAt(document: ChartDocument, row: number, column: number): StitchAction {
   return document.stitchActions?.[row]?.[column] ?? "knit";
 }
