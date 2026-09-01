@@ -22,6 +22,7 @@ import {
   finishedSize,
   flipGrid,
   floodFillActive,
+  floodFillStitchActions,
   MAX_CHART_ROWS,
   MAX_CHART_STITCHES,
   resizeCellsCentered,
@@ -315,6 +316,18 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   function paint(row: number, column: number, shouldFill: boolean) {
     if (structureAction) {
       setDocument((current) => {
+        if (shouldFill) {
+          return {
+            ...current,
+            stitchActions: floodFillStitchActions(
+              current.cells,
+              current.stitchActions,
+              row,
+              column,
+              structureAction,
+            ),
+          };
+        }
         const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height))
           .map((currentRow) => [...currentRow]);
         const targets = new Set([`${row}:${column}`]);
@@ -693,7 +706,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
 
   function selectStitchAction(action: StitchAction) {
     setStructureAction(action);
-    setTool("pencil");
+    if (tool !== "fill") setTool("pencil");
   }
 
   function addStitchToPalette(action: StitchPaletteAction) {
@@ -1130,7 +1143,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                   );
                 })}
               </div>
-              {!stitchPalette.length ? <p className="empty-stitch-palette">Add increases, decreases, or no-stitch cells to draw them onto your chart.</p> : null}
+              {!stitchPalette.length ? <p className="empty-stitch-palette">Add purl, increase, decrease, or no-stitch cells to draw them onto your chart.</p> : null}
               {stitchPalette.length ? <button className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`} onClick={() => selectStitchAction("knit")}>Remove a stitch symbol</button> : null}
             </div>
           </details>
@@ -1186,7 +1199,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             <div className="editor-actions">
               <div className="tool-group" data-tour="drawing-tools" aria-label="Drawing tools">
                 <button className={tool === "pencil" && !structureAction ? "active" : ""} onClick={() => { setTool("pencil"); setStructureAction(null); setStitchPickerOpen(false); }}>Draw</button>
-                <button className={tool === "fill" && !structureAction ? "active" : ""} onClick={() => { setTool("fill"); setStructureAction(null); setStitchPickerOpen(false); }}>Fill</button>
+                <button className={tool === "fill" ? "active" : ""} onClick={() => { setTool("fill"); setStitchPickerOpen(false); }}>Fill</button>
                 <button className={tool === "eraser" && !structureAction ? "active" : ""} onClick={() => { setTool("eraser"); setStructureAction(null); setStitchPickerOpen(false); }}>Erase</button>
                 <button className={tool === "select" ? "active" : ""} onClick={() => setTool("select")}>Select</button>
                 {selection && !structureAction ? <button className="selection-fill-button" onClick={fillSelection}>Fill selection</button> : null}

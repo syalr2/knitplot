@@ -15,12 +15,13 @@ export type PaletteColor = {
   hex: string;
 };
 
-export type StitchAction = "knit" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
+export type StitchAction = "knit" | "purl" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
 export type StitchPaletteAction = Exclude<StitchAction, "knit">;
 export type StitchDisplayColors = Partial<Record<StitchPaletteAction, string>>;
 
 export const stitchActionOptions: Array<{ value: StitchAction; label: string; shortLabel: string; help: string }> = [
   { value: "knit", label: "Normal stitch", shortLabel: "Knit", help: "Remove a shaping symbol and work this cell normally." },
+  { value: "purl", label: "Purl stitch", shortLabel: "Purl", help: "Work this chart cell as a purl stitch." },
   { value: "no-stitch", label: "No stitch", shortLabel: "No stitch", help: "Mark a chart placeholder that is not worked on this row." },
   { value: "m1l", label: "Make 1 left", shortLabel: "M1L", help: "Add a left-leaning increase." },
   { value: "m1r", label: "Make 1 right", shortLabel: "M1R", help: "Add a right-leaning increase." },
@@ -37,11 +38,11 @@ export function stitchActionLabel(action: StitchAction) {
 }
 
 export function stitchActionSymbol(action: StitchPaletteAction) {
-  return action === "no-stitch" ? "—" : stitchActionLabel(action);
+  return action === "purl" ? "P" : action === "no-stitch" ? "—" : stitchActionLabel(action);
 }
 
 export function isShapingAction(action: StitchAction) {
-  return action !== "knit" && action !== "no-stitch";
+  return action !== "knit" && action !== "purl" && action !== "no-stitch";
 }
 
 export type StitchActionMath = { consumes: number; produces: number; change: number };
@@ -341,6 +342,40 @@ export function floodFillActive(
     }
   }
   return next;
+}
+
+export function floodFillStitchActions(
+  cells: string[][],
+  actions: StitchAction[][] | undefined,
+  startRow: number,
+  startColumn: number,
+  replacement: StitchAction,
+) {
+  const targetAction = actions?.[startRow]?.[startColumn] ?? "knit";
+  const targetColor = cells[startRow]?.[startColumn];
+  if (!targetColor || targetAction === replacement) return actions;
+
+  const next = (actions ?? createStitchActions(cells[0]?.length ?? 0, cells.length))
+    .map((row) => [...row]);
+  const queue: Array<[number, number]> = [[startRow, startColumn]];
+  let queueIndex = 0;
+  next[startRow][startColumn] = replacement;
+
+  while (queueIndex < queue.length) {
+    const [row, column] = queue[queueIndex];
+    queueIndex += 1;
+    for (const [nextRow, nextColumn] of [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]] as Array<[number, number]>) {
+      const nextAction = actions?.[nextRow]?.[nextColumn] ?? "knit";
+      const matchesTarget = nextAction === targetAction
+        && (targetAction !== "knit" || cells[nextRow]?.[nextColumn] === targetColor);
+      if (matchesTarget && next[nextRow]?.[nextColumn] !== replacement) {
+        next[nextRow][nextColumn] = replacement;
+        queue.push([nextRow, nextColumn]);
+      }
+    }
+  }
+
+  return next.some((row) => row.some((action) => action !== "knit")) ? next : undefined;
 }
 
 export function cellAspectRatio(document: ChartDocument) {

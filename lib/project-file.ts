@@ -43,17 +43,17 @@ export function readProject(value: unknown): ChartDocument {
   const validStitchActions = stitchActions === undefined || (
     Array.isArray(stitchActions) && stitchActions.length === height && stitchActions.every((row) =>
       Array.isArray(row) && row.length === width && row.every((action) =>
-        ["knit", "no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)),
+        ["knit", "purl", "no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)),
       ),
     )
   );
   const validStitchPalette = stitchPalette === undefined || (
-    Array.isArray(stitchPalette) && stitchPalette.length <= 9 && new Set(stitchPalette).size === stitchPalette.length &&
-    stitchPalette.every((action) => ["no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)))
+    Array.isArray(stitchPalette) && stitchPalette.length <= 10 && new Set(stitchPalette).size === stitchPalette.length &&
+    stitchPalette.every((action) => ["purl", "no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(String(action)))
   );
   const validStitchColors = stitchColors === undefined || (
     isRecord(stitchColors) && Object.entries(stitchColors).every(([action, color]) =>
-      ["no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(action) &&
+      ["purl", "no-stitch", "m1l", "m1r", "kfb", "inc", "ssk", "k2tog", "cdd", "dec"].includes(action) &&
       typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
     )
   );

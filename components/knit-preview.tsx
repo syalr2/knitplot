@@ -226,7 +226,7 @@ function drawPreview(
         : activeColumns;
       for (const chartColumn of chartColumns) {
         const action: StitchAction = stitchActionAt(document, chartRow, chartColumn);
-        const nearestColourColumn = action === "knit"
+        const nearestColourColumn = action === "knit" || action === "purl"
           ? chartColumn
           : activeColumns
             .filter((column) => stitchActionAt(document, chartRow, column) === "knit")

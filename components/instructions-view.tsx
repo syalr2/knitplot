@@ -325,7 +325,7 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
                   {settings.technique === "duplicate"
                     ? "Sequences are written in chart-reading order. Skip counts are base stitches left unembroidered; other counts are duplicate stitches worked in that colour."
                     : showStitchMath
-                      ? "Sequences are written in working order. Colour counts show ordinary stitches; shaping actions show their own abbreviations. The count beneath each row accounts for stitches consumed and produced by those actions."
+                      ? "Sequences are written in working order. Colour counts show ordinary knit stitches; special stitch actions show their own abbreviations. The count beneath each row accounts for stitches consumed and produced by those actions."
                       : "Sequences are written in working order. Each number is the number of stitches to work in that colour."}
                 </p>
                 <ol className="written-row-list">

@@ -201,7 +201,9 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
         </div>
         <p className="chart-hint">
           {structureAction
-            ? `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
+            ? tool === "fill"
+              ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
+              : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
             : tool === "fill" ? "Click an area to fill it. Clicking a stitch symbol replaces it with the selected colour." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action." : `Click and drag to ${tool === "eraser" ? "erase" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}{document.stitchActions && !structureAction ? " Painting over a stitch symbol turns it into a regular colour stitch." : ""}
         </p>
       </div>

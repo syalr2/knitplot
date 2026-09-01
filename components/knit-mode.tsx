@@ -379,7 +379,7 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
           </div>
           <p className="knit-direction">{isDuplicate
             ? "Follow each chart row from left to right, or work the duplicate stitches in any order that feels comfortable."
-            : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`} {structural ? "Skip the no-stitch cells; shaping actions are counted separately from ordinary stitches." : "Click any stitch to place your marker there."}</p>
+            : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`} {structural ? "Skip no-stitch cells and work special stitch actions as shown." : "Click any stitch to place your marker there."}</p>
           {structural ? (
             <div className="knit-row-math" aria-label={`${unitName} stitch count`}>
               <div><span>Start</span><strong>{rowMath.startingStitches}</strong></div>
@@ -393,7 +393,11 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
               <strong>{activeStep.action === "knit"
                 ? `Work ${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId) === 0 ? "MC" : `CC${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId)}`}`
                 : stitchActionLabel(activeStep.action)}</strong>
-              {activeStep.action !== "knit" && activeStepMath ? <small>{activeStepMath.consumes} stitch{activeStepMath.consumes === 1 ? "" : "es"} in → {activeStepMath.produces} out. This is not an MC stitch.</small> : null}
+              {activeStep.action === "purl"
+                ? <small>Work one purl stitch as marked.</small>
+                : activeStep.action !== "knit" && activeStepMath
+                  ? <small>{activeStepMath.consumes} stitch{activeStepMath.consumes === 1 ? "" : "es"} in → {activeStepMath.produces} out. This is not an MC stitch.</small>
+                  : null}
             </div>
           ) : null}
           <div className="knit-sequence" aria-label="Current row colour sequence">

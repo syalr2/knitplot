@@ -137,7 +137,7 @@ function renderChart(document: ChartDocument) {
 
   context.textAlign = "left";
   context.fillStyle = "#69716c";
-  context.fillText(hasStructuralStitches(document) ? "Shaded squares are not stitches; increase symbols are worked as shown." : "Each square represents one stitch.", left, top + chartHeight + 25);
+  context.fillText(hasStructuralStitches(document) ? "Shaded squares are not stitches; special stitch symbols are worked as shown." : "Each square represents one stitch.", left, top + chartHeight + 25);
   return canvas;
 }
 
