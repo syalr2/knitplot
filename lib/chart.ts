@@ -15,7 +15,7 @@ export type PaletteColor = {
   hex: string;
 };
 
-export type StitchAction = "knit" | "purl" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
+export type StitchAction = "knit" | "purl" | "no-stitch" | "cast-on" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec" | "bind-off";
 export type StitchPaletteAction = Exclude<StitchAction, "knit">;
 export type StitchDisplayColors = Partial<Record<StitchPaletteAction, string>>;
 
@@ -23,6 +23,7 @@ export const stitchActionOptions: Array<{ value: StitchAction; label: string; sh
   { value: "knit", label: "Normal stitch", shortLabel: "Knit", help: "Remove a shaping symbol and work this cell normally." },
   { value: "purl", label: "Purl stitch", shortLabel: "Purl", help: "Work this chart cell as a purl stitch." },
   { value: "no-stitch", label: "No stitch", shortLabel: "No stitch", help: "Mark a chart placeholder that is not worked on this row." },
+  { value: "cast-on", label: "Cast on", shortLabel: "CO", help: "Create one new stitch at this chart position." },
   { value: "m1l", label: "Make 1 left", shortLabel: "M1L", help: "Add a left-leaning increase." },
   { value: "m1r", label: "Make 1 right", shortLabel: "M1R", help: "Add a right-leaning increase." },
   { value: "kfb", label: "Knit front and back", shortLabel: "kfb", help: "Increase one stitch by knitting into the front and back." },
@@ -31,6 +32,7 @@ export const stitchActionOptions: Array<{ value: StitchAction; label: string; sh
   { value: "k2tog", label: "Knit 2 together", shortLabel: "k2tog", help: "Add a right-leaning decrease." },
   { value: "cdd", label: "Centred double decrease", shortLabel: "CDD", help: "Decrease three stitches to one, removing two stitches." },
   { value: "dec", label: "Generic decrease", shortLabel: "Dec", help: "Add a decrease when the exact method is specified elsewhere." },
+  { value: "bind-off", label: "Bind off", shortLabel: "BO", help: "Bind off one stitch at this chart position." },
 ];
 
 export function stitchActionLabel(action: StitchAction) {
@@ -49,11 +51,12 @@ export type StitchActionMath = { consumes: number; produces: number; change: num
 
 export function stitchActionMath(action: StitchAction): StitchActionMath {
   const counts = action === "no-stitch" ? { consumes: 0, produces: 0 }
-    : action === "m1l" || action === "m1r" ? { consumes: 0, produces: 1 }
+    : action === "cast-on" || action === "m1l" || action === "m1r" ? { consumes: 0, produces: 1 }
       : action === "kfb" || action === "inc" ? { consumes: 1, produces: 2 }
         : action === "ssk" || action === "k2tog" || action === "dec" ? { consumes: 2, produces: 1 }
           : action === "cdd" ? { consumes: 3, produces: 1 }
-            : { consumes: 1, produces: 1 };
+            : action === "bind-off" ? { consumes: 1, produces: 0 }
+              : { consumes: 1, produces: 1 };
   return { ...counts, change: counts.produces - counts.consumes };
 }
 

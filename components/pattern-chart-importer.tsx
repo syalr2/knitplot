@@ -3,7 +3,7 @@
 import { PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { MAX_CHART_ROWS, MAX_CHART_STITCHES, type ChartDocument, type PaletteColor, type StitchAction } from "@/lib/chart";
 
-type SymbolMeaning = "main" | "pattern" | "purl" | "no-stitch" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec";
+type SymbolMeaning = "main" | "pattern" | "purl" | "no-stitch" | "cast-on" | "m1l" | "m1r" | "kfb" | "inc" | "ssk" | "k2tog" | "cdd" | "dec" | "bind-off";
 type CropRect = { x: number; y: number; width: number; height: number };
 type SourceImage = { url: string; width: number; height: number; label: string };
 type SymbolSample = { index: number; sampleUrl: string };
@@ -46,6 +46,7 @@ const SYMBOL_OPTIONS: Array<{ value: SymbolMeaning; label: string }> = [
   { value: "pattern", label: "Contrast colour · knit" },
   { value: "purl", label: "Purl stitch" },
   { value: "no-stitch", label: "No stitch · skip" },
+  { value: "cast-on", label: "Cast on · CO" },
   { value: "m1l", label: "Increase · M1L" },
   { value: "m1r", label: "Increase · M1R" },
   { value: "kfb", label: "Increase · kfb" },
@@ -54,15 +55,16 @@ const SYMBOL_OPTIONS: Array<{ value: SymbolMeaning; label: string }> = [
   { value: "k2tog", label: "Decrease · k2tog" },
   { value: "cdd", label: "Decrease · centred double" },
   { value: "dec", label: "Decrease · generic" },
+  { value: "bind-off", label: "Bind off · BO" },
 ];
-const DEFAULT_CATEGORY_MEANINGS: SymbolMeaning[] = ["main", "pattern", "m1l", "m1r", "purl", "no-stitch", "ssk", "k2tog", "kfb", "cdd", "inc", "dec"];
+const DEFAULT_CATEGORY_MEANINGS: SymbolMeaning[] = ["main", "pattern", "m1l", "m1r", "purl", "no-stitch", "cast-on", "bind-off", "ssk", "k2tog", "kfb", "cdd", "inc", "dec"];
 
 function meaningAction(meaning: SymbolMeaning): StitchAction {
   return meaning === "main" || meaning === "pattern" ? "knit" : meaning;
 }
 
 function previewActionSymbol(action: StitchAction) {
-  return action === "purl" ? "P" : action === "no-stitch" ? "—" : action === "m1l" ? "L" : action === "m1r" ? "R" : action === "kfb" ? "FB" : action === "inc" ? "+" : action === "ssk" ? "S" : action === "k2tog" ? "2" : action === "cdd" ? "C" : action === "dec" ? "−" : "";
+  return action === "purl" ? "P" : action === "no-stitch" ? "—" : action === "cast-on" ? "CO" : action === "bind-off" ? "BO" : action === "m1l" ? "L" : action === "m1r" ? "R" : action === "kfb" ? "FB" : action === "inc" ? "+" : action === "ssk" ? "S" : action === "k2tog" ? "2" : action === "cdd" ? "C" : action === "dec" ? "−" : "";
 }
 
 async function destroyPdf(pdf: PdfDocument | null) {
@@ -939,7 +941,7 @@ export function PatternChartImporter({ open, document, onClose, onOpenKnitMode, 
                 <label>Width<input type="range" min="5" max={100 - crop.x} step="0.1" value={crop.width} onChange={(event) => setCrop((current) => ({ ...current, width: Number(event.target.value) }))} /></label>
                 <label>Height<input type="range" min="5" max={100 - crop.y} step="0.1" value={crop.height} onChange={(event) => setCrop((current) => ({ ...current, height: Number(event.target.value) }))} /></label>
               </div>
-              <label>Visual categories to teach<select value={specialSymbolCount} onChange={(event) => changeSpecialSymbolCount(Number(event.target.value))}>{Array.from({ length: 13 }, (_, count) => <option key={count} value={count}>{count === 0 ? "None" : count}</option>)}</select></label>
+              <label>Visual categories to teach<select value={specialSymbolCount} onChange={(event) => changeSpecialSymbolCount(Number(event.target.value))}>{Array.from({ length: 15 }, (_, count) => <option key={count} value={count}>{count === 0 ? "None" : count}</option>)}</select></label>
               <label>Worked<select value={construction} onChange={(event) => setConstruction(event.target.value as ChartDocument["instructions"]["construction"])}><option value="round">In the round</option><option value="flat">Flat</option></select></label>
               <label>First row appears<select value={firstRow} onChange={(event) => setFirstRow(event.target.value as "bottom" | "top")}><option value="bottom">At the bottom</option><option value="top">At the top</option></select></label>
               <p>Enter the printed stitch and row counts, then draw a rough box around the chart and choose Snap grid to chart. Check that every overlay cell matches one printed chart cell before continuing.</p>

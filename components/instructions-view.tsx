@@ -102,19 +102,37 @@ function writtenRows(document: ChartDocument, settings: InstructionSettings) {
     const ordered = readRightToLeft ? [...source].reverse() : source;
     const sequenceParts: string[] = [];
     let knitRun: string[] = [];
+    let edgeActionRun: { action: "cast-on" | "bind-off"; count: number } | null = null;
     const flushKnitRun = () => {
       if (!knitRun.length) return;
       sequenceParts.push(...compressRow(knitRun, labels).map((run) => `${run.label} ${run.count}`));
       knitRun = [];
     };
+    const flushEdgeActionRun = () => {
+      if (!edgeActionRun) return;
+      sequenceParts.push(`${stitchActionLabel(edgeActionRun.action)} ${edgeActionRun.count}`);
+      edgeActionRun = null;
+    };
     ordered.forEach((step) => {
-      if (step.action === "knit") knitRun.push(step.colorId);
-      else {
+      if (step.action === "knit") {
+        flushEdgeActionRun();
+        knitRun.push(step.colorId);
+      } else {
         flushKnitRun();
-        sequenceParts.push(stitchActionLabel(step.action));
+        if (step.action === "cast-on" || step.action === "bind-off") {
+          if (edgeActionRun?.action === step.action) edgeActionRun.count += 1;
+          else {
+            flushEdgeActionRun();
+            edgeActionRun = { action: step.action, count: 1 };
+          }
+        } else {
+          flushEdgeActionRun();
+          sequenceParts.push(stitchActionLabel(step.action));
+        }
       }
     });
     flushKnitRun();
+    flushEdgeActionRun();
     const sequence = sequenceParts.join(", ");
     const math = rowStitchMath(document, number);
 

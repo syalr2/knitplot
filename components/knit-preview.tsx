@@ -176,12 +176,7 @@ function drawPreview(
   maskCache: Map<string, HTMLCanvasElement>,
 ) {
   const totalRows = document.height * repeatY;
-  const activeStitchesByRow = Array.from({ length: document.height }, (_, row) =>
-    Array.from({ length: document.width }, (_, column) => column)
-      .filter((column) => stitchActionAt(document, row, column) !== "no-stitch"),
-  );
-  const maximumActiveColumns = Math.max(1, ...activeStitchesByRow.map((columns) => columns.length));
-  const totalColumns = maximumActiveColumns * repeatX;
+  const totalColumns = document.width * repeatX;
   const stitchWidth = Math.max(12, Math.min(30, Math.floor(1100 / totalColumns)));
   const stitchHeight = stitchWidth * (document.gaugeStitches / document.gaugeRows);
   const bleed = Math.ceil(stitchWidth * 0.45);
@@ -216,51 +211,54 @@ function drawPreview(
     const chartRow = repeatStyle === "mirrored" && repeatRow % 2 === 1
       ? document.height - 1 - rowWithinRepeat
       : rowWithinRepeat;
-    const activeColumns = activeStitchesByRow[chartRow];
-    const rowStitchCount = activeColumns.length * repeatX;
-    const rowOffset = (totalColumns - rowStitchCount) / 2;
-    let packedColumn = 0;
+    const workedColourColumns = Array.from({ length: document.width }, (_, column) => column)
+      .filter((column) => ["knit", "purl"].includes(stitchActionAt(document, chartRow, column)));
     for (let repeatColumn = 0; repeatColumn < repeatX; repeatColumn += 1) {
-      const chartColumns = repeatStyle === "mirrored" && repeatColumn % 2 === 1
-        ? [...activeColumns].reverse()
-        : activeColumns;
-      for (const chartColumn of chartColumns) {
+      const mirrorColumn = repeatStyle === "mirrored" && repeatColumn % 2 === 1;
+      for (let displayColumn = 0; displayColumn < document.width; displayColumn += 1) {
+        const chartColumn = mirrorColumn ? document.width - 1 - displayColumn : displayColumn;
         const action: StitchAction = stitchActionAt(document, chartRow, chartColumn);
+        if (action === "no-stitch") continue;
         const nearestColourColumn = action === "knit" || action === "purl"
           ? chartColumn
-          : activeColumns
-            .filter((column) => stitchActionAt(document, chartRow, column) === "knit")
+          : workedColourColumns
             .sort((left, right) => Math.abs(left - chartColumn) - Math.abs(right - chartColumn))[0];
         // Shaping symbols are colour-neutral chart instructions. The fabric preview
         // borrows the closest worked stitch's yarn solely to render the resulting loop.
         const colorId = document.cells[chartRow]?.[nearestColourColumn ?? chartColumn];
         const hex = palette.get(colorId) ?? document.palette[0]?.hex ?? "#ffffff";
-        const actionScale = action === "m1l" || action === "m1r" || action === "kfb" || action === "inc"
-          ? 0.9
-          : action === "ssk" || action === "k2tog" || action === "cdd" || action === "dec"
-            ? 1.05
-            : 1;
+        const actionScale = action === "cast-on"
+          ? 0.86
+          : action === "bind-off"
+            ? 1.08
+            : action === "m1l" || action === "m1r" || action === "kfb" || action === "inc"
+              ? 0.9
+              : action === "ssk" || action === "k2tog" || action === "cdd" || action === "dec"
+                ? 1.05
+                : 1;
+        const actionHeightScale = action === "cast-on" ? 0.72 : action === "bind-off" ? 0.5 : 1;
+        const verticalOffset = action === "cast-on" ? stitchHeight * 0.28 : action === "bind-off" ? stitchHeight * 0.08 : 0;
         const renderedWidth = stitchWidth * actionScale;
+        const renderedHeight = stitchHeight * actionHeightScale;
         const sprite = makeStitchSprite(
           source,
           hex,
-          (packedColumn + row * 2) % source.cellsPerSide,
+          (displayColumn + repeatColumn * document.width + row * 2) % source.cellsPerSide,
           row % source.cellsPerSide,
           renderedWidth,
-          stitchHeight,
+          renderedHeight,
           spriteCache,
           maskCache,
         );
-        const x = bleed + (rowOffset + packedColumn) * stitchWidth + (stitchWidth - renderedWidth) / 2;
+        const x = bleed + (repeatColumn * document.width + displayColumn) * stitchWidth + (stitchWidth - renderedWidth) / 2;
 
         context.drawImage(
           sprite.canvas,
           x - sprite.margin,
-          bleed + row * stitchHeight - sprite.margin,
+          bleed + row * stitchHeight + verticalOffset - sprite.margin,
           sprite.width,
           sprite.height,
         );
-        packedColumn += 1;
       }
     }
   }

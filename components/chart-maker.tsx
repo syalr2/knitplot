@@ -1143,7 +1143,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                   );
                 })}
               </div>
-              {!stitchPalette.length ? <p className="empty-stitch-palette">Add purl, increase, decrease, or no-stitch cells to draw them onto your chart.</p> : null}
+              {!stitchPalette.length ? <p className="empty-stitch-palette">Add purl, cast-on, bind-off, shaping, or no-stitch cells to draw them onto your chart.</p> : null}
               {stitchPalette.length ? <button className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`} onClick={() => selectStitchAction("knit")}>Remove a stitch symbol</button> : null}
             </div>
           </details>

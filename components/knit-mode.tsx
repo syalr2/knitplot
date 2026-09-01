@@ -71,14 +71,23 @@ function rowSequence(document: ChartDocument, rowNumber: number) {
   const ordered = isRightToLeft(document, rowNumber) ? [...source].reverse() : source;
   const labels = new Map(document.palette.map((color, index) => [color.id, index === 0 ? "MC" : `CC${index}`]));
   if (document.instructions.technique === "duplicate") labels.set(document.palette[0].id, "Skip");
-  return ordered.reduce<Array<{ key: string; colorId: string; label: string; count: number }>>((runs, step) => {
+  return ordered.reduce<Array<{ key: string; colorId: string; label: string; count: number; showCount: boolean }>>((runs, step) => {
     if (step.action !== "knit") {
-      runs.push({ key: `${step.action}-${step.column}`, colorId: step.colorId, label: stitchActionLabel(step.action), count: 1 });
+      const isEdgeAction = step.action === "cast-on" || step.action === "bind-off";
+      const previous = runs[runs.length - 1];
+      if (isEdgeAction && previous?.key === step.action) previous.count += 1;
+      else runs.push({
+        key: isEdgeAction ? step.action : `${step.action}-${step.column}`,
+        colorId: step.colorId,
+        label: stitchActionLabel(step.action),
+        count: 1,
+        showCount: isEdgeAction,
+      });
       return runs;
     }
     const previous = runs[runs.length - 1];
     if (previous?.key === step.colorId) previous.count += 1;
-    else runs.push({ key: step.colorId, colorId: step.colorId, label: labels.get(step.colorId) ?? "?", count: 1 });
+    else runs.push({ key: step.colorId, colorId: step.colorId, label: labels.get(step.colorId) ?? "?", count: 1, showCount: true });
     return runs;
   }, []);
 }
@@ -402,7 +411,7 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
           ) : null}
           <div className="knit-sequence" aria-label="Current row colour sequence">
             {sequence.map((run, index) => (
-              <span key={`${run.key}-${index}`} className={run.key === run.colorId ? "" : "stitch-action"}>{run.key === run.colorId ? <i style={{ background: palette.get(run.colorId) }} /> : null}{run.label} {run.key === run.colorId ? run.count : ""}</span>
+              <span key={`${run.key}-${index}`} className={run.key === run.colorId ? "" : "stitch-action"}>{run.key === run.colorId ? <i style={{ background: palette.get(run.colorId) }} /> : null}{run.label} {run.showCount ? run.count : ""}</span>
             ))}
           </div>
           <div className="knit-row-controls">

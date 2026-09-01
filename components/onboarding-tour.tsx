@@ -24,7 +24,7 @@ const steps: TourStep[] = [
     target: "stitches",
     eyebrow: "Add chart instructions",
     title: "Keep stitches separate",
-    body: "Add purl stitches, increases, decreases, and no-stitch cells here. Each instruction has its own editable display colour and works like a drawing swatch.",
+    body: "Add purl, cast-on, bind-off, shaping, and no-stitch cells here. Each instruction has its own editable display colour and works like a drawing swatch.",
   },
   {
     target: "chart-size",
