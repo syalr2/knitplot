@@ -47,6 +47,14 @@ button { color: inherit; }
 .chart-maker-loading .brand-mark { height: 28px; width: 28px; }
 .chart-maker-loading p { color: var(--muted); font-size: 12px; margin: 0; }
 
+.support-footer { border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 12px; line-height: 1.6; padding: 20px 24px; text-align: center; }
+.support-footer p { margin: 0; }
+.support-footer p + p { margin-top: 4px; }
+.support-footer a { color: var(--accent-deep); text-underline-offset: 3px; }
+.support-footer a:hover { color: var(--ink); }
+.support-footer a:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 4px; border-radius: 2px; }
+@media print { .support-footer { display: none; } }
+
 .topbar {
   align-items: stretch;
   background: var(--panel);

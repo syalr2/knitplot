@@ -101,7 +101,7 @@ Bug reports, feature ideas, documentation fixes, and code contributions are welc
 
 ## Supporting KnitPlot
 
-KnitPlot is free and open source. If it is useful to you, an optional support link may be added here in the future. There will never be a payment requirement inside the chart maker.
+KnitPlot is free and open source. If it is useful to you, you can buy me a coffee [here](https://ko-fi.com/syalr2). There will never be a payment requirement inside the chart maker.
 
 ## License and assets
 

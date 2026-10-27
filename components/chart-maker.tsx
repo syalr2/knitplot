@@ -1265,6 +1265,13 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         </details>
       </div>
 
+      {!knitModeOpen ? (
+        <footer className="support-footer">
+          <p>I am committed to keeping KnitPlot completely free and open source.</p>
+          <p>If you’re enjoying it, you can <a href="https://ko-fi.com/syalr2" target="_blank" rel="noopener noreferrer">buy me a coffee <span aria-hidden="true">☕</span></a>.</p>
+        </footer>
+      ) : null}
+
       {resizeDialogOpen ? (
         <div className="modal-backdrop" role="presentation">
           <section className="import-dialog resize-dialog" role="dialog" aria-modal="true" aria-labelledby="resize-dialog-title">
