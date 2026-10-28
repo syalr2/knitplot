@@ -194,8 +194,12 @@ export function ExportTools({
 
   async function downloadPreview() {
     const canvas = previewCanvasRef.current;
-    if (!canvas || !canvas.width || !canvas.height) {
+    if (!canvas || !canvas.width || !canvas.height || canvas.dataset.previewState === "rendering") {
       setMessage("The knitted preview is still loading.");
+      return;
+    }
+    if(canvas.dataset.previewState === "error"){
+      setMessage("Refresh the knitted preview before downloading it.");
       return;
     }
     try {

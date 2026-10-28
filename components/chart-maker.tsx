@@ -8,7 +8,7 @@ import { ChartGrid } from "@/components/chart-grid";
 import { ExportTools } from "@/components/export-tools";
 import { ImageImporter } from "@/components/image-importer";
 import { InstructionsView } from "@/components/instructions-view";
-import { KnitPreview } from "@/components/knit-preview";
+import { ConnectedKnitPreview } from "@/components/connected-knit-preview";
 import { defaultKnitProgress, KnitMode, KnitProgress } from "@/components/knit-mode";
 import { OnboardingTour } from "@/components/onboarding-tour";
 import { PatternChartImporter } from "@/components/pattern-chart-importer";
@@ -1259,8 +1259,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
               <button className="primary-button refresh-preview-button" onClick={refreshPreview}>Refresh preview</button>
             </div>
             {previewOutdated ? <p className="preview-stale-note" role="status">Preview needs a refresh.</p> : null}
-            <KnitPreview document={previewDocument} repeatX={preview.renderedRepeatX} repeatY={preview.renderedRepeatY} repeatStyle={preview.renderedRepeatStyle} canvasRef={previewCanvasRef} />
-            <p className="preview-note">{document.stitchActions ? "This approximate shaped view compacts unworked cells and widens or narrows the fabric around shaping instructions." : "This is an approximate fabric view using your gauge and colours."}</p>
+            <ConnectedKnitPreview document={previewDocument} repeatX={preview.renderedRepeatX} repeatY={preview.renderedRepeatY} repeatStyle={preview.renderedRepeatStyle} canvasRef={previewCanvasRef} showDiagnostics={false} />
           </div>
         </details>
       </div>
