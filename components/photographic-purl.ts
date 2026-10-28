@@ -29,6 +29,10 @@ export function paintPhotographicPurl(ctx:CanvasRenderingContext2D, source:Relie
   }
   s.putImageData(pixels,0,0);
   ctx.save();ctx.translate(margin,margin);
+  // Keep the bump centred and connected, with slightly slimmer proportions.
+  ctx.translate(width*.5,height*.8);
+  ctx.scale(.90,1.06);
+  ctx.translate(-width*.5,-height*.8);
   const cord=(points:Point[],diameter:number,shadow=false)=>{
     const line=new Path2D();points.forEach((p,i)=>i?line.lineTo(p.x*width,p.y*height):line.moveTo(p.x*width,p.y*height));
     if(shadow){ctx.save();ctx.strokeStyle="rgba(35,23,14,.18)";ctx.lineWidth=diameter;ctx.lineCap="round";ctx.shadowColor="rgba(35,23,14,.18)";ctx.shadowBlur=1.4;ctx.stroke(line);ctx.restore();}
