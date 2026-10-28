@@ -987,7 +987,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         <div className="topbar-actions">
           <div className="workflow-actions" data-tour="workflow-actions">
             <button className="primary-button knit-mode-button" onClick={() => setKnitModeOpen(true)}>Knit mode</button>
-            <AiChartGenerator document={document} onImport={importAiChart} accountsEnabled={accountsEnabled} signedIn={Boolean(viewer)} aiConnected={aiConnected} />
+            {viewer && aiConnected ? <AiChartGenerator document={document} onImport={importAiChart} signedIn={true} aiConnected={true} /> : null}
             <ImageImporter document={document} onImport={importImage} />
             <InstructionsView document={document} onSettingsChange={updateInstructionSettings} />
           </div>

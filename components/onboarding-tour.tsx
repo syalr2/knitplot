@@ -47,8 +47,8 @@ const steps: TourStep[] = [
   {
     target: "workflow-actions",
     eyebrow: "More ways to work",
-    title: "Import, generate, follow, and print",
-    body: "Start from an image, use optional AI tools, create printable instructions, or open Knit Mode while you work the pattern.",
+    title: "Import, follow, and print",
+    body: "Start from an image, create printable instructions, or open Knit Mode while you work the pattern.",
   },
   {
     target: "knitted-preview",

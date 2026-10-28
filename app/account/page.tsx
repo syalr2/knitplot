@@ -17,8 +17,8 @@ export default async function AccountPage() {
   return (
     <main className="account-hub-page">
       <nav className="account-hub-nav">
-        <Link className="account-hub-brand" href="/"><span aria-hidden="true" />KnitPlot</Link>
-        <div><Link className="account-chart-maker-link" href="/">Chart maker</Link><Link href="/my-charts">My charts</Link></div>
+        <a className="account-hub-brand" href="/"><span aria-hidden="true" />KnitPlot</a>
+        <div><a className="account-chart-maker-link" href="/">Chart maker</a><Link href="/my-charts">My charts</Link></div>
       </nav>
 
       <section className="account-hub-shell">
