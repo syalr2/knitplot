@@ -678,6 +678,7 @@ input:focus, select:focus { border-color: var(--accent); outline: 2px solid var(
 .remove-stitch-tool { background: transparent; border: 0; box-shadow: none; color: var(--muted); font-size: 10px; margin-top: 7px; min-height: 28px; padding: 2px 5px; }
 .remove-stitch-tool:hover:not(:disabled) { background: #f0ede3; box-shadow: none; transform: none; }
 .remove-stitch-tool.selected { background: var(--accent-soft); color: var(--accent-deep); }
+.stitch-color-reset { grid-column: 1 / -1; justify-self: start; font-size: 10px; }
 .palette-name { display: grid; gap: 3px; min-width: 0; text-align: left; }
 .palette-hex { color: var(--quiet); font-family: var(--font-mono); font-size: 9px; }
 .palette-row input[type="color"] { background: transparent; border: 0; border-radius: 50%; cursor: pointer; height: 24px; overflow: hidden; padding: 0; width: 24px; }

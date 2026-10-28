@@ -103,6 +103,8 @@ export type ChartDocument = {
   stitchActions?: StitchAction[][];
   stitchPalette?: StitchPaletteAction[];
   stitchColors?: StitchDisplayColors;
+  /** Per-cell chart display overrides; null follows the yarn colour. */
+  stitchCellColors?: (string | null)[][];
 };
 
 export const defaultDocument: ChartDocument = {
@@ -175,8 +177,104 @@ export function defaultStitchColor(action: StitchPaletteAction) {
   return action === "no-stitch" ? "#303632" : "#ffffff";
 }
 
-export function stitchDisplayColor(document: ChartDocument, action: StitchPaletteAction) {
-  return document.stitchColors?.[action] ?? defaultStitchColor(action);
+export function stitchDisplayColor(document: ChartDocument, action: StitchPaletteAction, yarnColor?: string) {
+  return document.stitchColors?.[action] ?? (action === "no-stitch" ? defaultStitchColor(action) : yarnColor ?? defaultStitchColor(action));
+}
+
+export function stitchCellColorAt(document: ChartDocument, row: number, column: number) {
+  if (document.stitchCellColors) return document.stitchCellColors[row]?.[column] ?? null;
+  // Older charts stored one display colour per stitch type. Preserve their
+  // appearance while migrating to per-cell overrides.
+  const action = stitchActionAt(document, row, column);
+  return action === "knit" ? null : document.stitchColors?.[action] ?? null;
+}
+
+export function copyStitchCellColors(document: ChartDocument) {
+  return Array.from({ length: document.height }, (_, row) =>
+    Array.from({ length: document.width }, (_, column) => stitchCellColorAt(document, row, column)));
+}
+
+export function chartCellDisplayColor(document: ChartDocument, row: number, column: number, yarnColor?: string) {
+  const action = stitchActionAt(document, row, column);
+  if (action === "knit") return yarnColor ?? "#ffffff";
+  return stitchCellColorAt(document, row, column) ?? (action === "no-stitch" ? defaultStitchColor(action) : yarnColor ?? "#ffffff");
+}
+
+export function paintStitchCells(document: ChartDocument, targets: Array<[number, number]>, action: StitchAction) {
+  const stitchActions = (document.stitchActions ?? createStitchActions(document.width, document.height)).map(row => [...row]);
+  const stitchCellColors = copyStitchCellColors(document);
+  const colour = action === "knit" ? null : document.stitchColors?.[action] ?? null;
+  for (const [row, column] of targets) {
+    stitchActions[row][column] = action;
+    stitchCellColors[row][column] = colour;
+  }
+  return { ...document, stitchActions: stitchActions.some(row => row.some(value => value !== "knit")) ? stitchActions : undefined, stitchCellColors };
+}
+
+/** A stitch palette change applies to every existing cell of that type. */
+export function recolourStitchType(document: ChartDocument, action: StitchPaletteAction, colour: string | null) {
+  const stitchCellColors = copyStitchCellColors(document);
+  const stitchColors = { ...document.stitchColors };
+  if (colour === null) delete stitchColors[action];
+  else stitchColors[action] = colour;
+  for (let row = 0; row < document.height; row++) {
+    for (let column = 0; column < document.width; column++) {
+      if (stitchActionAt(document, row, column) === action) stitchCellColors[row][column] = colour;
+    }
+  }
+  return { ...document, stitchColors, stitchCellColors };
+}
+
+/** Yarn painting always wins locally, but never removes the stitch action. */
+export function paintYarnCells(document: ChartDocument, targets: Array<[number, number]>, colourId: string) {
+  const cells = document.cells.map(row => [...row]);
+  const stitchCellColors = copyStitchCellColors(document);
+  for (const [row, column] of targets) {
+    cells[row][column] = colourId;
+    stitchCellColors[row][column] = null;
+  }
+  return { ...document, cells, stitchCellColors };
+}
+
+export function yarnFillTargets(document: ChartDocument, startRow: number, startColumn: number): Array<[number, number]> {
+  const colour = document.cells[startRow]?.[startColumn];
+  if (!colour || stitchActionAt(document, startRow, startColumn) === "no-stitch") return [];
+  const queue: Array<[number, number]> = [[startRow, startColumn]];
+  const visited = new Set([`${startRow}:${startColumn}`]);
+  for (let index = 0; index < queue.length; index++) {
+    const [row, column] = queue[index];
+    for (const [r, c] of [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]]) {
+      const key = `${r}:${c}`;
+      if (visited.has(key) || document.cells[r]?.[c] !== colour || stitchActionAt(document, r, c) === "no-stitch") continue;
+      visited.add(key);
+      queue.push([r, c]);
+    }
+  }
+  return queue;
+}
+
+export function stitchFillTargets(document: ChartDocument, startRow: number, startColumn: number): Array<[number, number]> {
+  const action = stitchActionAt(document, startRow, startColumn);
+  const colour = document.cells[startRow]?.[startColumn];
+  if (!colour) return [];
+  const queue: Array<[number, number]> = [[startRow, startColumn]];
+  const visited = new Set([`${startRow}:${startColumn}`]);
+  for (let index = 0; index < queue.length; index++) {
+    const [row, column] = queue[index];
+    for (const [r, c] of [[row - 1, column], [row + 1, column], [row, column - 1], [row, column + 1]]) {
+      const key = `${r}:${c}`;
+      if (visited.has(key) || document.cells[r]?.[c] === undefined) continue;
+      if (stitchActionAt(document, r, c) !== action || (action === "knit" && document.cells[r][c] !== colour)) continue;
+      visited.add(key);
+      queue.push([r, c]);
+    }
+  }
+  return queue;
+}
+
+export function validStitchCellColors(value: unknown, width: number, height: number) {
+  return value === undefined || (Array.isArray(value) && value.length === height && value.every(row =>
+    Array.isArray(row) && row.length === width && row.every(colour => colour === null || (typeof colour === "string" && /^#[0-9a-f]{6}$/i.test(colour)))));
 }
 
 export function contrastTextColor(hex: string) {
@@ -222,11 +320,11 @@ export function resizeCells(
   );
 }
 
-export function resizeCellsCentered(
-  cells: string[][],
+export function resizeCellsCentered<T>(
+  cells: T[][],
   width: number,
   height: number,
-  backgroundId: string,
+  backgroundId: T,
 ) {
   const oldHeight = cells.length;
   const oldWidth = cells[0]?.length ?? 0;
@@ -255,7 +353,7 @@ export function resizeStitchActionsCentered(
   );
 }
 
-export function scaleCells(cells: string[][], width: number, height: number) {
+export function scaleCells<T>(cells: T[][], width: number, height: number) {
   const oldHeight = cells.length;
   const oldWidth = cells[0]?.length ?? 0;
   if (!oldWidth || !oldHeight) return [];
@@ -409,5 +507,6 @@ export function cloneDocument(document: ChartDocument): ChartDocument {
       ? stitchPaletteFromActions(document.stitchActions)
       : [...document.stitchPalette],
     stitchColors: { ...document.stitchColors },
+    stitchCellColors: copyStitchCellColors(document),
   };
 }

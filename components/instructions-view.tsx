@@ -14,7 +14,8 @@ import {
   stitchActionAt,
   stitchActionLabel,
   stitchActionSymbol,
-  stitchDisplayColor,
+  chartCellDisplayColor,
+  copyStitchCellColors,
 } from "@/lib/chart";
 
 type Props = {
@@ -64,7 +65,7 @@ function instructionRegion(document: ChartDocument, shouldTrim: boolean): Instru
     .map((row) => row.slice(minimumColumn, maximumColumn + 1));
 
   return {
-    document: { ...document, width, height, cells, stitchActions },
+    document: { ...document, width, height, cells, stitchActions, stitchCellColors: copyStitchCellColors(document).slice(minimumRow, maximumRow + 1).map(row => row.slice(minimumColumn, maximumColumn + 1)) },
     hasDesign,
     trimmed: width !== document.width || height !== document.height,
     leftOffset: minimumColumn,
@@ -183,12 +184,12 @@ function PrintableChart({ document, showSymbols }: { document: ChartDocument; sh
     <svg className="instructions-chart" viewBox={`${-leftMargin} ${-topMargin} ${width + leftMargin} ${height + topMargin + bottomMargin}`} role="img" aria-label={`${document.width} stitch by ${document.height} row chart`}>
       {document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => {
         const action = stitchActionAt(document, rowIndex, columnIndex);
-        return <rect key={`${rowIndex}-${columnIndex}`} x={columnIndex * stitchWidth} y={rowIndex} width={stitchWidth} height={1} fill={action === "knit" ? palette.get(colorId) ?? "#ffffff" : stitchDisplayColor(document, action)} />;
+        return <rect key={`${rowIndex}-${columnIndex}`} x={columnIndex * stitchWidth} y={rowIndex} width={stitchWidth} height={1} fill={chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(colorId))} />;
       }))}
       {document.cells.flatMap((row, rowIndex) => row.map((colorId, columnIndex) => {
         const action = stitchActionAt(document, rowIndex, columnIndex);
         const symbol = action !== "knit" ? stitchActionSymbol(action) : showSymbols ? symbols.get(colorId) : "";
-        const symbolColor = action !== "knit" ? contrastTextColor(stitchDisplayColor(document, action)) : undefined;
+        const symbolColor = action !== "knit" ? contrastTextColor(chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(colorId))) : undefined;
         return symbol ? <text className="instruction-cell-symbol" style={symbolColor ? { fill: symbolColor } : undefined} key={`symbol-${rowIndex}-${columnIndex}`} x={(columnIndex + 0.5) * stitchWidth} y={rowIndex + 0.69} textAnchor="middle" fontSize={Math.min(action === "knit" ? 0.68 : 0.42, stitchWidth * (action === "knit" ? 0.55 : 0.34))}>{symbol}</text> : null;
       }))}
       {verticalLines}

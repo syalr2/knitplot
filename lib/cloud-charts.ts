@@ -1,4 +1,4 @@
-import { ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
+import { ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES, validStitchCellColors } from "@/lib/chart";
 
 export type CloudChartPayload = {
   document: ChartDocument;
@@ -44,7 +44,7 @@ export function readCloudChartPayload(value: unknown): CloudChartPayload {
     typeof guides.showRepeatGuides === "boolean" &&
     Number.isInteger(guides.repeatWidth) && Number(guides.repeatWidth) >= 1 && Number(guides.repeatWidth) <= Number(width) &&
     Number.isInteger(guides.repeatHeight) && Number(guides.repeatHeight) >= 1 && Number(guides.repeatHeight) <= Number(height);
-  if (!colorsAreValid || colorIds.size !== palette.length || !cellsAreValid || !instructionsAreValid || !guidesAreValid) {
+  if (!colorsAreValid || colorIds.size !== palette.length || !cellsAreValid || !instructionsAreValid || !guidesAreValid || !validStitchCellColors(candidate.stitchCellColors, width, height)) {
     throw new Error("The chart colours or stitches were not valid.");
   }
 

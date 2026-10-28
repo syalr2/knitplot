@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ChangeEvent, RefObject, useEffect, useRef, useState } from "react";
-import { cellAspectRatio, ChartDocument, cloneDocument, contrastTextColor, hasStructuralStitches, stitchActionAt, stitchActionSymbol, stitchDisplayColor } from "@/lib/chart";
+import { cellAspectRatio, ChartDocument, cloneDocument, contrastTextColor, hasStructuralStitches, stitchActionAt, stitchActionSymbol, chartCellDisplayColor } from "@/lib/chart";
 import { readProject } from "@/lib/project-file";
 
 type Props = {
@@ -88,10 +88,11 @@ function renderChart(document: ChartDocument) {
   for (let row = 0; row < document.height; row += 1) {
     for (let column = 0; column < document.width; column += 1) {
       const action = stitchActionAt(document, row, column);
-      context.fillStyle = action === "knit" ? palette.get(document.cells[row][column]) ?? "#ffffff" : stitchDisplayColor(document, action);
+      const yarnColor = palette.get(document.cells[row][column]);
+      context.fillStyle = chartCellDisplayColor(document, row, column, yarnColor);
       context.fillRect(left + column * cellWidth, top + row * cellHeight, cellWidth, cellHeight);
       if (action !== "knit") {
-        context.fillStyle = contrastTextColor(stitchDisplayColor(document, action));
+        context.fillStyle = contrastTextColor(chartCellDisplayColor(document, row, column, yarnColor));
         context.font = `bold ${Math.max(6, Math.min(10, cellHeight * 0.4))}px Arial, sans-serif`;
         context.textAlign = "center";
         context.fillText(stitchActionSymbol(action), left + (column + 0.5) * cellWidth, top + (row + 0.68) * cellHeight);

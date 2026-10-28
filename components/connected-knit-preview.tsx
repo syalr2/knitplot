@@ -51,7 +51,6 @@ export function ConnectedKnitPreview({document,repeatX=1,repeatY=1,mirrored=fals
         for(let tile=down-1;tile>=0;tile--)for(let r=fabric.rows.length-1;r>=0;r--){
           const verticalMirror=reflect&&tile%2===1;
           const row=fabric.rows[r],special=row.filter(n=>n.kind==="bar"||n.kind==="merge");
-          const colours=row.filter(n=>n.action==="knit"||n.action==="purl");
           for(const node of [...row.filter(n=>!special.includes(n)),...special]){
             if(performance.now()-lastYield>10){
               // Yield between short drawing batches, including on browsers
@@ -61,9 +60,7 @@ export function ConnectedKnitPreview({document,repeatX=1,repeatY=1,mirrored=fals
               if(cancelled)return;
               lastYield=performance.now();
             }
-            const colourColumn=node.action==="knit"||node.action==="purl"?node.column
-              :colours.reduce<number|undefined>((best,n)=>best===undefined||Math.abs(n.column-node.column)<Math.abs(best-node.column)?n.column:best,undefined)??node.column;
-            const hex=palette.get(fabric.document.cells[r]?.[colourColumn])??document.palette[0]?.hex??"#f2eadf";
+            const hex=palette.get(fabric.document.cells[r]?.[node.column])??document.palette[0]?.hex??"#f2eadf";
             const nearby=special.reduce<typeof node|undefined>((best,n)=>Math.abs(n.x-node.x)<2.1&&(!best||Math.abs(n.x-node.x)<Math.abs(best.x-node.x))?n:best,undefined);
             const mirror=nearby?.action==="m1r"||nearby?.action==="k2tog";
             let action:StitchAction=node.action;

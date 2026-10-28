@@ -1,4 +1,4 @@
-import { type ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
+import { type ChartDocument, cloneDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES, validStitchCellColors } from "@/lib/chart";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,7 +72,7 @@ export function readProject(value: unknown): ChartDocument {
     Number.isInteger(guides.repeatWidth) && Number(guides.repeatWidth) >= 1 && Number(guides.repeatWidth) <= Number(width) &&
     Number.isInteger(guides.repeatHeight) && Number(guides.repeatHeight) >= 1 && Number(guides.repeatHeight) <= Number(height)
   );
-  if (!colors || colorIds.size !== palette.length || !validCells || !validStitchActions || !validStitchPalette || !validStitchColors || !validInstructions || !validGuides) {
+  if (!colors || colorIds.size !== palette.length || !validCells || !validStitchActions || !validStitchPalette || !validStitchColors || !validInstructions || !validGuides || !validStitchCellColors(candidate.stitchCellColors, width, height)) {
     throw new Error("This project file contains invalid colours or stitches.");
   }
 

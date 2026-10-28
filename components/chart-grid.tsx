@@ -1,7 +1,7 @@
 "use client";
 
 import { PointerEvent, useRef } from "react";
-import { cellAspectRatio, CellSelection, ChartDocument, contrastTextColor, stitchActionAt, stitchActionLabel, stitchActionSymbol, stitchDisplayColor, StitchAction, Tool } from "@/lib/chart";
+import { cellAspectRatio, CellSelection, ChartDocument, contrastTextColor, stitchActionAt, stitchActionLabel, stitchActionSymbol, chartCellDisplayColor, StitchAction, Tool } from "@/lib/chart";
 
 type Props = {
   document: ChartDocument;
@@ -142,7 +142,7 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
                       y={rowIndex}
                       width={aspect}
                       height="1"
-                      fill={action === "knit" ? palette.get(colorId) ?? "#ffffff" : stitchDisplayColor(document, action)}
+                      fill={chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(colorId))}
                     />
                   );
                 }),
@@ -152,7 +152,7 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
               {document.cells.flatMap((row, rowIndex) => row.map((_, columnIndex) => {
                 const action = stitchActionAt(document, rowIndex, columnIndex);
                 if (action === "knit") return null;
-                const background = stitchDisplayColor(document, action);
+                const background = chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(document.cells[rowIndex][columnIndex]));
                 return <text key={`${rowIndex}-${columnIndex}`} style={{ fill: contrastTextColor(background) }} x={(columnIndex + 0.5) * aspect} y={rowIndex + 0.69} textAnchor="middle" fontSize={Math.min(0.45, aspect * 0.35)}>{stitchActionSymbol(action)}</text>;
               }))}
             </g>
@@ -200,11 +200,12 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
           </svg>
         </div>
         <p className="chart-hint">
-          {structureAction
+          {structureAction === "knit" ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."
+            : structureAction
             ? tool === "fill"
               ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
               : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
-            : tool === "fill" ? "Click an area to fill it. Clicking a stitch symbol replaces it with the selected colour." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action." : `Click and drag to ${tool === "eraser" ? "erase" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}{document.stitchActions && !structureAction ? " Painting over a stitch symbol turns it into a regular colour stitch." : ""}
+            : tool === "fill" ? "Click an area to fill its yarn colour. Stitch symbols stay in place." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action." : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}{document.stitchActions && !structureAction ? " Use Remove stitch to erase symbols without changing yarn colours." : ""}
         </p>
       </div>
     </div>

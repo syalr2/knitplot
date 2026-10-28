@@ -13,7 +13,8 @@ import {
   stitchActionLabel,
   stitchActionMath,
   stitchActionSymbol,
-  stitchDisplayColor,
+  chartCellDisplayColor,
+  copyStitchCellColors,
 } from "@/lib/chart";
 
 export type KnitProgress = {
@@ -118,6 +119,7 @@ function knitRegion(document: ChartDocument, shouldTrim: boolean) {
       width,
       height,
       cells: document.cells.slice(minimumRow, maximumRow + 1).map((chartRow) => chartRow.slice(minimumColumn, maximumColumn + 1)),
+      stitchCellColors: copyStitchCellColors(document).slice(minimumRow, maximumRow + 1).map(row => row.slice(minimumColumn, maximumColumn + 1)),
       stitchActions: document.stitchActions
         ?.slice(minimumRow, maximumRow + 1)
         .map((chartRow) => chartRow.slice(minimumColumn, maximumColumn + 1)),
@@ -273,7 +275,7 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
                     y={chartRowIndex}
                     width={aspect}
                     height="1"
-                    fill={action === "knit" ? palette.get(colorId) ?? "#fff" : stitchDisplayColor(activeDocument, action)}
+                    fill={chartCellDisplayColor(activeDocument, chartRowIndex, columnIndex, palette.get(colorId))}
                     onClick={() => {
                       if (action === "no-stitch") return;
                       const nextRow = activeDocument.height - chartRowIndex;
@@ -290,7 +292,7 @@ export function KnitMode({ document, progress, onProgressChange, onSettingsChang
               {activeDocument.cells.flatMap((chartRow, chartRowIndex) => chartRow.map((_, columnIndex) => {
                 const action = stitchActionAt(activeDocument, chartRowIndex, columnIndex);
                 if (action === "knit") return null;
-                const background = stitchDisplayColor(activeDocument, action);
+                const background = chartCellDisplayColor(activeDocument, chartRowIndex, columnIndex, palette.get(activeDocument.cells[chartRowIndex][columnIndex]));
                 return <text key={`${chartRowIndex}-${columnIndex}`} style={{ fill: contrastTextColor(background) }} x={(columnIndex + 0.5) * aspect} y={chartRowIndex + 0.7} textAnchor="middle" fontSize={Math.min(0.48, aspect * 0.38)}>{stitchActionSymbol(action)}</text>;
               }))}
             </g>

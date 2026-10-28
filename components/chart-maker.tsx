@@ -16,13 +16,17 @@ import {
   CellSelection,
   ChartDocument,
   cloneDocument,
+  copyStitchCellColors,
   contrastTextColor,
   createStitchActions,
   defaultDocument,
   finishedSize,
   flipGrid,
-  floodFillActive,
-  floodFillStitchActions,
+  paintYarnCells,
+  recolourStitchType,
+  yarnFillTargets,
+  paintStitchCells,
+  stitchFillTargets,
   MAX_CHART_ROWS,
   MAX_CHART_STITCHES,
   resizeCellsCentered,
@@ -57,7 +61,7 @@ type PreviewSettings = {
 };
 type ChartTab = { id: string; cloudId?: string; document: ChartDocument; knitProgress: KnitProgress; preview: PreviewSettings };
 type TabHistory = { past: ChartDocument[]; future: ChartDocument[] };
-type SelectionClipboard = { tabId: string; cells: string[][]; stitchActions: StitchAction[][] };
+type SelectionClipboard = { tabId: string; cells: string[][]; stitchActions: StitchAction[][]; stitchCellColors: (string | null)[][] };
 type WorkspaceSave = {
   format: "knitplot-workspace";
   version: 1 | 2 | 3 | 4;
@@ -317,60 +321,21 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     if (structureAction) {
       setDocument((current) => {
         if (shouldFill) {
-          return {
-            ...current,
-            stitchActions: floodFillStitchActions(
-              current.cells,
-              current.stitchActions,
-              row,
-              column,
-              structureAction,
-            ),
-          };
+          return paintStitchCells(current, stitchFillTargets(current, row, column), structureAction);
         }
-        const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height))
-          .map((currentRow) => [...currentRow]);
         const targets = new Set([`${row}:${column}`]);
         if (current.guides.symmetry === "horizontal" || current.guides.symmetry === "both") targets.add(`${row}:${current.width - column - 1}`);
         if (current.guides.symmetry === "vertical" || current.guides.symmetry === "both") targets.add(`${current.height - row - 1}:${column}`);
         if (current.guides.symmetry === "both") targets.add(`${current.height - row - 1}:${current.width - column - 1}`);
-        let changed = false;
-        for (const target of targets) {
-          const [targetRow, targetColumn] = target.split(":").map(Number);
-          if (stitchActions[targetRow][targetColumn] !== structureAction) {
-            stitchActions[targetRow][targetColumn] = structureAction;
-            changed = true;
-          }
-        }
-        if (!changed) return current;
-        return {
-          ...current,
-          stitchActions: stitchActions.some((currentRow) => currentRow.some((action) => action !== "knit"))
-            ? stitchActions
-            : undefined,
-        };
+        return paintStitchCells(current, [...targets].map(target => target.split(":").map(Number) as [number, number]), structureAction);
       });
       return;
     }
     const colorId = tool === "eraser" ? document.palette[0].id : selectedColor;
     setDocument((current) => {
       if (shouldFill) {
-        const startingAction = stitchActionAt(current, row, column);
-        if (startingAction !== "knit") {
-          const cells = current.cells.map((currentRow) => [...currentRow]);
-          const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((currentRow) => [...currentRow]);
-          cells[row][column] = colorId;
-          stitchActions[row][column] = "knit";
-          return {
-            ...current,
-            cells,
-            stitchActions: stitchActions.some((currentRow) => currentRow.some((action) => action !== "knit")) ? stitchActions : undefined,
-          };
-        }
-        return { ...current, cells: floodFillActive(current.cells, current.stitchActions, row, column, colorId) };
+        return paintYarnCells(current, yarnFillTargets(current, row, column), colorId);
       }
-      const cells = current.cells.map((currentRow) => [...currentRow]);
-      const stitchActions = current.stitchActions?.map((currentRow) => [...currentRow]);
       const targets = new Set([`${row}:${column}`]);
       if (current.guides.symmetry === "horizontal" || current.guides.symmetry === "both") {
         targets.add(`${row}:${current.width - column - 1}`);
@@ -381,24 +346,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       if (current.guides.symmetry === "both") {
         targets.add(`${current.height - row - 1}:${current.width - column - 1}`);
       }
-      let changed = false;
-      for (const target of targets) {
-        const [targetRow, targetColumn] = target.split(":").map(Number);
-        if (stitchActions && stitchActions[targetRow][targetColumn] !== "knit") {
-          stitchActions[targetRow][targetColumn] = "knit";
-          changed = true;
-        }
-        if (cells[targetRow][targetColumn] !== colorId) {
-          cells[targetRow][targetColumn] = colorId;
-          changed = true;
-        }
-      }
-      if (!changed) return current;
-      return {
-        ...current,
-        cells,
-        stitchActions: stitchActions?.some((currentRow) => currentRow.some((action) => action !== "knit")) ? stitchActions : undefined,
-      };
+      return paintYarnCells(current, [...targets].map(target => target.split(":").map(Number) as [number, number]), colorId);
     });
   }
 
@@ -418,19 +366,13 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const startColumn = Math.min(selection.startColumn, selection.endColumn);
     const endColumn = Math.max(selection.startColumn, selection.endColumn);
     commit((current) => {
-      const cells = current.cells.map((row) => [...row]);
-      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
+      const targets: Array<[number, number]> = [];
       for (let row = startRow; row <= endRow; row += 1) {
         for (let column = startColumn; column <= endColumn; column += 1) {
-          cells[row][column] = selectedColor;
-          stitchActions[row][column] = "knit";
+          targets.push([row, column]);
         }
       }
-      return {
-        ...current,
-        cells,
-        stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined,
-      };
+      return paintYarnCells(current, targets, selectedColor);
     });
     setSelection(null);
   }
@@ -439,19 +381,13 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const bounds = selectionBounds();
     if (!bounds || !structureAction) return;
     commit((current) => {
-      const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height))
-        .map((row) => [...row]);
+      const targets: Array<[number, number]> = [];
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
         for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
-          stitchActions[row][column] = structureAction;
+          targets.push([row, column]);
         }
       }
-      return {
-        ...current,
-        stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit"))
-          ? stitchActions
-          : undefined,
-      };
+      return paintStitchCells(current, targets, structureAction);
     });
     setSelection(null);
   }
@@ -471,6 +407,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     if (!bounds) return;
     setSelectionClipboard({
       tabId: activeTabId,
+      stitchCellColors: copyStitchCellColors(document).slice(bounds.startRow, bounds.endRow + 1).map(row => row.slice(bounds.startColumn, bounds.endColumn + 1)),
       cells: document.cells
         .slice(bounds.startRow, bounds.endRow + 1)
         .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1)),
@@ -488,14 +425,16 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     copySelection();
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchCellColors = copyStitchCellColors(current);
       const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
         for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
           cells[row][column] = current.palette[0].id;
+          stitchCellColors[row][column] = null;
           stitchActions[row][column] = "knit";
         }
       }
-      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
+      return { ...current, cells, stitchCellColors, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
   }
 
@@ -506,16 +445,18 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const startColumn = bounds?.startColumn ?? 0;
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchCellColors = copyStitchCellColors(current);
       const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       selectionClipboard.cells.forEach((clipboardRow, rowOffset) => {
         clipboardRow.forEach((colorId, columnOffset) => {
           if (cells[startRow + rowOffset]?.[startColumn + columnOffset] !== undefined) {
             cells[startRow + rowOffset][startColumn + columnOffset] = colorId;
+            stitchCellColors[startRow + rowOffset][startColumn + columnOffset] = selectionClipboard.stitchCellColors[rowOffset]?.[columnOffset] ?? null;
             stitchActions[startRow + rowOffset][startColumn + columnOffset] = selectionClipboard.stitchActions[rowOffset]?.[columnOffset] ?? "knit";
           }
         });
       });
-      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
+      return { ...current, cells, stitchCellColors, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
     const pastedHeight = Math.min(selectionClipboard.cells.length, document.height - startRow);
     const pastedWidth = Math.min(selectionClipboard.cells[0]?.length ?? 0, document.width - startColumn);
@@ -547,18 +488,22 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         ),
       );
       const cells = current.cells.map((row) => [...row]);
+      const stitchCellColors = copyStitchCellColors(current);
+      const colourBlock = stitchCellColors.slice(bounds.startRow, bounds.endRow + 1).map(row => row.slice(bounds.startColumn, bounds.endColumn + 1));
       const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
         for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
           cells[row][column] = current.palette[0].id;
+          stitchCellColors[row][column] = null;
           stitchActions[row][column] = "knit";
         }
       }
       block.forEach((blockRow, rowOffset) => blockRow.forEach((colorId, columnOffset) => {
         cells[nextStartRow + rowOffset][nextStartColumn + columnOffset] = colorId;
+        stitchCellColors[nextStartRow + rowOffset][nextStartColumn + columnOffset] = colourBlock[rowOffset][columnOffset];
         stitchActions[nextStartRow + rowOffset][nextStartColumn + columnOffset] = actionBlock[rowOffset][columnOffset];
       }));
-      return { ...current, cells, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
+      return { ...current, cells, stitchCellColors, stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined };
     });
     setSelection({ startRow: nextStartRow, endRow: nextEndRow, startColumn: nextStartColumn, endColumn: nextEndColumn });
   }
@@ -584,23 +529,29 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     );
     const transformedCells = transform === "rotate" ? rotateGridClockwise(block) : flipGrid(block, transform);
     const transformedActions = transform === "rotate" ? rotateGridClockwise(actionBlock) : flipGrid(actionBlock, transform);
+    const colourBlock = copyStitchCellColors(document).slice(bounds.startRow, bounds.endRow + 1).map(row => row.slice(bounds.startColumn, bounds.endColumn + 1));
+    const transformedColours = transform === "rotate" ? rotateGridClockwise(colourBlock) : flipGrid(colourBlock, transform);
 
     commit((current) => {
       const cells = current.cells.map((row) => [...row]);
+      const stitchCellColors = copyStitchCellColors(current);
       const stitchActions = (current.stitchActions ?? createStitchActions(current.width, current.height)).map((row) => [...row]);
       for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
         for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
           cells[row][column] = current.palette[0].id;
+          stitchCellColors[row][column] = null;
           stitchActions[row][column] = "knit";
         }
       }
       transformedCells.forEach((blockRow, rowOffset) => blockRow.forEach((colorId, columnOffset) => {
         cells[bounds.startRow + rowOffset][bounds.startColumn + columnOffset] = colorId;
+        stitchCellColors[bounds.startRow + rowOffset][bounds.startColumn + columnOffset] = transformedColours[rowOffset][columnOffset];
         stitchActions[bounds.startRow + rowOffset][bounds.startColumn + columnOffset] = transformedActions[rowOffset][columnOffset];
       }));
       return {
         ...current,
         cells,
+        stitchCellColors,
         stitchActions: stitchActions.some((row) => row.some((action) => action !== "knit")) ? stitchActions : undefined,
       };
     });
@@ -620,6 +571,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     commit((current) => ({
       ...current,
       cells: flipGrid(current.cells, direction),
+      stitchCellColors: flipGrid(copyStitchCellColors(current), direction),
       stitchActions: current.stitchActions ? flipGrid(current.stitchActions, direction) : undefined,
     }));
     setSelection(null);
@@ -641,6 +593,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
         repeatHeight: Math.min(current.width, current.guides.repeatWidth),
       },
       cells: rotateGridClockwise(current.cells),
+      stitchCellColors: rotateGridClockwise(copyStitchCellColors(current)),
       stitchActions: current.stitchActions ? rotateGridClockwise(current.stitchActions) : undefined,
     }));
     clampActiveKnitProgress(document.height, document.width);
@@ -670,6 +623,9 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       ...current,
       width: draftWidth,
       height: draftHeight,
+      stitchCellColors: mode === "scale"
+        ? scaleCells(copyStitchCellColors(current), draftWidth, draftHeight)
+        : resizeCellsCentered<string | null>(copyStitchCellColors(current), draftWidth, draftHeight, null),
       cells: mode === "scale"
         ? scaleCells(current.cells, draftWidth, draftHeight)
         : resizeCellsCentered(current.cells, draftWidth, draftHeight, current.palette[0].id),
@@ -729,10 +685,13 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
   }
 
   function changeStitchColor(action: StitchPaletteAction, hex: string) {
-    commit((current) => ({
-      ...current,
-      stitchColors: { ...current.stitchColors, [action]: hex },
-    }));
+    commit((current) => recolourStitchType(current, action, hex));
+    selectStitchAction(action);
+  }
+
+  function resetStitchColor(action: StitchPaletteAction) {
+    commit((current) => recolourStitchType(current, action, null));
+    selectStitchAction(action);
   }
 
   function removeColor(id: string) {
@@ -763,6 +722,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       palette,
       cells,
       stitchActions: undefined,
+      stitchCellColors: undefined,
       stitchPalette: [],
       stitchColors: {},
       guides: {
@@ -783,12 +743,14 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
     const width = cells[0]?.length ?? document.width;
     const height = cells.length;
     const preservedActions = width === document.width && height === document.height ? document.stitchActions : undefined;
+    const preservedCellColors = copyStitchCellColors(document);
     const preservedStitchPalette = width === document.width && height === document.height ? document.stitchPalette : undefined;
     const preservedStitchColors = width === document.width && height === document.height ? document.stitchColors : undefined;
     importImage(palette, cells);
     if (preservedActions) setDocument((current) => ({
       ...current,
       stitchActions: preservedActions.map((row) => [...row]),
+      stitchCellColors: preservedCellColors,
       stitchPalette: preservedStitchPalette ? [...preservedStitchPalette] : stitchPaletteFromActions(preservedActions),
       stitchColors: { ...preservedStitchColors },
     }));
@@ -811,6 +773,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
       palette,
       cells,
       stitchActions,
+      stitchCellColors: undefined,
       stitchPalette: stitchPaletteFromActions(stitchActions),
       stitchColors: {},
       instructions: {
@@ -1134,17 +1097,18 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
                         <span className="stitch-swatch" style={{ background: displayColor, color: contrastTextColor(displayColor) }}>{action === "no-stitch" ? "—" : option?.shortLabel}</span>
                         <span className="palette-name">
                           <span>{option?.label ?? action}</span>
-                          <span className="palette-hex">{displayColor.toUpperCase()}</span>
+                          <span className="palette-hex">{document.stitchColors?.[action] ? displayColor.toUpperCase() : action === "no-stitch" ? "No fabric" : "Use yarn colour"}</span>
                         </span>
                       </button>
                       <input type="color" value={displayColor} aria-label={`Change ${option?.label ?? action} display colour`} onChange={(event) => changeStitchColor(action, event.target.value)} />
                       <button className="remove-button" aria-label={`Remove ${option?.label ?? action} from stitch palette`} title="Remove from palette; existing chart symbols will stay" onClick={() => removeStitchFromPalette(action)}>×</button>
+                      {document.stitchColors?.[action] ? <button className="text-button stitch-color-reset" title="Reset display colour" onClick={() => resetStitchColor(action)}>{action === "no-stitch" ? "Reset" : "Use yarn colour"}</button> : null}
                     </div>
                   );
                 })}
               </div>
               {!stitchPalette.length ? <p className="empty-stitch-palette">Add purl, cast-on, bind-off, shaping, or no-stitch cells to draw them onto your chart.</p> : null}
-              {stitchPalette.length ? <button className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`} onClick={() => selectStitchAction("knit")}>Remove a stitch symbol</button> : null}
+              <button className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`} aria-pressed={structureAction === "knit"} onClick={() => selectStitchAction("knit")}>Remove stitch</button>
             </div>
           </details>
 
@@ -1198,7 +1162,7 @@ export function ChartMaker({ viewer, accountsEnabled, aiConnected }: ChartMakerP
             <h1 className="visually-hidden">Chart editor</h1>
             <div className="editor-actions">
               <div className="tool-group" data-tour="drawing-tools" aria-label="Drawing tools">
-                <button className={tool === "pencil" && !structureAction ? "active" : ""} onClick={() => { setTool("pencil"); setStructureAction(null); setStitchPickerOpen(false); }}>Draw</button>
+                <button className={tool === "pencil" ? "active" : ""} onClick={() => { setTool("pencil"); setStitchPickerOpen(false); }}>Draw</button>
                 <button className={tool === "fill" ? "active" : ""} onClick={() => { setTool("fill"); setStitchPickerOpen(false); }}>Fill</button>
                 <button className={tool === "eraser" && !structureAction ? "active" : ""} onClick={() => { setTool("eraser"); setStructureAction(null); setStitchPickerOpen(false); }}>Erase</button>
                 <button className={tool === "select" ? "active" : ""} onClick={() => setTool("select")}>Select</button>
