@@ -156,3 +156,60 @@ test("keeping a separate local copy detaches its failed save from leave-page war
   queue.forgetFailed("one");
   assert.equal(queue.hasPending(), false);
 });
+
+test("conflict recovery discards the stopped queue and uses the loaded cloud revision", async () => {
+  const versions: (string | undefined)[] = [];
+  const conflicts: (boolean | undefined)[] = [];
+  const queue = new CloudSaveQueue(
+    async (_id, _data: string, version) => {
+      versions.push(version);
+      if (version === "1") throw new HttpError("conflict", 409);
+      return "3";
+    },
+    (_id, _state, _message, _saved, conflict) => conflicts.push(conflict),
+    0,
+  );
+  queue.enqueue(
+    "one",
+    { data: "local", snapshot: "local", version: "1" },
+    "old",
+  );
+  await queue.flush("one");
+  assert.equal(queue.isStopped("one"), true);
+  assert.equal(conflicts.at(-1), true);
+  queue.forgetFailed("one");
+  assert.equal(queue.hasPending(), false);
+  queue.enqueue(
+    "one",
+    { data: "cloud", snapshot: "cloud", version: "2" },
+    "cloud",
+  );
+  queue.enqueue(
+    "one",
+    { data: "edited", snapshot: "edited", version: "2" },
+    "cloud",
+  );
+  await queue.flush("one");
+  assert.deepEqual(versions, ["1", "2"]);
+  assert.equal(conflicts.at(-1), undefined);
+});
+
+test("network failures are not presented as cloud conflicts", async () => {
+  let conflict: boolean | undefined;
+  const queue = new CloudSaveQueue(
+    async () => {
+      throw new TypeError("offline");
+    },
+    (_id, _state, _message, _saved, flag) => {
+      conflict = flag;
+    },
+    0,
+  );
+  queue.enqueue(
+    "one",
+    { data: "local", snapshot: "local", version: "1" },
+    "old",
+  );
+  await queue.flush("one");
+  assert.equal(conflict, false);
+});

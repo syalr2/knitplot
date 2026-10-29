@@ -20,14 +20,25 @@ export function useLocalWorkspace(
   const writer = useRef<WorkspacePersistence | null>(null);
   const latest = useRef<WorkspaceSave | null>(null);
   const failed = useRef(false);
+  const persist = useCallback(
+    (workspace: WorkspaceSave) => {
+      if (!enabled)
+        throw new HttpError(
+          "Browser storage is not ready. Download your chart before reloading.",
+        );
+      if (!writer.current)
+        writer.current = new WorkspacePersistence(localStorage, initialValue);
+      writer.current.save(workspace);
+      latest.current = workspace;
+      failed.current = false;
+      setError("");
+    },
+    [enabled, initialValue],
+  );
   const save = useCallback(() => {
     if (!latest.current) return;
     try {
-      if (!writer.current)
-        writer.current = new WorkspacePersistence(localStorage, initialValue);
-      writer.current.save(latest.current);
-      failed.current = false;
-      setError("");
+      persist(latest.current);
     } catch (error) {
       failed.current = true;
       setError(
@@ -36,7 +47,7 @@ export function useLocalWorkspace(
           : "Your browser could not save your work. Download your chart from File before closing this page.",
       );
     }
-  }, [initialValue]);
+  }, [persist]);
   useEffect(() => {
     if (!enabled) return;
     latest.current = workspaceSave(tabs, activeTabId);
@@ -70,5 +81,5 @@ export function useLocalWorkspace(
       document.removeEventListener("visibilitychange", onHidden);
     };
   }, [enabled, save]);
-  return error;
+  return { error, persist };
 }

@@ -68,8 +68,9 @@ import {
 import { remember, travelHistory, type TabHistory } from "@/lib/history";
 import { useCloudSync } from "@/components/use-cloud-sync";
 import { responseJson } from "@/lib/http";
-import { tabSnapshot } from "@/lib/workspace";
+import { tabSnapshot, workspaceSave } from "@/lib/workspace";
 import { useLocalWorkspace } from "@/components/use-local-workspace";
+import { useCloudRecovery } from "@/components/use-cloud-recovery";
 const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
 
 type RepeatStyle = "normal" | "mirrored";
@@ -157,7 +158,7 @@ export function ChartMaker({
   const [initialStorageValue, setInitialStorageValue] = useState<string | null>(
     null,
   );
-  const localSaveError = useLocalWorkspace(
+  const localWorkspace = useLocalWorkspace(
     tabs,
     activeTabId,
     loaded && storageReady,
@@ -169,6 +170,24 @@ export function ChartMaker({
     loaded && !!viewer,
     setTabs,
   );
+  const recovery = useCloudRecovery({
+    workspace: workspaceSave(tabs, activeTabId),
+    persist: localWorkspace.persist,
+    canRecover: cloudStatus.canRecover,
+    clearConflict: cloudStatus.forgetFailed,
+    commit: (next) => {
+      const incoming = next.tabs.find(
+        (tab) => !tabs.some((existing) => existing.id === tab.id),
+      )!;
+      setTabs(next.tabs);
+      setActiveTabId(next.activeTabId);
+      setPreviewDocuments((current) => ({
+        ...current,
+        [incoming.id]: cloneDocument(incoming.document),
+      }));
+      if (next.activeTabId !== activeTabId) prepareTabView(incoming.document);
+    },
+  });
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
@@ -1265,14 +1284,31 @@ export function ChartMaker({
 
   return (
     <main className="app-shell">
-      {restoreError || localSaveError ? (
-        <p role="alert">{restoreError || localSaveError}</p>
+      {restoreError || localWorkspace.error ? (
+        <p role="alert">{restoreError || localWorkspace.error}</p>
       ) : null}
       {activeTab.cloudId && cloudStatus.state === "error" ? (
         <p role="alert">
           {cloudStatus.message}{" "}
-          <button onClick={cloudStatus.retry}>Retry save</button>{" "}
+          <button disabled={recovery.busy} onClick={cloudStatus.retry}>
+            Retry save
+          </button>{" "}
+          {cloudStatus.conflict ? (
+            <>
+              <button
+                disabled={recovery.busy}
+                onClick={() =>
+                  void recovery.load(activeTabId, activeTab.cloudId!)
+                }
+              >
+                {recovery.busy
+                  ? "Loading cloud version…"
+                  : "Load cloud version"}
+              </button>{" "}
+            </>
+          ) : null}
           <button
+            disabled={recovery.busy}
             onClick={() => {
               cloudStatus.forgetFailed(activeTab.cloudId!);
               setTabs((current) =>
@@ -1293,6 +1329,7 @@ export function ChartMaker({
           </button>
         </p>
       ) : null}
+      {recovery.error ? <p role="alert">{recovery.error}</p> : null}
       <header className="topbar">
         <div className="project-bar">
           <div className="brand-lockup" aria-label="KnitPlot">
