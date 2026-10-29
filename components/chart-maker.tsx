@@ -48,6 +48,7 @@ import {
   Tool,
 } from "@/lib/chart";
 import type { Viewer } from "@/lib/auth";
+import { cloudVersionToken } from "@/lib/cloud-revision";
 import {
   tutorialExampleDocument,
   type TutorialExample,
@@ -1142,17 +1143,18 @@ export function ChartMaker({
           preview: activeTab.preview,
         }),
       });
-      const result = await responseJson<{ id: string; updatedAt: string }>(
+      const result = await responseJson<{ id: string; version: number }>(
         response,
       );
       if (!result.id) throw new Error("Cloud save failed.");
+      const cloudVersion = cloudVersionToken(result);
       setTabs((current) =>
         current.map((tab) =>
           tab.id === activeTabId
             ? {
                 ...tab,
                 cloudId: result.id,
-                cloudVersion: result.updatedAt,
+                cloudVersion,
                 cloudSnapshot: tabSnapshot(activeTab),
               }
             : tab,

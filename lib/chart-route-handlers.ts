@@ -3,6 +3,7 @@ import type { getDatabase as DatabaseGetter } from "./db";
 import { HttpError, errorResponse, readJsonObject, isUuid } from "./http";
 import { readCloudChartPayload } from "./cloud-charts";
 import { hasValidRequestOrigin } from "./security/origin";
+import { readCloudRevision } from "./cloud-revision";
 
 // Dependency injection keeps HTTP behaviour testable without Clerk/network/keys.
 export function createChartHandlers(dependencies: {
@@ -30,7 +31,7 @@ export function createChartHandlers(dependencies: {
     let data: Record<string, unknown> | undefined;
     try {
       const rows =
-        (await sql`select id, name, document, knit_progress, preview, updated_at::text as updated_at from knitplot_charts where id = ${id}::uuid and user_id = ${viewer.id} limit 1`) as Array<
+        (await sql`select id, name, document, knit_progress, preview, version, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from knitplot_charts where id = ${id}::uuid and user_id = ${viewer.id} limit 1`) as Array<
           Record<string, unknown>
         >;
       data = rows[0];
@@ -45,6 +46,7 @@ export function createChartHandlers(dependencies: {
         knitProgress: data.knit_progress,
         preview: data.preview,
         updatedAt: data.updated_at,
+        version: data.version,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );
@@ -66,9 +68,11 @@ export function createChartHandlers(dependencies: {
     try {
       const body = await readJsonObject(request);
       const payload = readCloudChartPayload(body);
-      const version = body.expectedVersion;
-      if (typeof version !== "string" || version.length > 100 || !version)
+      const version = readCloudRevision(body.expectedVersion);
+      if (version === undefined)
         return errorResponse("Reopen this chart before saving it.", 428);
+      const integerVersion = typeof version === "number" ? version : null;
+      const legacyTimestamp = typeof version === "string" ? version : null;
       const name = payload.document.name.trim() || "Untitled chart";
       const documentJson = JSON.stringify(payload.document);
       const progressJson = JSON.stringify(payload.knitProgress);
@@ -77,8 +81,11 @@ export function createChartHandlers(dependencies: {
       update knitplot_charts set
         name = ${name}, document = ${documentJson}::jsonb, knit_progress = ${progressJson}::jsonb,
         preview = ${previewJson}::jsonb, updated_at = now()
-      where id = ${id}::uuid and user_id = ${viewer.id} and updated_at::text = ${version}
-      returning id, updated_at::text as "updatedAt"
+      where id = ${id}::uuid and user_id = ${viewer.id} and
+        case when ${integerVersion}::integer is not null
+          then version = ${integerVersion}::integer
+          else updated_at = ${legacyTimestamp}::timestamptz end
+      returning id, version, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
     `) as Array<Record<string, unknown>>;
       const data = rows[0];
       if (!data)
@@ -129,7 +136,7 @@ export function createChartHandlers(dependencies: {
       update knitplot_charts set
         name = ${name}, document = jsonb_set(document, '{name}', to_jsonb(${name}::text), true), updated_at = now()
       where id = ${id}::uuid and user_id = ${viewer.id}
-      returning id, name, updated_at::text as "updatedAt"
+      returning id, name, version, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
     `) as Array<Record<string, unknown>>;
       const data = rows[0];
       if (!data) return errorResponse("That chart was not found.", 404);
@@ -181,7 +188,7 @@ export function createChartHandlers(dependencies: {
       const rows = (await sql`
       insert into knitplot_charts (user_id, name, document, knit_progress, preview)
       values (${viewer.id}, ${name}, ${documentJson}::jsonb, ${progressJson}::jsonb, ${previewJson}::jsonb)
-      returning id, updated_at::text as "updatedAt"
+      returning id, version, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
     `) as Array<Record<string, unknown>>;
       return Response.json(rows[0], {
         status: 201,

@@ -69,31 +69,62 @@ test("a missing revision cannot overwrite a cloud chart", async () => {
   assert.equal(queries.length, 0);
 });
 test("cloud writes require both ownership and the exact loaded revision", async () => {
-  const { handlers, queries } = fixture([{ id, updatedAt: "new-version" }]);
+  const { handlers, queries } = fixture([{ id, version: 8 }]);
   const result = await handlers.PUT(
-    request({ document: defaultDocument, expectedVersion: "old-version" }),
+    request({ document: defaultDocument, expectedVersion: 7 }),
     params,
   );
   assert.equal(result.status, 200);
-  assert.equal((await result.json()).updatedAt, "new-version");
-  assert.match(queries[0].text, /user_id = \? and updated_at::text = \?/);
-  assert.deepEqual(queries[0].values.slice(-3), [
-    id,
-    "user-one",
-    "old-version",
-  ]);
+  assert.equal((await result.json()).version, 8);
+  assert.match(queries[0].text, /user_id = \?/);
+  assert.match(queries[0].text, /version = \?/);
+  assert.ok(queries[0].values.includes(7));
+  assert.ok(queries[0].values.includes("user-one"));
+  assert.doesNotMatch(queries[0].text, /updated_at::text/);
 });
 test("a stale revision returns 409, not successful last-writer-wins", async () => {
   const { handlers } = fixture([]);
   assert.equal(
     (
       await handlers.PUT(
-        request({ document: defaultDocument, expectedVersion: "stale" }),
+        request({ document: defaultDocument, expectedVersion: 6 }),
         params,
       )
     ).status,
     409,
   );
+});
+test("invalid integer revisions never reach the database", async () => {
+  const { handlers, queries } = fixture();
+  for (const expectedVersion of [0, -1, 1.5, 2147483648, "7", "stale", null]) {
+    assert.equal(
+      (
+        await handlers.PUT(
+          request({ document: defaultDocument, expectedVersion }),
+          params,
+        )
+      ).status,
+      428,
+    );
+  }
+  assert.equal(queries.length, 0);
+});
+test("already-open clients retain timestamp compare-and-swap during rollout", async () => {
+  const { handlers, queries } = fixture([{ id, version: 2 }]);
+  assert.equal(
+    (
+      await handlers.PUT(
+        request({
+          document: defaultDocument,
+          expectedVersion: "2026-10-29 12:00:00.123456+00",
+        }),
+        params,
+      )
+    ).status,
+    200,
+  );
+  assert.ok(queries[0].values.includes("2026-10-29T12:00:00.123456+00:00"));
+  assert.match(queries[0].text, /updated_at = \?::timestamptz/);
 });
 test("read and delete queries are scoped to the signed-in user", async () => {
   const { handlers, queries } = fixture([{ id, document: defaultDocument }]);

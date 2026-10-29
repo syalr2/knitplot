@@ -12,10 +12,12 @@ import {
 } from "@/lib/workspace";
 import { readCloudChartPayload } from "@/lib/cloud-charts";
 import { responseJson } from "@/lib/http";
+import { cloudVersionToken } from "@/lib/cloud-revision";
 
 type CloudChartResponse = {
   id: string;
   updatedAt: string;
+  version: number;
   document: Record<string, unknown>;
   knitProgress: Record<string, unknown>;
   preview: Record<string, unknown>;
@@ -39,7 +41,7 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
       const tab = {
         id: `chart-${crypto.randomUUID()}`,
         cloudId: id,
-        cloudVersion: result.updatedAt,
+        cloudVersion: cloudVersionToken(result),
         ...payload,
         cloudSnapshot: tabSnapshot(payload),
       };
