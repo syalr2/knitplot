@@ -5,6 +5,8 @@ out
 *.log
 *.tsbuildinfo
 coverage
+playwright-report
+test-results
 next-env.d.ts
 .env*
 !.env.example

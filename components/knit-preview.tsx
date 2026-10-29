@@ -655,7 +655,7 @@ export function KnitPreview({
     // relief sprites and their alpha masks together.
     spriteCacheRef.current.clear();
     maskCacheRef.current.clear();
-    let frame = window.requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
       drawPreview(
         canvas,
         source,
@@ -670,7 +670,15 @@ export function KnitPreview({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [document, repeatX, repeatY, repeatStyle, sourceReady, initialPose]);
+  }, [
+    document,
+    repeatX,
+    repeatY,
+    repeatStyle,
+    sourceReady,
+    initialPose,
+    canvasRef,
+  ]);
 
   return (
     <div className="preview-stage">

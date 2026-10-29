@@ -4,104 +4,39 @@ import {
   SourceArtworkApiError,
 } from "@/lib/openai/source-artwork";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
-import { MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
-
-type GenerateRequest = {
-  prompt?: unknown;
-  width?: unknown;
-  height?: unknown;
-  colorCount?: unknown;
-  colorMode?: unknown;
-  minimumColors?: unknown;
-  maximumColors?: unknown;
-  chartAspect?: unknown;
-  layoutMode?: unknown;
-  referenceImage?: unknown;
-  referenceMimeType?: unknown;
-  referenceUse?: unknown;
-};
+import { errorResponse, readJsonObject } from "@/lib/http";
+import { generateRequestSchema, readAiRequest } from "@/lib/ai-request";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
-
-function errorResponse(message: string, status: number) {
-  return Response.json(
-    { error: message },
-    { status, headers: { "Cache-Control": "no-store" } },
-  );
-}
 
 export async function POST(request: Request) {
   if (!hasValidRequestOrigin(request))
     return errorResponse("Invalid request origin.", 403);
 
-  let body: GenerateRequest;
+  let body;
   try {
-    body = (await request.json()) as GenerateRequest;
+    body = readAiRequest(generateRequestSchema, await readJsonObject(request));
   } catch {
-    return errorResponse("The generation request was not valid.", 400);
-  }
-
-  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  const width = body.width;
-  const height = body.height;
-  const colorCount = body.colorCount;
-  const colorMode = body.colorMode === "range" ? "range" : "exact";
-  const minimumColors = body.minimumColors;
-  const maximumColors = body.maximumColors;
-  const chartAspect = body.chartAspect;
-  const layoutMode = body.layoutMode === "repeat" ? "repeat" : "motif";
-  const referenceImage =
-    typeof body.referenceImage === "string" ? body.referenceImage : "";
-  const referenceMimeType =
-    typeof body.referenceMimeType === "string"
-      ? body.referenceMimeType
-      : "image/png";
-  const referenceUse = body.referenceUse === "style" ? "style" : "subject";
-
-  if (prompt.length < 3 || prompt.length > 800) {
     return errorResponse(
-      "Describe the motif in between 3 and 800 characters.",
+      "The AI request settings or reference image were not valid.",
       400,
     );
   }
-  const exactColorsAreValid =
-    Number.isInteger(colorCount) &&
-    typeof colorCount === "number" &&
-    colorCount >= 2 &&
-    colorCount <= 8;
-  const rangeColorsAreValid =
-    Number.isInteger(minimumColors) &&
-    typeof minimumColors === "number" &&
-    minimumColors >= 2 &&
-    minimumColors <= 8 &&
-    Number.isInteger(maximumColors) &&
-    typeof maximumColors === "number" &&
-    maximumColors >= minimumColors &&
-    maximumColors <= 8;
-  if (
-    !Number.isInteger(width) ||
-    typeof width !== "number" ||
-    width < 1 ||
-    width > MAX_CHART_STITCHES ||
-    !Number.isInteger(height) ||
-    typeof height !== "number" ||
-    height < 1 ||
-    height > MAX_CHART_ROWS ||
-    (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid) ||
-    typeof chartAspect !== "number" ||
-    !Number.isFinite(chartAspect) ||
-    chartAspect <= 0
-  ) {
-    return errorResponse("The chart settings were not valid.", 400);
-  }
-  if (
-    referenceImage &&
-    (referenceImage.length > 25_000_000 ||
-      !["image/png", "image/jpeg", "image/webp"].includes(referenceMimeType))
-  ) {
-    return errorResponse("The reference image was not valid.", 400);
-  }
+  const {
+    prompt,
+    width,
+    height,
+    colorMode,
+    colorCount,
+    minimumColors,
+    maximumColors,
+    layoutMode,
+    chartAspect,
+    referenceImage,
+    referenceMimeType,
+    referenceUse,
+  } = body;
 
   const keyResult = await resolveOpenAIKey();
   if ("error" in keyResult)

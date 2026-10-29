@@ -264,7 +264,6 @@ function PrintableChart({
     >
       {document.cells.flatMap((row, rowIndex) =>
         row.map((colorId, columnIndex) => {
-          const action = stitchActionAt(document, rowIndex, columnIndex);
           return (
             <rect
               key={`${rowIndex}-${columnIndex}`}

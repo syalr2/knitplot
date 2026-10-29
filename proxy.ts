@@ -1,6 +1,10 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { accountsConfigured } from "@/lib/auth-config";
 
-export default clerkMiddleware();
+export default accountsConfigured()
+  ? clerkMiddleware()
+  : () => NextResponse.next();
 
 export const config = {
   matcher: [

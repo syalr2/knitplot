@@ -30,7 +30,6 @@ export function ChartGrid({
   document,
   tool,
   structureAction,
-  selectedColor,
   zoom,
   selection,
   onSelectionChange,

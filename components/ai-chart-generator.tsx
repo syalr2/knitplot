@@ -1,5 +1,8 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- Local data/blob previews must remain in the browser, not pass through the image optimiser. */
 
+import { prepareReferenceImage } from "@/lib/ai-upload";
+import { responseJson } from "@/lib/http";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { cellAspectRatio, ChartDocument, PaletteColor } from "@/lib/chart";
 import { ColorCountChoice, convertImage } from "@/components/image-importer";
@@ -297,7 +300,7 @@ export function AiChartGenerator({
         }),
         signal: controller.signal,
       });
-      const result = (await response.json()) as GenerateResponse;
+      const result = await responseJson<GenerateResponse>(response);
       if (!response.ok) {
         throw new Error(result.error || "The chart could not be generated.");
       }
@@ -328,35 +331,24 @@ export function AiChartGenerator({
     }
   }
 
-  function chooseReference(event: ChangeEvent<HTMLInputElement>) {
+  async function chooseReference(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (
-      !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
-      file.size > 10 * 1024 * 1024
-    ) {
-      setError("Choose a PNG, JPEG, or WebP image smaller than 10 MB.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      const comma = result.indexOf(",");
-      if (comma < 0) {
-        setError("That reference image could not be opened.");
-        return;
-      }
-      setReferenceImage(result.slice(comma + 1));
-      setReferenceMimeType(file.type);
+    try {
+      const result = await prepareReferenceImage(file);
+      setReferenceImage(result.base64);
+      setReferenceMimeType(result.mimeType);
       setReferenceName(file.name);
-      setReferenceUrl(result);
+      setReferenceUrl(result.url);
       setError("");
-    };
-    reader.onerror = () =>
-      setError("That reference image could not be opened.");
-    reader.readAsDataURL(file);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "That reference image could not be opened.",
+      );
+    }
   }
 
   function removeReference() {
@@ -399,7 +391,7 @@ export function AiChartGenerator({
         }),
         signal: controller.signal,
       });
-      const result = (await response.json()) as GenerateResponse;
+      const result = await responseJson<GenerateResponse>(response);
       if (!response.ok) {
         throw new Error(result.error || "The chart could not be edited.");
       }

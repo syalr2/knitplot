@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   cellAspectRatio,
   ChartDocument,
@@ -165,6 +171,9 @@ function knitRegion(document: ChartDocument, shouldTrim: boolean) {
   };
 }
 
+const subscribeToStaticCapability = () => () => {};
+const wakeLockAvailable = () => "wakeLock" in navigator;
+
 export function KnitMode({
   document,
   progress,
@@ -173,7 +182,11 @@ export function KnitMode({
   onClose,
 }: Props) {
   const [keepScreenAwake, setKeepScreenAwake] = useState(false);
-  const [wakeLockSupported, setWakeLockSupported] = useState(false);
+  const wakeLockSupported = useSyncExternalStore(
+    subscribeToStaticCapability,
+    wakeLockAvailable,
+    () => false,
+  );
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const region = useMemo(
     () => knitRegion(document, progress.trimBorder),
@@ -203,10 +216,7 @@ export function KnitMode({
   const markerX = (markerColumn + 0.5) * aspect;
   const marker =
     MARKERS.find((choice) => choice.id === progress.markerStyle) ?? MARKERS[1];
-  const sequence = useMemo(
-    () => rowSequence(activeDocument, row),
-    [activeDocument, row],
-  );
+  const sequence = rowSequence(activeDocument, row);
   const isDuplicate = activeDocument.instructions.technique === "duplicate";
   const unitName = isDuplicate
     ? "Row"
@@ -220,10 +230,6 @@ export function KnitMode({
   const columnStep =
     activeDocument.width <= 24 ? 1 : activeDocument.width <= 50 ? 5 : 10;
   const rowStep = activeDocument.height <= 24 ? 1 : 5;
-
-  useEffect(() => {
-    setWakeLockSupported("wakeLock" in navigator);
-  }, []);
 
   useEffect(() => {
     if (!keepScreenAwake || !wakeLockSupported) return;

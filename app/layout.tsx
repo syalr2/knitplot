@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { accountsConfigured } from "@/lib/auth-config";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
@@ -32,17 +33,20 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <ClerkProvider>
-      <html
-        lang="en"
-        className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
-      >
-        <body>
-          {children}
-          <Analytics />
-        </body>
-      </html>
-    </ClerkProvider>
+  const content = (
+    <html
+      lang="en"
+      className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
+    >
+      <body>
+        {children}
+        <Analytics />
+      </body>
+    </html>
+  );
+  return accountsConfigured() ? (
+    <ClerkProvider>{content}</ClerkProvider>
+  ) : (
+    content
   );
 }

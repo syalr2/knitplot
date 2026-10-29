@@ -1,16 +1,10 @@
+import { errorResponse as responseError, readJsonObject } from "@/lib/http";
 import { getViewer } from "@/lib/auth";
 import { getDatabase } from "@/lib/db";
 import { encryptOpenAIKey } from "@/lib/openai/credentials";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
-
-function responseError(error: string, status: number) {
-  return Response.json(
-    { error },
-    { status, headers: { "Cache-Control": "no-store" } },
-  );
-}
 
 export async function POST(request: Request) {
   if (!hasValidRequestOrigin(request))
@@ -22,7 +16,7 @@ export async function POST(request: Request) {
 
   let apiKey = "";
   try {
-    const body = (await request.json()) as { apiKey?: unknown };
+    const body = await readJsonObject(request);
     apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   } catch {
     return responseError("The key was not valid.", 400);

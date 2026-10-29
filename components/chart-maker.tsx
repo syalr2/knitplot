@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncedDraft } from "@/components/use-synced-draft";
+import { ColourPalettePanel } from "@/components/colour-palette-panel";
+import { StitchPalettePanel } from "@/components/stitch-palette-panel";
+import { ChartMeasurementsPanel } from "@/components/chart-measurements-panel";
 import { AccountAvatar } from "@/components/account-avatar";
-import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { SetStateAction, useEffect, useRef, useState } from "react";
 import { AiChartGenerator } from "@/components/ai-chart-generator";
 import { ChartGrid } from "@/components/chart-grid";
 import { ExportTools } from "@/components/export-tools";
@@ -21,10 +25,8 @@ import {
   ChartDocument,
   cloneDocument,
   copyStitchCellColors,
-  contrastTextColor,
   createStitchActions,
   defaultDocument,
-  finishedSize,
   flipGrid,
   paintYarnCells,
   recolourStitchType,
@@ -40,7 +42,6 @@ import {
   scaleStitchActions,
   stitchActionAt,
   stitchActionOptions,
-  stitchDisplayColor,
   stitchPaletteFromActions,
   StitchAction,
   StitchPaletteAction,
@@ -52,67 +53,33 @@ import {
   type TutorialExample,
 } from "@/lib/tutorial-examples";
 
-const STORAGE_KEY = "colorwork-chart-v1";
-const INITIAL_TAB_ID = "chart-initial";
-const MAX_CHART_TABS = 8;
+import {
+  STORAGE_KEY,
+  INITIAL_TAB_ID,
+  MAX_CHART_TABS,
+  readWorkspace,
+  type ChartTab,
+} from "@/lib/workspace";
+import {
+  createPreviewSettings,
+  type PreviewSettings,
+} from "@/lib/chart-schema";
+import { remember, travelHistory, type TabHistory } from "@/lib/history";
+import { useCloudSync } from "@/components/use-cloud-sync";
+import { responseJson } from "@/lib/http";
+import { tabSnapshot } from "@/lib/workspace";
+import { useLocalWorkspace } from "@/components/use-local-workspace";
 const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
 
 type RepeatStyle = "normal" | "mirrored";
-type PreviewSettings = {
-  repeatX: number;
-  repeatY: number;
-  repeatStyle: RepeatStyle;
-  renderedRepeatX: number;
-  renderedRepeatY: number;
-  renderedRepeatStyle: RepeatStyle;
-};
-type ChartTab = {
-  id: string;
-  cloudId?: string;
-  document: ChartDocument;
-  knitProgress: KnitProgress;
-  preview: PreviewSettings;
-};
-type TabHistory = { past: ChartDocument[]; future: ChartDocument[] };
 type SelectionClipboard = {
   tabId: string;
   cells: string[][];
   stitchActions: StitchAction[][];
   stitchCellColors: (string | null)[][];
 };
-type WorkspaceSave = {
-  format: "knitplot-workspace";
-  version: 1 | 2 | 3 | 4;
-  activeTabId: string;
-  tabs: ChartTab[];
-};
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizedRepeat(value: number | undefined, fallback = 1) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? clamp(Math.round(value), 1, 3)
-    : fallback;
-}
-
-function createPreviewSettings(
-  saved?: Partial<PreviewSettings>,
-): PreviewSettings {
-  const repeatX = normalizedRepeat(saved?.repeatX);
-  const repeatY = normalizedRepeat(saved?.repeatY);
-  const repeatStyle: RepeatStyle =
-    saved?.repeatStyle === "mirrored" ? "mirrored" : "normal";
-  return {
-    repeatX,
-    repeatY,
-    repeatStyle,
-    renderedRepeatX: normalizedRepeat(saved?.renderedRepeatX, repeatX),
-    renderedRepeatY: normalizedRepeat(saved?.renderedRepeatY, repeatY),
-    renderedRepeatStyle:
-      saved?.renderedRepeatStyle === "mirrored" ? "mirrored" : repeatStyle,
-  };
 }
 
 type ChartMakerProps = {
@@ -161,24 +128,46 @@ export function ChartMaker({
     useState<SelectionClipboard | null>(null);
   const [knitModeOpen, setKnitModeOpen] = useState(false);
   const [patternImporterOpen, setPatternImporterOpen] = useState(false);
-  const [dimensionDraft, setDimensionDraft] = useState({
-    width: String(defaultDocument.width),
-    height: String(defaultDocument.height),
-  });
-  const [gaugeDraft, setGaugeDraft] = useState({
-    stitches: String(defaultDocument.gaugeStitches),
-    rows: String(defaultDocument.gaugeRows),
-    measure: String(defaultDocument.gaugeMeasure),
-  });
+  const [dimensionDraft, setDimensionDraft] = useSyncedDraft(
+    `${activeTabId}:${document.width}:${document.height}`,
+    {
+      width: String(document.width),
+      height: String(document.height),
+    },
+  );
+  const [gaugeDraft, setGaugeDraft] = useSyncedDraft(
+    `${activeTabId}:${document.gaugeStitches}:${document.gaugeRows}:${document.gaugeMeasure}`,
+    {
+      stitches: String(document.gaugeStitches),
+      rows: String(document.gaugeRows),
+      measure: String(document.gaugeMeasure),
+    },
+  );
   const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
+  const [closingBusy, setClosingBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [cloudSaveState, setCloudSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [cloudSaveMessage, setCloudSaveMessage] = useState("");
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [restoreError, setRestoreError] = useState("");
+  const [storageReady, setStorageReady] = useState(false);
+  const [initialStorageValue, setInitialStorageValue] = useState<string | null>(
+    null,
+  );
+  const localSaveError = useLocalWorkspace(
+    tabs,
+    activeTabId,
+    loaded && storageReady,
+    initialStorageValue,
+  );
+  const cloudStatus = useCloudSync(
+    tabs,
+    activeTabId,
+    loaded && !!viewer,
+    setTabs,
+  );
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
@@ -210,21 +199,6 @@ export function ChartMaker({
     );
   }
 
-  function setHistoryPart(
-    key: "past" | "future",
-    update: SetStateAction<ChartDocument[]>,
-  ) {
-    setHistories((current) => {
-      const tabHistory = current[activeTabId] ?? { past: [], future: [] };
-      const items = tabHistory[key];
-      const nextItems =
-        typeof update === "function"
-          ? (update as (current: ChartDocument[]) => ChartDocument[])(items)
-          : update;
-      return { ...current, [activeTabId]: { ...tabHistory, [key]: nextItems } };
-    });
-  }
-
   function clampActiveKnitProgress(width: number, height: number) {
     setTabs((current) =>
       current.map((tab) =>
@@ -244,165 +218,58 @@ export function ChartMaker({
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as ChartDocument | WorkspaceSave;
-        if (
-          "format" in parsed &&
-          parsed.format === "knitplot-workspace" &&
-          Array.isArray(parsed.tabs) &&
-          parsed.tabs.length
-        ) {
-          const savedTabs = parsed.tabs.slice(0, MAX_CHART_TABS).map((tab) => {
-            const savedProgress = tab.knitProgress ?? defaultKnitProgress;
-            const savedDocument = cloneDocument(tab.document);
-            return {
-              id: tab.id,
-              cloudId:
-                typeof tab.cloudId === "string" ? tab.cloudId : undefined,
-              document: savedDocument,
-              preview: createPreviewSettings(tab.preview),
-              knitProgress: {
-                ...defaultKnitProgress,
-                ...savedProgress,
-                row: clamp(savedProgress.row, 1, savedDocument.height),
-                stitch: clamp(savedProgress.stitch, 0, savedDocument.width),
-              },
-            };
-          });
-          const savedActiveId = savedTabs.some(
-            (tab) => tab.id === parsed.activeTabId,
-          )
-            ? parsed.activeTabId
-            : savedTabs[0].id;
-          const savedActiveDocument = savedTabs.find(
-            (tab) => tab.id === savedActiveId,
-          )!.document;
-          setTabs(savedTabs);
-          setActiveTabId(savedActiveId);
-          setHistories(
-            Object.fromEntries(
-              savedTabs.map((tab) => [tab.id, { past: [], future: [] }]),
-            ),
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Browser storage can only be restored after hydration; this runs once, not on edits.
+      setInitialStorageValue(raw);
+      if (raw) {
+        const { workspace, rejectedTabs } = readWorkspace(JSON.parse(raw));
+        if (rejectedTabs) {
+          // Keep the original intact for recovery before replacing it with validated tabs.
+          window.localStorage.setItem(STORAGE_KEY + "-recovery", raw);
+          setRestoreError(
+            "Some saved tabs could not be read. Their original data is kept in browser storage for recovery.",
           );
-          setSelectedColor(
-            savedActiveDocument.palette[1]?.id ??
-              savedActiveDocument.palette[0].id,
-          );
-          setPreviewDocuments(
-            Object.fromEntries(
-              savedTabs.map((tab) => [tab.id, cloneDocument(tab.document)]),
-            ),
-          );
-        } else {
-          const savedDocument = cloneDocument(parsed as ChartDocument);
-          setTabs([
-            {
-              id: INITIAL_TAB_ID,
-              document: savedDocument,
-              knitProgress: { ...defaultKnitProgress },
-              preview: createPreviewSettings(),
-            },
-          ]);
-          setPreviewDocuments({
-            [INITIAL_TAB_ID]: cloneDocument(savedDocument),
-          });
         }
+        setTabs(workspace.tabs);
+        setActiveTabId(workspace.activeTabId);
+        setHistories(
+          Object.fromEntries(
+            workspace.tabs.map((tab) => [tab.id, { past: [], future: [] }]),
+          ),
+        );
+        setPreviewDocuments(
+          Object.fromEntries(
+            workspace.tabs.map((tab) => [tab.id, cloneDocument(tab.document)]),
+          ),
+        );
+        const active = workspace.tabs.find(
+          (tab) => tab.id === workspace.activeTabId,
+        )!;
+        setSelectedColor(
+          active.document.palette[1]?.id ?? active.document.palette[0].id,
+        );
       }
+      setStorageReady(true);
     } catch {
-      // A malformed browser save should never stop the editor from opening.
+      setRestoreError(
+        "Your saved workspace could not be read and has not been overwritten. Download any new work from File before closing this page.",
+      );
     } finally {
       setLoaded(true);
     }
   }, []);
 
-  useEffect(() => {
-    if (!loaded) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      try {
-        const workspace: WorkspaceSave = {
-          format: "knitplot-workspace",
-          version: 4,
-          activeTabId,
-          tabs,
-        };
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
-      } catch {
-        // Private browsing and full storage quotas should not interrupt editing.
-      }
-    }, 250);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [tabs, activeTabId, loaded]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    if (!viewer || !activeTab.cloudId) {
-      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
-      setCloudSaveState("idle");
-      setCloudSaveMessage("");
-      return;
-    }
-    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
-    setCloudSaveState("saving");
-    setCloudSaveMessage("Saving to My Charts…");
-    cloudSaveTimer.current = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `/api/charts/${encodeURIComponent(activeTab.cloudId!)}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              document: activeTab.document,
-              knitProgress: activeTab.knitProgress,
-              preview: activeTab.preview,
-            }),
-          },
-        );
-        const result = (await response.json()) as { error?: string };
-        if (!response.ok) throw new Error(result.error ?? "Cloud save failed.");
-        setCloudSaveState("saved");
-        setCloudSaveMessage("Saved to My Charts");
-      } catch (error) {
-        setCloudSaveState("error");
-        setCloudSaveMessage(
-          error instanceof Error ? error.message : "Cloud save failed.",
-        );
-      }
-    }, 1200);
-    return () => {
-      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
-    };
-  }, [activeTab, loaded, viewer]);
-
-  useEffect(() => {
-    setDimensionDraft({
-      width: String(document.width),
-      height: String(document.height),
-    });
-  }, [document.width, document.height]);
-
-  useEffect(() => {
-    setGaugeDraft({
-      stitches: String(document.gaugeStitches),
-      rows: String(document.gaugeRows),
-      measure: String(document.gaugeMeasure),
-    });
-  }, [document.gaugeStitches, document.gaugeRows, document.gaugeMeasure]);
-
-  const size = useMemo(() => finishedSize(document), [document]);
   const stitchPalette =
     document.stitchPalette ?? stitchPaletteFromActions(document.stitchActions);
 
   function rememberCurrent() {
-    setHistoryPart("past", (items) => [
-      ...items.slice(-39),
-      cloneDocument(document),
-    ]);
-    setHistoryPart("future", []);
+    setHistories((current) => ({
+      ...current,
+      [activeTabId]: remember(
+        current[activeTabId] ?? { past: [], future: [] },
+        document,
+      ),
+    }));
   }
 
   function commit(update: (current: ChartDocument) => ChartDocument) {
@@ -412,18 +279,16 @@ export function ChartMaker({
 
   function undo() {
     if (!past.length) return;
-    const previous = past[past.length - 1];
-    setHistoryPart("future", (items) => [cloneDocument(document), ...items]);
-    setHistoryPart("past", (items) => items.slice(0, -1));
-    setDocument(cloneDocument(previous));
+    const next = travelHistory(history, document, "undo");
+    setHistories((current) => ({ ...current, [activeTabId]: next.history }));
+    setDocument(next.document);
   }
 
   function redo() {
     if (!future.length) return;
-    const next = future[0];
-    setHistoryPart("past", (items) => [...items, cloneDocument(document)]);
-    setHistoryPart("future", (items) => items.slice(1));
-    setDocument(cloneDocument(next));
+    const next = travelHistory(history, document, "redo");
+    setHistories((current) => ({ ...current, [activeTabId]: next.history }));
+    setDocument(next.document);
   }
 
   function paint(row: number, column: number, shouldFill: boolean) {
@@ -1277,12 +1142,20 @@ export function ChartMaker({
           preview: activeTab.preview,
         }),
       });
-      const result = (await response.json()) as { id?: string; error?: string };
-      if (!response.ok || !result.id)
-        throw new Error(result.error ?? "Cloud save failed.");
+      const result = await responseJson<{ id: string; updatedAt: string }>(
+        response,
+      );
+      if (!result.id) throw new Error("Cloud save failed.");
       setTabs((current) =>
         current.map((tab) =>
-          tab.id === activeTabId ? { ...tab, cloudId: result.id } : tab,
+          tab.id === activeTabId
+            ? {
+                ...tab,
+                cloudId: result.id,
+                cloudVersion: result.updatedAt,
+                cloudSnapshot: tabSnapshot(activeTab),
+              }
+            : tab,
         ),
       );
       setCloudSaveState("saved");
@@ -1325,16 +1198,28 @@ export function ChartMaker({
     setClosingTabId(id);
   }
 
-  function confirmCloseTab() {
-    if (!closingTabId) return;
+  async function confirmCloseTab() {
+    if (!closingTabId || closingBusy) return;
     const id = closingTabId;
+    const closing = tabs.find((tab) => tab.id === id);
+    if (closing?.cloudId && viewer) {
+      setClosingBusy(true);
+      const saved = await cloudStatus.flushChart(closing.cloudId);
+      setClosingBusy(false);
+      if (!saved) {
+        switchTab(id);
+        setClosingTabId(null);
+        return;
+      }
+      cloudStatus.forgetSaved(closing.cloudId);
+    }
     const closingIndex = tabs.findIndex((tab) => tab.id === id);
     const remainingTabs = tabs.filter((tab) => tab.id !== id);
     if (closingIndex < 0 || !remainingTabs.length) {
       setClosingTabId(null);
       return;
     }
-    setTabs(remainingTabs);
+    setTabs((current) => current.filter((tab) => tab.id !== id));
     setHistories((current) => {
       const next = { ...current };
       delete next[id];
@@ -1378,6 +1263,34 @@ export function ChartMaker({
 
   return (
     <main className="app-shell">
+      {restoreError || localSaveError ? (
+        <p role="alert">{restoreError || localSaveError}</p>
+      ) : null}
+      {activeTab.cloudId && cloudStatus.state === "error" ? (
+        <p role="alert">
+          {cloudStatus.message}{" "}
+          <button onClick={cloudStatus.retry}>Retry save</button>{" "}
+          <button
+            onClick={() => {
+              cloudStatus.forgetFailed(activeTab.cloudId!);
+              setTabs((current) =>
+                current.map((tab) =>
+                  tab.id === activeTabId
+                    ? {
+                        ...tab,
+                        cloudId: undefined,
+                        cloudVersion: undefined,
+                        cloudSnapshot: undefined,
+                      }
+                    : tab,
+                ),
+              );
+            }}
+          >
+            Keep as a separate chart
+          </button>
+        </p>
+      ) : null}
       <header className="topbar">
         <div className="project-bar">
           <div className="brand-lockup" aria-label="KnitPlot">
@@ -1430,8 +1343,12 @@ export function ChartMaker({
             accountsEnabled={accountsEnabled}
             signedIn={Boolean(viewer)}
             cloudId={activeTab.cloudId}
-            cloudSaveState={cloudSaveState}
-            cloudSaveMessage={cloudSaveMessage}
+            cloudSaveState={
+              activeTab.cloudId ? cloudStatus.state : cloudSaveState
+            }
+            cloudSaveMessage={
+              activeTab.cloudId ? cloudStatus.message : cloudSaveMessage
+            }
             onSaveToCloud={saveActiveChartToCloud}
             onImportPattern={() => setPatternImporterOpen(true)}
           />
@@ -1508,367 +1425,42 @@ export function ChartMaker({
 
       <div className="workspace">
         <aside className="sidebar panel">
-          <details className="settings-group" data-tour="colours" open>
-            <summary>
-              Colours <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="settings-content">
-              <div className="compact-section-action">
-                <button
-                  className="text-button"
-                  onClick={addColor}
-                  disabled={document.palette.length >= 8}
-                >
-                  + Add colour
-                </button>
-              </div>
-              <div className="palette-list">
-                {document.palette.map((color, index) => (
-                  <div
-                    className={`palette-row ${selectedColor === color.id && !structureAction ? "selected" : ""}`}
-                    key={color.id}
-                  >
-                    <button
-                      className="swatch-button"
-                      aria-label={`Use colour ${index + 1}`}
-                      onClick={() => {
-                        setSelectedColor(color.id);
-                        setStructureAction(null);
-                        setStitchPickerOpen(false);
-                      }}
-                    >
-                      <span
-                        className="swatch"
-                        style={{ background: color.hex }}
-                      />
-                      <span className="palette-name">
-                        <span>
-                          {index === 0 ? "Background" : `Colour ${index + 1}`}
-                        </span>
-                        <span className="palette-hex">
-                          {color.hex.toUpperCase()}
-                        </span>
-                      </span>
-                    </button>
-                    <input
-                      type="color"
-                      value={color.hex}
-                      aria-label={`Change colour ${index + 1}`}
-                      onChange={(event) =>
-                        changePaletteColor(color.id, event.target.value)
-                      }
-                    />
-                    {index > 0 && document.palette.length > 2 ? (
-                      <button
-                        className="remove-button"
-                        aria-label={`Remove colour ${index + 1}`}
-                        onClick={() => removeColor(color.id)}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </details>
-
-          <details
-            className="settings-group stitch-settings"
-            data-tour="stitches"
-            open
-          >
-            <summary>
-              Stitches <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="settings-content">
-              <div className="compact-section-action">
-                <button
-                  className={`text-button ${stitchPickerOpen ? "active" : ""}`}
-                  onClick={() => {
-                    if (stitchPickerOpen) setStructureAction(null);
-                    setStitchPickerOpen((open) => !open);
-                  }}
-                >
-                  + Add stitch
-                </button>
-              </div>
-              {stitchPickerOpen ? (
-                <div className="stitch-picker" aria-label="Stitch tools">
-                  <p>Add a stitch type to this chart’s palette.</p>
-                  <div>
-                    {stitchActionOptions
-                      .filter(
-                        (
-                          option,
-                        ): option is typeof option & {
-                          value: StitchPaletteAction;
-                        } =>
-                          option.value !== "knit" &&
-                          !stitchPalette.includes(
-                            option.value as StitchPaletteAction,
-                          ),
-                      )
-                      .map((option) => (
-                        <button
-                          key={option.value}
-                          title={option.help}
-                          onClick={() => addStitchToPalette(option.value)}
-                        >
-                          {option.shortLabel}
-                        </button>
-                      ))}
-                    {stitchPalette.length ===
-                    stitchActionOptions.filter(
-                      (option) => option.value !== "knit",
-                    ).length ? (
-                      <span>All stitch types have been added.</span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-              <div className="palette-list">
-                {stitchPalette.map((action) => {
-                  const option = stitchActionOptions.find(
-                    (item) => item.value === action,
-                  );
-                  const displayColor = stitchDisplayColor(document, action);
-                  return (
-                    <div
-                      className={`palette-row ${structureAction === action ? "selected" : ""}`}
-                      key={action}
-                    >
-                      <button
-                        className="swatch-button"
-                        aria-label={`Draw ${option?.label ?? action}`}
-                        onClick={() => selectStitchAction(action)}
-                      >
-                        <span
-                          className="stitch-swatch"
-                          style={{
-                            background: displayColor,
-                            color: contrastTextColor(displayColor),
-                          }}
-                        >
-                          {action === "no-stitch" ? "—" : option?.shortLabel}
-                        </span>
-                        <span className="palette-name">
-                          <span>{option?.label ?? action}</span>
-                          <span className="palette-hex">
-                            {document.stitchColors?.[action]
-                              ? displayColor.toUpperCase()
-                              : action === "no-stitch"
-                                ? "No fabric"
-                                : "Use yarn colour"}
-                          </span>
-                        </span>
-                      </button>
-                      <input
-                        type="color"
-                        value={displayColor}
-                        aria-label={`Change ${option?.label ?? action} display colour`}
-                        onChange={(event) =>
-                          changeStitchColor(action, event.target.value)
-                        }
-                      />
-                      <button
-                        className="remove-button"
-                        aria-label={`Remove ${option?.label ?? action} from stitch palette`}
-                        title="Remove from palette; existing chart symbols will stay"
-                        onClick={() => removeStitchFromPalette(action)}
-                      >
-                        ×
-                      </button>
-                      {document.stitchColors?.[action] ? (
-                        <button
-                          className="text-button stitch-color-reset"
-                          title="Reset display colour"
-                          onClick={() => resetStitchColor(action)}
-                        >
-                          {action === "no-stitch" ? "Reset" : "Use yarn colour"}
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              {!stitchPalette.length ? (
-                <p className="empty-stitch-palette">
-                  Add purl, cast-on, bind-off, shaping, or no-stitch cells to
-                  draw them onto your chart.
-                </p>
-              ) : null}
-              <button
-                className={`remove-stitch-tool ${structureAction === "knit" ? "selected" : ""}`}
-                aria-pressed={structureAction === "knit"}
-                onClick={() => selectStitchAction("knit")}
-              >
-                Remove stitch
-              </button>
-            </div>
-          </details>
-
-          <details className="settings-group" data-tour="chart-size" open>
-            <summary>
-              Chart size <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="settings-content">
-              <div className="two-fields">
-                <label>
-                  Stitches
-                  <input
-                    type="number"
-                    min="1"
-                    max={MAX_CHART_STITCHES}
-                    value={dimensionDraft.width}
-                    onChange={(event) =>
-                      setDimensionDraft((current) => ({
-                        ...current,
-                        width: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  Rows
-                  <input
-                    type="number"
-                    min="1"
-                    max={MAX_CHART_ROWS}
-                    value={dimensionDraft.height}
-                    onChange={(event) =>
-                      setDimensionDraft((current) => ({
-                        ...current,
-                        height: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-              <button
-                className="resize-chart-button"
-                onClick={() => setResizeDialogOpen(true)}
-                disabled={!dimensionsValid || !dimensionsChanged}
-              >
-                Resize chart
-              </button>
-            </div>
-          </details>
-
-          <details className="settings-group gauge-settings" open>
-            <summary>
-              Gauge <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="settings-content">
-              <div className="two-fields">
-                <label>
-                  Stitches
-                  <input
-                    type="number"
-                    min="1"
-                    value={gaugeDraft.stitches}
-                    onChange={(event) =>
-                      setGaugeDraft((current) => ({
-                        ...current,
-                        stitches: event.target.value,
-                      }))
-                    }
-                    onBlur={() => applyGaugeDraft("stitches")}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                </label>
-                <label>
-                  Rows
-                  <input
-                    type="number"
-                    min="1"
-                    value={gaugeDraft.rows}
-                    onChange={(event) =>
-                      setGaugeDraft((current) => ({
-                        ...current,
-                        rows: event.target.value,
-                      }))
-                    }
-                    onBlur={() => applyGaugeDraft("rows")}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                </label>
-              </div>
-              <div className="measure-field">
-                <span>over</span>
-                <input
-                  aria-label="Gauge measurement"
-                  type="number"
-                  min="1"
-                  value={gaugeDraft.measure}
-                  onChange={(event) =>
-                    setGaugeDraft((current) => ({
-                      ...current,
-                      measure: event.target.value,
-                    }))
-                  }
-                  onBlur={() => applyGaugeDraft("measure")}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-                <select
-                  aria-label="Gauge unit"
-                  value={document.gaugeUnit}
-                  onChange={(event) =>
-                    setDocument((current) => ({
-                      ...current,
-                      gaugeUnit: event.target.value as "cm" | "in",
-                    }))
-                  }
-                >
-                  <option value="cm">cm</option>
-                  <option value="in">in</option>
-                </select>
-              </div>
-              <p className="measurement">
-                Finished size: {size.width.toFixed(1)} ×{" "}
-                {size.height.toFixed(1)} {document.gaugeUnit}
-              </p>
-            </div>
-          </details>
-
-          <details className="settings-group">
-            <summary>
-              Pattern guides <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className="settings-content">
-              <label className="stacked-field">
-                Live symmetry
-                <select
-                  value={document.guides.symmetry}
-                  onChange={(event) =>
-                    setDocument((current) => ({
-                      ...current,
-                      guides: {
-                        ...current.guides,
-                        symmetry: event.target
-                          .value as ChartDocument["guides"]["symmetry"],
-                      },
-                    }))
-                  }
-                >
-                  <option value="none">Off</option>
-                  <option value="horizontal">Mirror left and right</option>
-                  <option value="vertical">Mirror top and bottom</option>
-                  <option value="both">Mirror both ways</option>
-                </select>
-              </label>
-              <p className="setting-help">
-                Symmetry affects drawing and erasing. Blue dashed lines mark the
-                active mirror axes.
-              </p>
-            </div>
-          </details>
+          <ColourPalettePanel
+            document={document}
+            selectedColor={selectedColor}
+            structureAction={structureAction}
+            setSelectedColor={setSelectedColor}
+            setStructureAction={setStructureAction}
+            setStitchPickerOpen={setStitchPickerOpen}
+            addColor={addColor}
+            changePaletteColor={changePaletteColor}
+            removeColor={removeColor}
+          />
+          <StitchPalettePanel
+            document={document}
+            structureAction={structureAction}
+            stitchPickerOpen={stitchPickerOpen}
+            stitchPalette={stitchPalette}
+            setStructureAction={setStructureAction}
+            setStitchPickerOpen={setStitchPickerOpen}
+            addStitchToPalette={addStitchToPalette}
+            selectStitchAction={selectStitchAction}
+            changeStitchColor={changeStitchColor}
+            removeStitchFromPalette={removeStitchFromPalette}
+            resetStitchColor={resetStitchColor}
+          />
+          <ChartMeasurementsPanel
+            document={document}
+            setDocument={setDocument}
+            dimensionDraft={dimensionDraft}
+            setDimensionDraft={setDimensionDraft}
+            gaugeDraft={gaugeDraft}
+            setGaugeDraft={setGaugeDraft}
+            applyGaugeDraft={applyGaugeDraft}
+            setResizeDialogOpen={setResizeDialogOpen}
+            dimensionsValid={dimensionsValid}
+            dimensionsChanged={dimensionsChanged}
+          />
         </aside>
 
         <section className="editor panel">
@@ -2294,6 +1886,7 @@ export function ChartMaker({
                 type="button"
                 className="close-dialog"
                 aria-label="Cancel closing chart"
+                disabled={closingBusy}
                 onClick={() => setClosingTabId(null)}
               >
                 ×
@@ -2307,15 +1900,20 @@ export function ChartMaker({
               project first if you want to keep a separate copy.
             </p>
             <div className="import-actions">
-              <button type="button" onClick={() => setClosingTabId(null)}>
+              <button
+                type="button"
+                disabled={closingBusy}
+                onClick={() => setClosingTabId(null)}
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 className="danger-button"
                 onClick={confirmCloseTab}
+                disabled={closingBusy}
               >
-                Close chart
+                {closingBusy ? "Saving…" : "Close chart"}
               </button>
             </div>
           </section>

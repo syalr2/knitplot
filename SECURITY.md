@@ -5,7 +5,7 @@ Please report security vulnerabilities privately through GitHub's security advis
 ## Secrets and hosted installations
 
 - Never commit `.env.local`, Clerk secret keys, Neon database URLs, OpenAI keys, or `OPENAI_KEY_ENCRYPTION_SECRET`.
-- Public deployments should leave `ENABLE_SHARED_OPENAI_KEY=false` so anonymous visitors cannot spend the operator's OpenAI credits.
+- Production AI requests require an authenticated user's own connected key. Shared server keys are never accepted in production, regardless of legacy environment flags.
 - Keep Neon connection strings server-only. Every chart query is scoped to the authenticated Clerk user ID, and the encrypted-credential tables are only accessed from server routes.
 - Changing `OPENAI_KEY_ENCRYPTION_SECRET` makes existing encrypted user keys unreadable. Disconnect those keys before rotating it, or provide a controlled re-encryption migration.
 

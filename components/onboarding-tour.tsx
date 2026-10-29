@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { ChartDocument } from "@/lib/chart";
 import {
   tutorialExamples,
@@ -212,11 +212,15 @@ export function OnboardingTour({ tabsFull, onOpenExample }: Props) {
     }
   }
 
-  function closeTutorial() {
-    rememberTour();
+  const closeTutorial = useCallback(() => {
+    try {
+      window.localStorage.setItem(TUTORIAL_STORAGE_KEY, "seen");
+    } catch {
+      /* Closing remains available when storage is full. */
+    }
     setView("closed");
     setTargetRect(null);
-  }
+  }, []);
 
   function startTour() {
     rememberTour();
@@ -236,6 +240,7 @@ export function OnboardingTour({ tabsFull, onOpenExample }: Props) {
     const selector = `[data-tour="${steps[stepIndex].target}"]`;
     const element = window.document.querySelector<HTMLElement>(selector);
     if (!element) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear measurements when the external DOM target no longer exists.
       setTargetRect(null);
       return;
     }
@@ -275,7 +280,7 @@ export function OnboardingTour({ tabsFull, onOpenExample }: Props) {
     };
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
-  }, [view]);
+  }, [view, closeTutorial]);
 
   const bubbleStyle = (() => {
     if (!targetRect || typeof window === "undefined") return {};

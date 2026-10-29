@@ -1,8 +1,11 @@
+import { redirect } from "next/navigation";
+import { accountsConfigured } from "@/lib/auth-config";
 import { SignIn } from "@clerk/nextjs";
 import { AuthShell } from "@/components/auth-shell";
 import { clerkAuthAppearance } from "@/lib/clerk-appearance";
 
 export default function SignInPage() {
+  if (!accountsConfigured()) redirect("/");
   return (
     <AuthShell mode="sign-in">
       <SignIn

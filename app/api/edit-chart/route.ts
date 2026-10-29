@@ -5,84 +5,36 @@ import {
 } from "@/lib/openai/chart-grid";
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
-import { MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
-
-type EditRequest = {
-  prompt?: unknown;
-  width?: unknown;
-  height?: unknown;
-  colorCount?: unknown;
-  colorMode?: unknown;
-  minimumColors?: unknown;
-  maximumColors?: unknown;
-  layoutMode?: unknown;
-  palette?: unknown;
-  rows?: unknown;
-};
+import { errorResponse, readJsonObject } from "@/lib/http";
+import { editRequestSchema, readAiRequest } from "@/lib/ai-request";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
-
-function errorResponse(message: string, status: number) {
-  return Response.json(
-    { error: message },
-    { status, headers: { "Cache-Control": "no-store" } },
-  );
-}
 
 export async function POST(request: Request) {
   if (!hasValidRequestOrigin(request))
     return errorResponse("Invalid request origin.", 403);
 
-  let body: EditRequest;
+  let body;
   try {
-    body = (await request.json()) as EditRequest;
+    body = readAiRequest(editRequestSchema, await readJsonObject(request));
   } catch {
-    return errorResponse("The edit request was not valid.", 400);
-  }
-
-  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  const width = body.width;
-  const height = body.height;
-  const colorCount = body.colorCount;
-  const colorMode = body.colorMode === "range" ? "range" : "exact";
-  const minimumColors = body.minimumColors;
-  const maximumColors = body.maximumColors;
-  const layoutMode = body.layoutMode === "repeat" ? "repeat" : "motif";
-
-  if (prompt.length < 3 || prompt.length > 800) {
     return errorResponse(
-      "Describe the change in between 3 and 800 characters.",
+      "The AI request settings or reference image were not valid.",
       400,
     );
   }
-  const exactColorsAreValid =
-    Number.isInteger(colorCount) &&
-    typeof colorCount === "number" &&
-    colorCount >= 2 &&
-    colorCount <= 8;
-  const rangeColorsAreValid =
-    Number.isInteger(minimumColors) &&
-    typeof minimumColors === "number" &&
-    minimumColors >= 2 &&
-    minimumColors <= 8 &&
-    Number.isInteger(maximumColors) &&
-    typeof maximumColors === "number" &&
-    maximumColors >= minimumColors &&
-    maximumColors <= 8;
-  if (
-    !Number.isInteger(width) ||
-    typeof width !== "number" ||
-    width < 1 ||
-    width > MAX_CHART_STITCHES ||
-    !Number.isInteger(height) ||
-    typeof height !== "number" ||
-    height < 1 ||
-    height > MAX_CHART_ROWS ||
-    (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid)
-  ) {
-    return errorResponse("The chart settings were not valid.", 400);
-  }
+  const {
+    prompt,
+    width,
+    height,
+    colorMode,
+    colorCount,
+    minimumColors,
+    maximumColors,
+    layoutMode,
+  } = body;
+
   const source = validateChartGrid(
     { palette: body.palette, rows: body.rows },
     width,

@@ -108,9 +108,7 @@ export async function resolveOpenAIKey(): Promise<OpenAIKeyResult> {
     }
   }
 
-  const allowSharedKey =
-    process.env.NODE_ENV !== "production" ||
-    process.env.ENABLE_SHARED_OPENAI_KEY === "true";
+  const allowSharedKey = process.env.NODE_ENV === "development";
   if (allowSharedKey && process.env.OPENAI_API_KEY) {
     return { key: process.env.OPENAI_API_KEY, userId: null };
   }
@@ -121,7 +119,13 @@ export async function resolveOpenAIKey(): Promise<OpenAIKeyResult> {
 }
 
 export async function claimAiRequest(userId: string | null) {
-  if (!userId) return { allowed: true as const };
+  if (!userId)
+    return process.env.NODE_ENV === "development"
+      ? { allowed: true as const }
+      : {
+          allowed: false as const,
+          message: "Sign in and connect your own OpenAI key.",
+        };
   const sql = getDatabase();
   if (!sql)
     return {
@@ -140,7 +144,7 @@ export async function claimAiRequest(userId: string | null) {
         ) < 30
         returning id
       `,
-      transaction`delete from knitplot_ai_request_log where created_at < now() - interval '7 days'`,
+      transaction`delete from knitplot_ai_request_log where user_id = ${userId} and created_at < now() - interval '7 days'`,
     ]);
     const insertedRows = results[1] as Array<Record<string, unknown>>;
     if (insertedRows.length === 0) {

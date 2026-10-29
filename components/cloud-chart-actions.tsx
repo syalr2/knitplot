@@ -3,11 +3,19 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-const STORAGE_KEY = "colorwork-chart-v1";
-const MAX_TABS = 8;
+import {
+  STORAGE_KEY,
+  readWorkspace,
+  readStoredWorkspace,
+  openCloudTab,
+  tabSnapshot,
+} from "@/lib/workspace";
+import { readCloudChartPayload } from "@/lib/cloud-charts";
+import { responseJson } from "@/lib/http";
 
 type CloudChartResponse = {
   id: string;
+  updatedAt: string;
   document: Record<string, unknown>;
   knitProgress: Record<string, unknown>;
   preview: Record<string, unknown>;
@@ -25,49 +33,19 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
     setError("");
     try {
       const response = await fetch(`/api/charts/${encodeURIComponent(id)}`);
-      const result = (await response.json()) as CloudChartResponse & {
-        error?: string;
-      };
-      if (!response.ok)
-        throw new Error(result.error ?? "The chart could not be opened.");
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      const saved = raw
-        ? (JSON.parse(raw) as {
-            format?: string;
-            version?: number;
-            activeTabId?: string;
-            tabs?: Array<Record<string, unknown>>;
-          })
-        : null;
-      const tabs =
-        saved?.format === "knitplot-workspace" && Array.isArray(saved.tabs)
-          ? [...saved.tabs]
-          : [];
-      const existing = tabs.findIndex((tab) => tab.cloudId === id);
+      const result = await responseJson<CloudChartResponse>(response);
+      const saved = readStoredWorkspace(window.localStorage);
+      const payload = readCloudChartPayload(result);
       const tab = {
-        id: existing >= 0 ? tabs[existing].id : `chart-${crypto.randomUUID()}`,
+        id: `chart-${crypto.randomUUID()}`,
         cloudId: id,
-        document: result.document,
-        knitProgress: result.knitProgress,
-        preview: result.preview,
+        cloudVersion: result.updatedAt,
+        ...payload,
+        cloudSnapshot: tabSnapshot(payload),
       };
-      if (existing >= 0) tabs[existing] = tab;
-      else {
-        if (tabs.length >= MAX_TABS)
-          throw new Error(
-            "Close one chart tab before opening another cloud chart.",
-          );
-        tabs.push(tab);
-      }
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          format: "knitplot-workspace",
-          version: 4,
-          activeTabId: tab.id,
-          tabs,
-        }),
-      );
+      const workspace = openCloudTab(saved, tab);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- A full navigation restores the updated workspace rather than reusing a mounted editor.
       window.location.assign("/");
     } catch (caught) {
       setError(
@@ -92,9 +70,25 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
       const response = await fetch(`/api/charts/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
-      const result = (await response.json()) as { error?: string };
+      const result = await responseJson<{ error?: string }>(response);
       if (!response.ok)
         throw new Error(result.error ?? "The chart could not be deleted.");
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const workspace = readWorkspace(JSON.parse(raw)).workspace;
+        workspace.tabs = workspace.tabs.map((tab) =>
+          tab.cloudId === id
+            ? {
+                ...tab,
+                cloudId: undefined,
+                cloudVersion: undefined,
+                cloudSnapshot: undefined,
+              }
+            : tab,
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+      }
+      setBusy(null);
       router.refresh();
     } catch (caught) {
       setError(
@@ -118,9 +112,11 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: nextName }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = await responseJson<{ error?: string }>(response);
       if (!response.ok)
         throw new Error(result.error ?? "The chart could not be renamed.");
+      // Preserve any open local working copy; its stale revision will cause a
+      // conflict rather than silently overwriting this explicit rename.
       setRenaming(false);
       router.refresh();
       setBusy(null);

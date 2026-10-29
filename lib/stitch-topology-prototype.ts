@@ -41,14 +41,12 @@ export function buildStitchTopology(
   for (const [offset, actions] of operations.entries()) {
     const row = offset + 1,
       previous = rows[row - 1];
-    const previousBars = previous
-      .slice(1)
-      .map((right, i) => ({
-        id: `bar-${row - 1}:${i}`,
-        row: row - 1,
-        left: previous[i].id,
-        right: right.id,
-      }));
+    const previousBars = previous.slice(1).map((right, i) => ({
+      id: `bar-${row - 1}:${i}`,
+      row: row - 1,
+      left: previous[i].id,
+      right: right.id,
+    }));
     bars.push(...previousBars);
     let cursor = 0;
     const usedBars = new Set<string>();

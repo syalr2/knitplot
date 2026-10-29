@@ -5,17 +5,11 @@ import {
   type AccountAvatar,
   type AccountColor,
 } from "@/lib/account-preferences";
+import { errorResponse as responseError, readJsonObject } from "@/lib/http";
 import { getViewer } from "@/lib/auth";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
 
 export const runtime = "nodejs";
-
-function responseError(error: string, status: number) {
-  return Response.json(
-    { error },
-    { status, headers: { "Cache-Control": "no-store" } },
-  );
-}
 
 function parseAvatar(value: unknown): AccountAvatar | null {
   if (!value || typeof value !== "object") return null;
@@ -23,10 +17,14 @@ function parseAvatar(value: unknown): AccountAvatar | null {
   const raw = (value as Record<string, unknown>).value;
   const rawColor = (value as Record<string, unknown>).color;
   const color: AccountColor =
-    typeof rawColor === "string" && rawColor in ACCOUNT_COLORS
+    typeof rawColor === "string" && Object.hasOwn(ACCOUNT_COLORS, rawColor)
       ? (rawColor as AccountColor)
       : "green";
-  if (kind === "symbol" && typeof raw === "string" && raw in ACCOUNT_SYMBOLS) {
+  if (
+    kind === "symbol" &&
+    typeof raw === "string" &&
+    Object.hasOwn(ACCOUNT_SYMBOLS, raw)
+  ) {
     return { kind, value: raw as keyof typeof ACCOUNT_SYMBOLS, color };
   }
   if (kind === "initials" && typeof raw === "string") {
@@ -45,7 +43,7 @@ export async function PATCH(request: Request) {
 
   let avatar: AccountAvatar | null = null;
   try {
-    const body = (await request.json()) as { avatar?: unknown };
+    const body = await readJsonObject(request);
     avatar = parseAvatar(body.avatar);
   } catch {
     return responseError("The account icon was not valid.", 400);

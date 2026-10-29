@@ -1,4 +1,5 @@
 import { ChartMaker } from "@/components/chart-maker";
+import { accountsConfigured } from "@/lib/auth-config";
 import { getViewerWithEmail } from "@/lib/auth";
 import { getOpenAIConnectionStatus } from "@/lib/openai/credentials";
 
@@ -9,9 +10,8 @@ export default async function Home() {
   const aiConnection = viewer
     ? await getOpenAIConnectionStatus(viewer.id)
     : { connected: false as const };
-  const accountsEnabled = Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.DATABASE_URL,
-  );
+  const accountsEnabled =
+    accountsConfigured() && Boolean(process.env.DATABASE_URL);
   return (
     <ChartMaker
       viewer={viewer}

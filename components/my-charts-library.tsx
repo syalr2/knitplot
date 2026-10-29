@@ -1,10 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { CloudChartActions } from "@/components/cloud-chart-actions";
-import { defaultKnitProgress } from "@/components/knit-mode";
+import {
+  STORAGE_KEY,
+  MAX_CHART_TABS,
+  readStoredWorkspace,
+  newChartTab,
+  workspaceSave,
+} from "@/lib/workspace";
+import { responseJson } from "@/lib/http";
 import type { AccountAvatar as Avatar } from "@/lib/account-preferences";
 import {
   cloneDocument,
@@ -19,20 +27,16 @@ type ViewMode = "grid" | "list";
 
 type Props = {
   charts: ChartSummary[];
+  total: number;
+  matching: number;
+  page: number;
+  pageSize: number;
+  initialQuery: string;
+  initialSort: SortMode;
   email: string | null;
   avatar: Avatar;
   initialPinnedIds: string[];
   loadError: boolean;
-};
-
-const STORAGE_KEY = "colorwork-chart-v1";
-const MAX_TABS = 8;
-
-type StoredWorkspace = {
-  format?: string;
-  version?: number;
-  activeTabId?: string;
-  tabs?: Array<Record<string, unknown>>;
 };
 
 function ChartThumbnail({ chart }: { chart: ChartSummary }) {
@@ -80,10 +84,19 @@ export function MyChartsLibrary({
   avatar,
   initialPinnedIds,
   loadError,
+  total,
+  matching,
+  page,
+  pageSize,
+  initialQuery,
+  initialSort,
 }: Props) {
+  const router = useRouter();
+  const pageUrl = (nextPage: number, q = initialQuery, order = initialSort) =>
+    `/my-charts?${new URLSearchParams({ q, sort: order, page: String(nextPage) })}`;
   const importRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortMode>("updated-desc");
+  const [query, setQuery] = useState(initialQuery);
+  const [sort, setSort] = useState<SortMode>(initialSort);
   const [view, setView] = useState<ViewMode>("grid");
   const [pinnedIds, setPinnedIds] = useState(() => new Set(initialPinnedIds));
   const [pinBusy, setPinBusy] = useState(() => new Set<string>());
@@ -108,7 +121,6 @@ export function MyChartsLibrary({
 
   async function togglePin(chart: ChartSummary) {
     const shouldPin = !pinnedIds.has(chart.id);
-    const previous = new Set(pinnedIds);
     const next = new Set(pinnedIds);
     if (shouldPin) next.add(chart.id);
     else next.delete(chart.id);
@@ -121,11 +133,16 @@ export function MyChartsLibrary({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chartId: chart.id, pinned: shouldPin }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = await responseJson<{ error?: string }>(response);
       if (!response.ok)
         throw new Error(result.error ?? "The pin could not be saved.");
     } catch (error) {
-      setPinnedIds(previous);
+      setPinnedIds((current) => {
+        const reverted = new Set(current);
+        if (shouldPin) reverted.delete(chart.id);
+        else reverted.add(chart.id);
+        return reverted;
+      });
       setMessage(
         error instanceof Error ? error.message : "The pin could not be saved.",
       );
@@ -140,37 +157,17 @@ export function MyChartsLibrary({
 
   function openLocalDocument(document: ChartDocument) {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      const saved = raw ? (JSON.parse(raw) as StoredWorkspace) : null;
-      const tabs =
-        saved?.format === "knitplot-workspace" && Array.isArray(saved.tabs)
-          ? [...saved.tabs]
-          : [];
-      if (tabs.length >= MAX_TABS)
+      const saved = readStoredWorkspace(window.localStorage);
+      const tabs = saved ? [...saved.tabs] : [];
+      if (tabs.length >= MAX_CHART_TABS)
         throw new Error("Close one chart tab before opening another chart.");
       const id = `chart-${crypto.randomUUID()}`;
-      tabs.push({
-        id,
-        document: cloneDocument(document),
-        knitProgress: { ...defaultKnitProgress },
-        preview: {
-          repeatX: 1,
-          repeatY: 1,
-          repeatStyle: "normal",
-          renderedRepeatX: 1,
-          renderedRepeatY: 1,
-          renderedRepeatStyle: "normal",
-        },
-      });
+      tabs.push(newChartTab(document, id));
       window.localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({
-          format: "knitplot-workspace",
-          version: 4,
-          activeTabId: id,
-          tabs,
-        }),
+        JSON.stringify(workspaceSave(tabs, id)),
       );
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- The editor must remount to consume the updated browser workspace.
       window.location.assign("/");
     } catch (error) {
       setMessage(
@@ -276,8 +273,7 @@ export function MyChartsLibrary({
           <div>
             <h1>My charts</h1>
             <p>
-              {charts.length} {charts.length === 1 ? "chart" : "charts"} saved
-              to your account
+              {total} {total === 1 ? "chart" : "charts"} saved to your account
             </p>
           </div>
           <button
@@ -290,20 +286,32 @@ export function MyChartsLibrary({
         </header>
 
         <div className="library-toolbar">
-          <label className="library-search">
-            <span aria-hidden="true">⌕</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search your charts"
-            />
-          </label>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              router.push(pageUrl(1, query, sort));
+            }}
+          >
+            <label className="library-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search all your charts"
+              />
+            </label>
+            <button type="submit">Search</button>
+          </form>
           <label className="library-sort">
             <span>Sort</span>
             <select
               value={sort}
-              onChange={(event) => setSort(event.target.value as SortMode)}
+              onChange={(event) => {
+                const order = event.target.value as SortMode;
+                setSort(order);
+                router.push(pageUrl(1, query, order));
+              }}
             >
               <option value="updated-desc">Last edited</option>
               <option value="updated-asc">Oldest edited</option>
@@ -343,7 +351,7 @@ export function MyChartsLibrary({
             again.
           </p>
         ) : null}
-        {!loadError && !charts.length ? (
+        {!loadError && !total ? (
           <div className="library-empty">
             <span aria-hidden="true">◇</span>
             <h2>No saved charts yet</h2>
@@ -365,7 +373,7 @@ export function MyChartsLibrary({
             </div>
           </div>
         ) : null}
-        {!loadError && charts.length > 0 && !visibleCharts.length ? (
+        {!loadError && total > 0 && !visibleCharts.length ? (
           <p className="library-message">No charts match “{query}”.</p>
         ) : null}
 
@@ -447,6 +455,20 @@ export function MyChartsLibrary({
               </button>
             </aside>
           </>
+        ) : null}
+        {matching > pageSize || page > 1 ? (
+          <nav aria-label="Chart pages">
+            {page > 1 ? (
+              <Link href={pageUrl(page - 1)}>Previous page</Link>
+            ) : null}
+            <span>
+              {" "}
+              Page {page} of {Math.max(1, Math.ceil(matching / pageSize))}{" "}
+            </span>
+            {page * pageSize < matching ? (
+              <Link href={pageUrl(page + 1)}>Next page</Link>
+            ) : null}
+          </nav>
         ) : null}
       </section>
     </main>

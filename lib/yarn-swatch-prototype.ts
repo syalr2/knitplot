@@ -17,13 +17,11 @@ export function layoutYarnSwatch(
   if (!Number.isFinite(rowHeight) || rowHeight <= 0)
     throw new Error("Invalid row height");
   const initial = topologyDiagramPositions(graph);
-  const nodes = graph.rows
-    .flat()
-    .map((loop) => ({
-      loop,
-      x: initial.get(loop.id)! / 2,
-      links: [] as { id: string; delta: number; weight: number }[],
-    }));
+  const nodes = graph.rows.flat().map((loop) => ({
+    loop,
+    x: initial.get(loop.id)! / 2,
+    links: [] as { id: string; delta: number; weight: number }[],
+  }));
   const byId = new Map(nodes.map((n) => [n.loop.id, n]));
   const bars = new Map(graph.bars.map((b) => [b.id, b]));
   const link = (a: string, b: string, delta: number, weight: number) => {

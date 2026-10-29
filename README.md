@@ -58,23 +58,23 @@ Never commit or share `.env.local`. It is ignored by Git.
 KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart storage. The editor itself does not depend on either service.
 
 1. Create or connect Clerk and Neon resources. Vercel Marketplace can inject their environment variables automatically.
-2. Run [`database/migrations/001_accounts_and_cloud_charts.sql`](database/migrations/001_accounts_and_cloud_charts.sql) against the Neon database.
+2. Set `DATABASE_URL` for your Neon database and run `npm run db:migrate`. See [the migration guide](database/README.md) for existing installations and rollout precautions.
 3. Set the Clerk and Neon values from `.env.example` in `.env.local` and in Vercel. Generate `OPENAI_KEY_ENCRYPTION_SECRET` with `openssl rand -base64 32` and never change or expose it while saved API keys exist.
 
 `CLERK_SECRET_KEY`, `DATABASE_URL`, and `OPENAI_KEY_ENCRYPTION_SECRET` are server-only secrets. Never prefix them with `NEXT_PUBLIC_` or commit them.
 
-On a public deployment, leave `ENABLE_SHARED_OPENAI_KEY=false`. This requires each signed-in user to connect their own OpenAI key instead of spending the site owner's credits.
+Public deployments require a signed-in user and their own connected OpenAI key. A server-wide `OPENAI_API_KEY` is accepted only in development, never in production.
 
 ## Saving and privacy
 
 - Your open chart workspace and Knit Mode position are saved automatically in that browser's local storage.
 - Signed-in users can choose **Save to My Charts**. After the first cloud save, that chart is kept in sync while it remains open.
-- **Save chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
+- **File → Download editable chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
 - Ordinary image importing and colour reduction happen in your browser.
 - When you use an AI feature, its prompt and any attached or current-chart image are sent through KnitPlot's server to OpenAI using your connected key.
 - Connected OpenAI keys are encrypted with AES-256-GCM before Neon storage and are never returned to the browser. Only the final four characters are shown for identification.
 - KnitPlot stores no AI prompts or generated images in the account database. It stores request timestamps only for the 30-per-hour safety limit.
-- KnitPlot has no analytics.
+- The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, prompts, uploaded images, email addresses, and API keys are not sent as analytics events. No AI feature-usage counters are added.
 
 Browser storage is convenient, but it is not a backup. Download important charts as `.knitplot` files.
 
@@ -82,10 +82,13 @@ Browser storage is convenient, but it is not a backup. Download important charts
 
 ```bash
 npm run typecheck
+npm run lint
+npm test
+npm run format:check
 npm run build
 ```
 
-Run both with:
+Run all checks with:
 
 ```bash
 npm run check

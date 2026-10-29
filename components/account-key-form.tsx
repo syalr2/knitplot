@@ -1,5 +1,6 @@
 "use client";
 
+import { responseJson } from "@/lib/http";
 import { FormEvent, useState } from "react";
 
 type Props = { connected: boolean; lastFour?: string };
@@ -24,10 +25,10 @@ export function AccountKeyForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey }),
       });
-      const result = (await response.json()) as {
+      const result = await responseJson<{
         error?: string;
         lastFour?: string;
-      };
+      }>(response);
       if (!response.ok)
         throw new Error(result.error ?? "The connection could not be saved.");
       setConnected(true);
@@ -54,7 +55,7 @@ export function AccountKeyForm({
       const response = await fetch("/api/account/openai-key", {
         method: "DELETE",
       });
-      const result = (await response.json()) as { error?: string };
+      const result = await responseJson<{ error?: string }>(response);
       if (!response.ok)
         throw new Error(result.error ?? "The connection could not be removed.");
       setConnected(false);

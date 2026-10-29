@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { responseJson } from "@/lib/http";
 import { useState } from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import {
@@ -38,10 +39,10 @@ export function AccountPreferencesForm({ initialAvatar }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatar }),
       });
-      const result = (await response.json()) as {
+      const result = await responseJson<{
         error?: string;
         avatar?: Avatar;
-      };
+      }>(response);
       if (!response.ok || !result.avatar)
         throw new Error(result.error ?? "The account icon could not be saved.");
       setAvatar(result.avatar);

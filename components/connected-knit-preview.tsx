@@ -37,6 +37,7 @@ export function ConnectedKnitPreview({
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset UI status when starting a cancellable worker/canvas render, not derived chart data.
     setStatus("Rendering…");
     setFailed(false);
     if (ref.current) ref.current.dataset.previewState = "rendering";

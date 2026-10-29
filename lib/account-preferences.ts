@@ -37,13 +37,13 @@ export function parseAccountAvatar(
   const value = (avatar as Record<string, unknown>).value;
   const rawColor = (avatar as Record<string, unknown>).color;
   const color: AccountColor =
-    typeof rawColor === "string" && rawColor in ACCOUNT_COLORS
+    typeof rawColor === "string" && Object.hasOwn(ACCOUNT_COLORS, rawColor)
       ? (rawColor as AccountColor)
       : "green";
   if (
     kind === "symbol" &&
     typeof value === "string" &&
-    value in ACCOUNT_SYMBOLS
+    Object.hasOwn(ACCOUNT_SYMBOLS, value)
   ) {
     return { kind, value: value as AccountSymbol, color };
   }

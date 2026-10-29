@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+import { accountsConfigured } from "./auth-config";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import {
   defaultAccountAvatar,
@@ -15,7 +17,8 @@ export type Viewer = {
   pinnedChartIds: string[];
 };
 
-export async function getViewer(): Promise<Viewer | null> {
+export const getViewer = cache(async (): Promise<Viewer | null> => {
+  if (!accountsConfigured()) return null;
   const { userId } = await auth();
   return userId
     ? {
@@ -25,9 +28,9 @@ export async function getViewer(): Promise<Viewer | null> {
         pinnedChartIds: [],
       }
     : null;
-}
+});
 
-export async function getViewerWithEmail(): Promise<Viewer | null> {
+export const getViewerWithEmail = cache(async (): Promise<Viewer | null> => {
   const viewer = await getViewer();
   if (!viewer) return null;
   const user = await currentUser();
@@ -41,4 +44,4 @@ export async function getViewerWithEmail(): Promise<Viewer | null> {
     avatar: parseAccountAvatar(user?.publicMetadata, email),
     pinnedChartIds: parsePinnedChartIds(user?.publicMetadata),
   };
-}
+});

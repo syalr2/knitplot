@@ -104,6 +104,7 @@ function ConnectedPhoto({
   const [error, setError] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A new image render clears the previous asynchronous image-load error.
     setError(false);
     const image = new Image();
     image.onload = () => {
