@@ -21,6 +21,7 @@ export class CloudSaveQueue<T> {
       status: SaveStatus,
       message: string,
       saved?: { version: string; snapshot: string },
+      conflict?: boolean,
     ) => void,
     private delay = 1200,
   ) {}
@@ -84,10 +85,12 @@ export class CloudSaveQueue<T> {
           id,
           "error",
           error instanceof HttpError && error.status === 409
-            ? "This chart changed elsewhere. Your local work is safe; save it as a separate chart to keep both versions."
+            ? "This chart changed elsewhere. Load the cloud version or keep your work as a separate chart."
             : error instanceof Error
               ? error.message
               : "Cloud save failed. Your local copy is kept.",
+          undefined,
+          error instanceof HttpError && error.status === 409,
         );
       }
     }
@@ -120,5 +123,9 @@ export class CloudSaveQueue<T> {
       if (entry.timer) clearTimeout(entry.timer);
       this.entries.delete(id);
     }
+  }
+  isStopped(id: string) {
+    const entry = this.entries.get(id);
+    return !!entry?.stopped && !entry.running;
   }
 }

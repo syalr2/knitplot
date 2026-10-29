@@ -17,7 +17,7 @@ export function useCloudSync(
   setTabs: Dispatch<SetStateAction<ChartTab[]>>,
 ) {
   const [statuses, setStatuses] = useState<
-    Record<string, { state: SaveStatus; message: string }>
+    Record<string, { state: SaveStatus; message: string; conflict?: boolean }>
   >({});
   const queue = useRef<CloudSaveQueue<ReturnType<typeof tabPayload>> | null>(
     null,
@@ -29,10 +29,10 @@ export function useCloudSync(
     if (!queue.current)
       queue.current = new CloudSaveQueue(
         saveCloudChart,
-        (cloudId, state, message, saved) => {
+        (cloudId, state, message, saved, conflict) => {
           setStatuses((current) => ({
             ...current,
-            [cloudId]: { state, message },
+            [cloudId]: { state, message, conflict },
           }));
           if (saved)
             setTabs((current) =>
@@ -101,7 +101,15 @@ export function useCloudSync(
       return !queue.current?.hasPending(cloudId);
     },
     forgetSaved: (cloudId: string) => queue.current?.forgetSaved(cloudId),
-    forgetFailed: (cloudId: string) => queue.current?.forgetFailed(cloudId),
+    canRecover: (cloudId: string) => queue.current?.isStopped(cloudId) ?? false,
+    forgetFailed: (cloudId: string) => {
+      queue.current?.forgetFailed(cloudId);
+      setStatuses((current) => {
+        const next = { ...current };
+        delete next[cloudId];
+        return next;
+      });
+    },
     retry: () => {
       if (id) void queue.current?.retry(id);
     },
