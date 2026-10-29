@@ -11,7 +11,7 @@ Thank you for helping make KnitPlot better for knitters.
 
 ## Local setup
 
-KnitPlot requires Node.js 20 or newer.
+Use Node.js 24, or another version allowed by `engines` in `package.json`.
 
 ```bash
 npm install
@@ -33,9 +33,15 @@ npm run check
 format checks, and a production build. Run `npm run format` before committing.
 The build downloads the configured Google Fonts, so it needs network access.
 
-For the browser smoke tests, build without account credentials, install Chromium
-with `npx playwright install chromium`, then run `npm run test:e2e`. These tests use
-an isolated local port and anonymous workspace, never real accounts or charts.
+For browser tests, build without account credentials, install Chromium with
+`npx playwright install chromium`, then run `npm run test:e2e`. The anonymous
+smoke tests run against the production build on port 3108. Saving-failure tests
+render the real editor in a separate localhost-only Next.js app on port 3109,
+with a fake viewer and in-memory API responses. Both test servers have blank
+account, database and OpenAI credentials. No production authentication bypass or
+test route is added to KnitPlot. Contexts use isolated browser storage; the tests
+never use real accounts or charts. Run just the saving tests with
+`npm run test:e2e -- --project saving`.
 For PostgreSQL integration tests, see [database/README.md](database/README.md).
 CI provisions a disposable PostgreSQL database and runs both additional suites.
 
