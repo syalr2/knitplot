@@ -6,11 +6,15 @@ import { hasValidRequestOrigin } from "@/lib/security/origin";
 export const runtime = "nodejs";
 
 function responseError(error: string, status: number) {
-  return Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+  return Response.json(
+    { error },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
-  if (!hasValidRequestOrigin(request)) return responseError("Invalid request origin.", 403);
+  if (!hasValidRequestOrigin(request))
+    return responseError("Invalid request origin.", 403);
   const viewer = await getViewer();
   if (!viewer) return responseError("Please sign in first.", 401);
   const sql = getDatabase();
@@ -18,13 +22,16 @@ export async function POST(request: Request) {
 
   let apiKey = "";
   try {
-    const body = await request.json() as { apiKey?: unknown };
+    const body = (await request.json()) as { apiKey?: unknown };
     apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   } catch {
     return responseError("The key was not valid.", 400);
   }
   if (!apiKey.startsWith("sk-") || apiKey.length < 20 || apiKey.length > 500) {
-    return responseError("Enter a valid OpenAI API key beginning with sk-.", 400);
+    return responseError(
+      "Enter a valid OpenAI API key beginning with sk-.",
+      400,
+    );
   }
 
   try {
@@ -36,7 +43,11 @@ export async function POST(request: Request) {
     if (verification.status === 401 || verification.status === 403) {
       return responseError("OpenAI did not accept that API key.", 400);
     }
-    if (!verification.ok) return responseError("OpenAI could not verify the key right now. Please try again.", 502);
+    if (!verification.ok)
+      return responseError(
+        "OpenAI could not verify the key right now. Please try again.",
+        502,
+      );
 
     const encryptedKey = encryptOpenAIKey(apiKey);
     const lastFour = apiKey.slice(-4);
@@ -48,14 +59,21 @@ export async function POST(request: Request) {
         key_last_four = excluded.key_last_four,
         updated_at = now()
     `;
-    return Response.json({ connected: true, lastFour }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      { connected: true, lastFour },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch {
-    return responseError("The key could not be verified or encrypted. Please try again.", 502);
+    return responseError(
+      "The key could not be verified or encrypted. Please try again.",
+      502,
+    );
   }
 }
 
 export async function DELETE(request: Request) {
-  if (!hasValidRequestOrigin(request)) return responseError("Invalid request origin.", 403);
+  if (!hasValidRequestOrigin(request))
+    return responseError("Invalid request origin.", 403);
   const viewer = await getViewer();
   if (!viewer) return responseError("Please sign in first.", 401);
   const sql = getDatabase();
@@ -65,5 +83,8 @@ export async function DELETE(request: Request) {
   } catch {
     return responseError("KnitPlot could not remove the connection.", 503);
   }
-  return Response.json({ connected: false }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json(
+    { connected: false },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

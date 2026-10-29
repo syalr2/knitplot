@@ -3,4 +3,3 @@ export function hasValidRequestOrigin(request: Request) {
   if (!origin) return false;
   return origin === new URL(request.url).origin;
 }
-

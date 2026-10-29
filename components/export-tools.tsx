@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { ChangeEvent, RefObject, useEffect, useRef, useState } from "react";
-import { cellAspectRatio, ChartDocument, cloneDocument, contrastTextColor, hasStructuralStitches, stitchActionAt, stitchActionSymbol, chartCellDisplayColor } from "@/lib/chart";
+import {
+  cellAspectRatio,
+  ChartDocument,
+  cloneDocument,
+  contrastTextColor,
+  hasStructuralStitches,
+  stitchActionAt,
+  stitchActionSymbol,
+  chartCellDisplayColor,
+} from "@/lib/chart";
 import { readProject } from "@/lib/project-file";
 
 type Props = {
@@ -25,11 +34,12 @@ type ProjectFile = {
 };
 
 function fileName(name: string, extension: string) {
-  const safeName = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "") || "colorwork-chart";
+  const safeName =
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "colorwork-chart";
   return `${safeName}.${extension}`;
 }
 
@@ -84,18 +94,36 @@ function renderChart(document: ChartDocument) {
     47,
   );
 
-  const palette = new Map(document.palette.map((color) => [color.id, color.hex]));
+  const palette = new Map(
+    document.palette.map((color) => [color.id, color.hex]),
+  );
   for (let row = 0; row < document.height; row += 1) {
     for (let column = 0; column < document.width; column += 1) {
       const action = stitchActionAt(document, row, column);
       const yarnColor = palette.get(document.cells[row][column]);
-      context.fillStyle = chartCellDisplayColor(document, row, column, yarnColor);
-      context.fillRect(left + column * cellWidth, top + row * cellHeight, cellWidth, cellHeight);
+      context.fillStyle = chartCellDisplayColor(
+        document,
+        row,
+        column,
+        yarnColor,
+      );
+      context.fillRect(
+        left + column * cellWidth,
+        top + row * cellHeight,
+        cellWidth,
+        cellHeight,
+      );
       if (action !== "knit") {
-        context.fillStyle = contrastTextColor(chartCellDisplayColor(document, row, column, yarnColor));
+        context.fillStyle = contrastTextColor(
+          chartCellDisplayColor(document, row, column, yarnColor),
+        );
         context.font = `bold ${Math.max(6, Math.min(10, cellHeight * 0.4))}px Arial, sans-serif`;
         context.textAlign = "center";
-        context.fillText(stitchActionSymbol(action), left + (column + 0.5) * cellWidth, top + (row + 0.68) * cellHeight);
+        context.fillText(
+          stitchActionSymbol(action),
+          left + (column + 0.5) * cellWidth,
+          top + (row + 0.68) * cellHeight,
+        );
         context.textAlign = "left";
       }
     }
@@ -103,7 +131,8 @@ function renderChart(document: ChartDocument) {
 
   for (let column = 0; column <= document.width; column += 1) {
     context.beginPath();
-    context.strokeStyle = column % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
+    context.strokeStyle =
+      column % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
     context.lineWidth = column % 5 === 0 ? 1.5 : 1;
     const x = left + column * cellWidth;
     context.moveTo(x, top);
@@ -112,7 +141,8 @@ function renderChart(document: ChartDocument) {
   }
   for (let row = 0; row <= document.height; row += 1) {
     context.beginPath();
-    context.strokeStyle = row % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
+    context.strokeStyle =
+      row % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
     context.lineWidth = row % 5 === 0 ? 1.5 : 1;
     const y = top + row * cellHeight;
     context.moveTo(left, y);
@@ -124,21 +154,39 @@ function renderChart(document: ChartDocument) {
   context.font = "10px Arial, sans-serif";
   context.textAlign = "center";
   const columnStep = document.width > 40 ? 10 : 5;
-  for (let column = columnStep; column <= document.width; column += columnStep) {
-    context.fillText(String(column), left + (column - 0.5) * cellWidth, top - 10);
+  for (
+    let column = columnStep;
+    column <= document.width;
+    column += columnStep
+  ) {
+    context.fillText(
+      String(column),
+      left + (column - 0.5) * cellWidth,
+      top - 10,
+    );
   }
   context.textAlign = "right";
   const rowStep = document.height > 24 ? 5 : 1;
   for (let row = 0; row < document.height; row += 1) {
     const chartRow = document.height - row;
     if (chartRow % rowStep === 0) {
-      context.fillText(String(chartRow), left - 8, top + (row + 0.65) * cellHeight);
+      context.fillText(
+        String(chartRow),
+        left - 8,
+        top + (row + 0.65) * cellHeight,
+      );
     }
   }
 
   context.textAlign = "left";
   context.fillStyle = "#69716c";
-  context.fillText(hasStructuralStitches(document) ? "Shaded squares are not stitches; special stitch symbols are worked as shown." : "Each square represents one stitch.", left, top + chartHeight + 25);
+  context.fillText(
+    hasStructuralStitches(document)
+      ? "Shaded squares are not stitches; special stitch symbols are worked as shown."
+      : "Each square represents one stitch.",
+    left,
+    top + chartHeight + 25,
+  );
   return canvas;
 }
 
@@ -176,9 +224,15 @@ export function ExportTools({
   }, [open]);
 
   function saveProject() {
-    const project: ProjectFile = { format: "colorwork-chart", version: 2, document: cloneDocument(document) };
+    const project: ProjectFile = {
+      format: "colorwork-chart",
+      version: 2,
+      document: cloneDocument(document),
+    };
     downloadBlob(
-      new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }),
+      new Blob([JSON.stringify(project, null, 2)], {
+        type: "application/json",
+      }),
       fileName(document.name, "knitplot"),
     );
     setMessage("Editable KnitPlot file downloaded.");
@@ -186,7 +240,10 @@ export function ExportTools({
 
   async function downloadChart() {
     try {
-      downloadBlob(await canvasBlob(renderChart(document)), fileName(document.name, "chart.png"));
+      downloadBlob(
+        await canvasBlob(renderChart(document)),
+        fileName(document.name, "chart.png"),
+      );
       setMessage("Chart downloaded.");
     } catch {
       setMessage("The chart image could not be created.");
@@ -195,16 +252,24 @@ export function ExportTools({
 
   async function downloadPreview() {
     const canvas = previewCanvasRef.current;
-    if (!canvas || !canvas.width || !canvas.height || canvas.dataset.previewState === "rendering") {
+    if (
+      !canvas ||
+      !canvas.width ||
+      !canvas.height ||
+      canvas.dataset.previewState === "rendering"
+    ) {
       setMessage("The knitted preview is still loading.");
       return;
     }
-    if(canvas.dataset.previewState === "error"){
+    if (canvas.dataset.previewState === "error") {
       setMessage("Refresh the knitted preview before downloading it.");
       return;
     }
     try {
-      downloadBlob(await canvasBlob(canvas), fileName(document.name, "knitted.png"));
+      downloadBlob(
+        await canvasBlob(canvas),
+        fileName(document.name, "knitted.png"),
+      );
       setMessage("Knitted preview downloaded.");
     } catch {
       setMessage("The knitted preview could not be downloaded.");
@@ -225,44 +290,111 @@ export function ExportTools({
       setMessage("Project opened.");
       setOpen(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The project could not be opened.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The project could not be opened.",
+      );
     }
   }
 
   return (
     <div className="file-actions" data-tour="file-menu">
       <div className="file-menu" ref={menuRef}>
-        <input ref={inputRef} className="visually-hidden" type="file" accept=".knitplot,.colorwork.json,application/json" onChange={openProject} />
-        <button className="secondary-button" aria-expanded={open} onClick={() => { setOpen((value) => !value); setMessage(""); }}>
+        <input
+          ref={inputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".knitplot,.colorwork.json,application/json"
+          onChange={openProject}
+        />
+        <button
+          className="secondary-button"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((value) => !value);
+            setMessage("");
+          }}
+        >
           File
         </button>
         {open ? (
-          <div className="file-menu-popover" role="menu" aria-label="Project and export options">
+          <div
+            className="file-menu-popover"
+            role="menu"
+            aria-label="Project and export options"
+          >
             <p className="file-menu-section-label">On this device</p>
-            <button role="menuitem" onClick={() => { setOpen(false); onImportPattern(); }}>Import chart from pattern PDF or image</button>
-            <button role="menuitem" onClick={saveProject}>Download editable KnitPlot file</button>
-            <button role="menuitem" onClick={() => inputRef.current?.click()}>Open KnitPlot file</button>
-            {accountsEnabled ? <>
-              <span className="file-menu-divider" />
-              <p className="file-menu-section-label">My Charts</p>
-              {signedIn ? <>
-                {cloudId ? (
-                  <p className={`file-menu-cloud-status ${cloudSaveState}`} role="status" title={cloudSaveMessage}>
-                    {cloudSaveState === "saving" ? "Saving changes…" : cloudSaveState === "error" ? "Save failed" : "Saved · changes save automatically"}
-                  </p>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onImportPattern();
+              }}
+            >
+              Import chart from pattern PDF or image
+            </button>
+            <button role="menuitem" onClick={saveProject}>
+              Download editable KnitPlot file
+            </button>
+            <button role="menuitem" onClick={() => inputRef.current?.click()}>
+              Open KnitPlot file
+            </button>
+            {accountsEnabled ? (
+              <>
+                <span className="file-menu-divider" />
+                <p className="file-menu-section-label">My Charts</p>
+                {signedIn ? (
+                  <>
+                    {cloudId ? (
+                      <p
+                        className={`file-menu-cloud-status ${cloudSaveState}`}
+                        role="status"
+                        title={cloudSaveMessage}
+                      >
+                        {cloudSaveState === "saving"
+                          ? "Saving changes…"
+                          : cloudSaveState === "error"
+                            ? "Save failed"
+                            : "Saved · changes save automatically"}
+                      </p>
+                    ) : (
+                      <button
+                        role="menuitem"
+                        onClick={() => void onSaveToCloud()}
+                        disabled={cloudSaveState === "saving"}
+                      >
+                        {cloudSaveState === "saving"
+                          ? "Saving…"
+                          : cloudSaveState === "error"
+                            ? "Try saving to My Charts again"
+                            : "Save to My Charts"}
+                      </button>
+                    )}
+                    <Link role="menuitem" href="/my-charts">
+                      View My Charts
+                    </Link>
+                  </>
                 ) : (
-                  <button role="menuitem" onClick={() => void onSaveToCloud()} disabled={cloudSaveState === "saving"}>
-                    {cloudSaveState === "saving" ? "Saving…" : cloudSaveState === "error" ? "Try saving to My Charts again" : "Save to My Charts"}
-                  </button>
+                  <Link role="menuitem" href="/sign-in">
+                    Sign in to use My Charts
+                  </Link>
                 )}
-                <Link role="menuitem" href="/my-charts">View My Charts</Link>
-              </> : <Link role="menuitem" href="/sign-in">Sign in to use My Charts</Link>}
-            </> : null}
+              </>
+            ) : null}
             <span className="file-menu-divider" />
             <p className="file-menu-section-label">Export</p>
-            <button role="menuitem" onClick={downloadChart}>Download chart image</button>
-            <button role="menuitem" onClick={downloadPreview}>Download knitted preview</button>
-            {message ? <p className="file-menu-message" role="status">{message}</p> : null}
+            <button role="menuitem" onClick={downloadChart}>
+              Download chart image
+            </button>
+            <button role="menuitem" onClick={downloadPreview}>
+              Download knitted preview
+            </button>
+            {message ? (
+              <p className="file-menu-message" role="status">
+                {message}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

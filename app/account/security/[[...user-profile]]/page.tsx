@@ -12,12 +12,27 @@ export default async function AccountSecurityPage() {
   return (
     <main className="account-hub-page">
       <nav className="account-hub-nav">
-        <Link className="account-hub-brand" href="/"><span aria-hidden="true" />KnitPlot</Link>
-        <div><Link href="/account">Account</Link><Link href="/my-charts">My charts</Link></div>
+        <Link className="account-hub-brand" href="/">
+          <span aria-hidden="true" />
+          KnitPlot
+        </Link>
+        <div>
+          <Link href="/account">Account</Link>
+          <Link href="/my-charts">My charts</Link>
+        </div>
       </nav>
       <section className="account-security-shell">
-        <Link className="back-link" href="/account">← Back to account settings</Link>
-        <div><p className="eyebrow">Account security</p><h1>Sign-in &amp; security</h1><p className="account-intro">Manage your password, email addresses, connected accounts, and signed-in devices.</p></div>
+        <Link className="back-link" href="/account">
+          ← Back to account settings
+        </Link>
+        <div>
+          <p className="eyebrow">Account security</p>
+          <h1>Sign-in &amp; security</h1>
+          <p className="account-intro">
+            Manage your password, email addresses, connected accounts, and
+            signed-in devices.
+          </p>
+        </div>
         <div className="account-security-profile">
           <UserProfile
             routing="path"

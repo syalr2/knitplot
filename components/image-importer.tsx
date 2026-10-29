@@ -1,7 +1,19 @@
 "use client";
 
-import { ChangeEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import { cellAspectRatio, ChartDocument, MAX_CHART_ROWS, MAX_CHART_STITCHES, PaletteColor } from "@/lib/chart";
+import {
+  ChangeEvent,
+  PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  cellAspectRatio,
+  ChartDocument,
+  MAX_CHART_ROWS,
+  MAX_CHART_STITCHES,
+  PaletteColor,
+} from "@/lib/chart";
 
 export type FitMode = "cover" | "contain";
 export type ColorCountChoice = number | { min: number; max: number };
@@ -24,7 +36,11 @@ function distanceSquared(first: Rgb, second: Rgb) {
 
 function rgbToHex([red, green, blue]: Rgb) {
   return `#${[red, green, blue]
-    .map((channel) => Math.max(0, Math.min(255, Math.round(channel))).toString(16).padStart(2, "0"))
+    .map((channel) =>
+      Math.max(0, Math.min(255, Math.round(channel)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
     .join("")}`;
 }
 
@@ -38,7 +54,10 @@ function hexToRgb(hex: string): Rgb {
 }
 
 function chooseStartingCenters(samples: Rgb[], count: number) {
-  const buckets = new Map<string, { count: number; red: number; green: number; blue: number }>();
+  const buckets = new Map<
+    string,
+    { count: number; red: number; green: number; blue: number }
+  >();
 
   for (const [red, green, blue] of samples) {
     const key = `${Math.floor(red / 16)}:${Math.floor(green / 16)}:${Math.floor(blue / 16)}`;
@@ -50,11 +69,18 @@ function chooseStartingCenters(samples: Rgb[], count: number) {
     buckets.set(key, bucket);
   }
 
-  const minimumUsefulSize = samples.length >= 1000 ? Math.max(2, Math.floor(samples.length * 0.0005)) : 1;
+  const minimumUsefulSize =
+    samples.length >= 1000
+      ? Math.max(2, Math.floor(samples.length * 0.0005))
+      : 1;
   let candidates = Array.from(buckets.values())
     .filter((bucket) => bucket.count >= minimumUsefulSize)
     .map((bucket) => ({
-      color: [bucket.red / bucket.count, bucket.green / bucket.count, bucket.blue / bucket.count] as Rgb,
+      color: [
+        bucket.red / bucket.count,
+        bucket.green / bucket.count,
+        bucket.blue / bucket.count,
+      ] as Rgb,
       count: bucket.count,
     }))
     .sort((first, second) => second.count - first.count);
@@ -62,7 +88,11 @@ function chooseStartingCenters(samples: Rgb[], count: number) {
   if (candidates.length < count) {
     candidates = Array.from(buckets.values())
       .map((bucket) => ({
-        color: [bucket.red / bucket.count, bucket.green / bucket.count, bucket.blue / bucket.count] as Rgb,
+        color: [
+          bucket.red / bucket.count,
+          bucket.green / bucket.count,
+          bucket.blue / bucket.count,
+        ] as Rgb,
         count: bucket.count,
       }))
       .sort((first, second) => second.count - first.count);
@@ -75,7 +105,9 @@ function chooseStartingCenters(samples: Rgb[], count: number) {
     let bestScore = -1;
 
     for (const candidate of candidates) {
-      const nearestDistance = Math.min(...centers.map((center) => distanceSquared(candidate.color, center)));
+      const nearestDistance = Math.min(
+        ...centers.map((center) => distanceSquared(candidate.color, center)),
+      );
       const score = nearestDistance * (1 + Math.log2(candidate.count + 1));
       if (score > bestScore) {
         best = candidate;
@@ -98,16 +130,24 @@ function dominantCellColor(
   cellWidth: number,
   cellHeight: number,
 ) {
-  const buckets = new Map<string, { count: number; red: number; green: number; blue: number }>();
+  const buckets = new Map<
+    string,
+    { count: number; red: number; green: number; blue: number }
+  >();
 
   for (let y = 0; y < cellHeight; y += 1) {
     for (let x = 0; x < cellWidth; x += 1) {
-      const offset = (((startY + y) * sampleWidth) + startX + x) * 4;
+      const offset = ((startY + y) * sampleWidth + startX + x) * 4;
       const red = pixels[offset];
       const green = pixels[offset + 1];
       const blue = pixels[offset + 2];
       const key = `${red >> 5}:${green >> 5}:${blue >> 5}`;
-      const bucket = buckets.get(key) ?? { count: 0, red: 0, green: 0, blue: 0 };
+      const bucket = buckets.get(key) ?? {
+        count: 0,
+        red: 0,
+        green: 0,
+        blue: 0,
+      };
       bucket.count += 1;
       bucket.red += red;
       bucket.green += green;
@@ -116,12 +156,21 @@ function dominantCellColor(
     }
   }
 
-  let dominant = buckets.values().next().value as { count: number; red: number; green: number; blue: number };
+  let dominant = buckets.values().next().value as {
+    count: number;
+    red: number;
+    green: number;
+    blue: number;
+  };
   for (const bucket of buckets.values()) {
     if (bucket.count > dominant.count) dominant = bucket;
   }
 
-  return [dominant.red / dominant.count, dominant.green / dominant.count, dominant.blue / dominant.count] as Rgb;
+  return [
+    dominant.red / dominant.count,
+    dominant.green / dominant.count,
+    dominant.blue / dominant.count,
+  ] as Rgb;
 }
 
 function reduceColors(samples: Rgb[], requestedCount: number) {
@@ -151,20 +200,30 @@ function reduceColors(samples: Rgb[], requestedCount: number) {
     centers = centers.map((center, index) => {
       const total = totals[index];
       return total[3]
-        ? [total[0] / total[3], total[1] / total[3], total[2] / total[3]] as Rgb
+        ? ([
+            total[0] / total[3],
+            total[1] / total[3],
+            total[2] / total[3],
+          ] as Rgb)
         : center;
     });
   }
 
   const counts = centers.map(() => 0);
-  assignments.forEach((assignment) => { counts[assignment] += 1; });
+  assignments.forEach((assignment) => {
+    counts[assignment] += 1;
+  });
   const clusters = centers
     .map((center, index) => ({ center, count: counts[index], oldIndex: index }))
     .filter((cluster) => cluster.count > 0)
     .sort((first, second) => second.count - first.count);
 
-  const oldToNew = new Map(clusters.map((cluster, index) => [cluster.oldIndex, index]));
-  const sortedAssignments = assignments.map((assignment) => oldToNew.get(assignment) ?? 0);
+  const oldToNew = new Map(
+    clusters.map((cluster, index) => [cluster.oldIndex, index]),
+  );
+  const sortedAssignments = assignments.map(
+    (assignment) => oldToNew.get(assignment) ?? 0,
+  );
 
   if (clusters.length === 1) {
     const [red, green, blue] = clusters[0].center;
@@ -176,10 +235,16 @@ function reduceColors(samples: Rgb[], requestedCount: number) {
     });
   }
 
-  return { colors: clusters.map((cluster) => cluster.center), assignments: sortedAssignments };
+  return {
+    colors: clusters.map((cluster) => cluster.center),
+    assignments: sortedAssignments,
+  };
 }
 
-function reductionError(samples: Rgb[], reduction: ReturnType<typeof reduceColors>) {
+function reductionError(
+  samples: Rgb[],
+  reduction: ReturnType<typeof reduceColors>,
+) {
   return samples.reduce((total, sample, index) => {
     const color = reduction.colors[reduction.assignments[index]];
     return total + distanceSquared(sample, color);
@@ -195,7 +260,8 @@ function reduceColorsForChoice(samples: Rgb[], choice: ColorCountChoice) {
   for (let count = choice.min + 1; count <= choice.max; count += 1) {
     const candidate = reduceColors(samples, count);
     const candidateError = reductionError(samples, candidate);
-    const improvement = previousError > 0 ? (previousError - candidateError) / previousError : 0;
+    const improvement =
+      previousError > 0 ? (previousError - candidateError) / previousError : 0;
 
     if (improvement < 0.1) break;
     selected = candidate;
@@ -231,14 +297,33 @@ function drawFittedImage(
     const sourceHeight = baseHeight / zoom;
     const sourceX = (image.naturalWidth - sourceWidth) * (position.x / 100);
     const sourceY = (image.naturalHeight - sourceHeight) * (position.y / 100);
-    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      width,
+      height,
+    );
     return;
   }
 
-  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const scale = Math.min(
+    width / image.naturalWidth,
+    height / image.naturalHeight,
+  );
   const drawnWidth = image.naturalWidth * scale;
   const drawnHeight = image.naturalHeight * scale;
-  context.drawImage(image, (width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight);
+  context.drawImage(
+    image,
+    (width - drawnWidth) / 2,
+    (height - drawnHeight) / 2,
+    drawnWidth,
+    drawnHeight,
+  );
 }
 
 function CropPreview({
@@ -257,23 +342,45 @@ function CropPreview({
   onPositionChange: (position: CropPosition) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<{ clientX: number; clientY: number; position: CropPosition } | null>(null);
+  const dragRef = useRef<{
+    clientX: number;
+    clientY: number;
+    position: CropPosition;
+  } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const maximum = 800;
-    canvas.width = Math.max(1, Math.round(aspect >= 1 ? maximum : maximum * aspect));
-    canvas.height = Math.max(1, Math.round(aspect >= 1 ? maximum / aspect : maximum));
+    canvas.width = Math.max(
+      1,
+      Math.round(aspect >= 1 ? maximum : maximum * aspect),
+    );
+    canvas.height = Math.max(
+      1,
+      Math.round(aspect >= 1 ? maximum / aspect : maximum),
+    );
     const context = canvas.getContext("2d");
     if (!context) return;
-    drawFittedImage(context, image, canvas.width, canvas.height, fit, position, zoom);
+    drawFittedImage(
+      context,
+      image,
+      canvas.width,
+      canvas.height,
+      fit,
+      position,
+      zoom,
+    );
   }, [aspect, fit, image, position, zoom]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     if (fit !== "cover") return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { clientX: event.clientX, clientY: event.clientY, position };
+    dragRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      position,
+    };
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -281,8 +388,22 @@ function CropPreview({
     if (!drag || fit !== "cover") return;
     const bounds = event.currentTarget.getBoundingClientRect();
     onPositionChange({
-      x: Math.max(0, Math.min(100, drag.position.x - ((event.clientX - drag.clientX) / bounds.width) * 100)),
-      y: Math.max(0, Math.min(100, drag.position.y - ((event.clientY - drag.clientY) / bounds.height) * 100)),
+      x: Math.max(
+        0,
+        Math.min(
+          100,
+          drag.position.x -
+            ((event.clientX - drag.clientX) / bounds.width) * 100,
+        ),
+      ),
+      y: Math.max(
+        0,
+        Math.min(
+          100,
+          drag.position.y -
+            ((event.clientY - drag.clientY) / bounds.height) * 100,
+        ),
+      ),
     });
   }
 
@@ -294,8 +415,12 @@ function CropPreview({
       aria-label="Image crop preview"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
-      onPointerUp={() => { dragRef.current = null; }}
-      onPointerCancel={() => { dragRef.current = null; }}
+      onPointerUp={() => {
+        dragRef.current = null;
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
+      }}
     />
   );
 }
@@ -310,7 +435,10 @@ export function convertImage(
   paletteMode: PaletteMode = "image",
 ) {
   const cellHeight = 8;
-  const cellWidth = Math.max(1, Math.round(cellHeight * cellAspectRatio(document)));
+  const cellWidth = Math.max(
+    1,
+    Math.round(cellHeight * cellAspectRatio(document)),
+  );
   const sampleWidth = document.width * cellWidth;
   const sampleHeight = document.height * cellHeight;
   const canvas = window.document.createElement("canvas");
@@ -320,21 +448,31 @@ export function convertImage(
   if (!context) throw new Error("Your browser could not process this image.");
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  drawFittedImage(context, image, sampleWidth, sampleHeight, fit, position, zoom);
+  drawFittedImage(
+    context,
+    image,
+    sampleWidth,
+    sampleHeight,
+    fit,
+    position,
+    zoom,
+  );
 
   const pixels = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
   const samples: Rgb[] = [];
 
   for (let row = 0; row < document.height; row += 1) {
     for (let column = 0; column < document.width; column += 1) {
-      samples.push(dominantCellColor(
-        pixels,
-        sampleWidth,
-        column * cellWidth,
-        row * cellHeight,
-        cellWidth,
-        cellHeight,
-      ));
+      samples.push(
+        dominantCellColor(
+          pixels,
+          sampleWidth,
+          column * cellWidth,
+          row * cellHeight,
+          cellWidth,
+          cellHeight,
+        ),
+      );
     }
   }
 
@@ -345,7 +483,11 @@ export function convertImage(
         const sample = samples[row * document.width + column];
         let nearest = 0;
         existingColors.forEach((color, index) => {
-          if (distanceSquared(sample, color) < distanceSquared(sample, existingColors[nearest])) nearest = index;
+          if (
+            distanceSquared(sample, color) <
+            distanceSquared(sample, existingColors[nearest])
+          )
+            nearest = index;
         });
         return document.palette[nearest].id;
       }),
@@ -377,9 +519,14 @@ export function ImageImporter({ document, onImport }: Props) {
   const [fit, setFit] = useState<FitMode>("cover");
   const [sizeMode, setSizeMode] = useState<SizeMode>("current");
   const [targetWidth, setTargetWidth] = useState(document.width);
-  const [cropPosition, setCropPosition] = useState<CropPosition>({ x: 50, y: 50 });
+  const [cropPosition, setCropPosition] = useState<CropPosition>({
+    x: 50,
+    y: 50,
+  });
   const [cropZoom, setCropZoom] = useState(1);
-  const [colorCount, setColorCount] = useState(Math.min(5, Math.max(2, document.palette.length)));
+  const [colorCount, setColorCount] = useState(
+    Math.min(5, Math.max(2, document.palette.length)),
+  );
   const [paletteMode, setPaletteMode] = useState<PaletteMode>("image");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -392,9 +539,12 @@ export function ImageImporter({ document, onImport }: Props) {
     setError("");
   }
 
-  useEffect(() => () => {
-    if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -409,7 +559,10 @@ export function ImageImporter({ document, onImport }: Props) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024) {
+    if (
+      !["image/png", "image/jpeg", "image/webp"].includes(file.type) ||
+      file.size > 10 * 1024 * 1024
+    ) {
       setError("Choose a PNG, JPEG, or WebP image smaller than 10 MB.");
       return;
     }
@@ -442,8 +595,20 @@ export function ImageImporter({ document, onImport }: Props) {
   function createChart() {
     if (!image) return;
     try {
-      const targetDocument = { ...document, width: finalWidth, height: finalHeight };
-      const result = convertImage(image, targetDocument, colorCount, fit, cropPosition, cropZoom, paletteMode);
+      const targetDocument = {
+        ...document,
+        width: finalWidth,
+        height: finalHeight,
+      };
+      const result = convertImage(
+        image,
+        targetDocument,
+        colorCount,
+        fit,
+        cropPosition,
+        cropZoom,
+        paletteMode,
+      );
       onImport(result.palette, result.cells);
       releaseImage();
     } catch {
@@ -452,83 +617,183 @@ export function ImageImporter({ document, onImport }: Props) {
   }
 
   const imageAspect = image ? image.naturalWidth / image.naturalHeight : 1;
-  const finalWidth = sizeMode === "image" ? Math.max(1, Math.min(MAX_CHART_STITCHES, Math.round(targetWidth))) : document.width;
-  const matchedHeight = Math.round((finalWidth * cellAspectRatio(document)) / imageAspect);
-  const finalHeight = sizeMode === "image" ? Math.max(1, Math.min(MAX_CHART_ROWS, matchedHeight)) : document.height;
+  const finalWidth =
+    sizeMode === "image"
+      ? Math.max(1, Math.min(MAX_CHART_STITCHES, Math.round(targetWidth)))
+      : document.width;
+  const matchedHeight = Math.round(
+    (finalWidth * cellAspectRatio(document)) / imageAspect,
+  );
+  const finalHeight =
+    sizeMode === "image"
+      ? Math.max(1, Math.min(MAX_CHART_ROWS, matchedHeight))
+      : document.height;
   const physicalAspect = (finalWidth * cellAspectRatio(document)) / finalHeight;
 
   return (
     <>
-      <input ref={inputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseFile} />
-      <button className="secondary-button" onClick={() => inputRef.current?.click()} disabled={loading}>
+      <input
+        ref={inputRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={chooseFile}
+      />
+      <button
+        className="secondary-button"
+        onClick={() => inputRef.current?.click()}
+        disabled={loading}
+      >
         {loading ? "Opening…" : "From image"}
       </button>
-      {error && !previewUrl ? <span className="import-trigger-error" role="alert">{error}</span> : null}
+      {error && !previewUrl ? (
+        <span className="import-trigger-error" role="alert">
+          {error}
+        </span>
+      ) : null}
 
       {previewUrl && image ? (
         <div className="modal-backdrop" role="presentation">
-          <section className="import-dialog" role="dialog" aria-modal="true" aria-labelledby="import-title">
+          <section
+            className="import-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-title"
+          >
             <div className="import-dialog-heading">
-              <div><p className="eyebrow">Create from image</p><h1 id="import-title">Import image</h1></div>
-              <button className="close-dialog" aria-label="Close image importer" onClick={releaseImage}>×</button>
+              <div>
+                <p className="eyebrow">Create from image</p>
+                <h1 id="import-title">Import image</h1>
+              </div>
+              <button
+                className="close-dialog"
+                aria-label="Close image importer"
+                onClick={releaseImage}
+              >
+                ×
+              </button>
             </div>
 
-            <div className="import-preview" style={{ aspectRatio: physicalAspect }}>
-              <CropPreview image={image} aspect={physicalAspect} fit={fit} position={cropPosition} zoom={cropZoom} onPositionChange={setCropPosition} />
+            <div
+              className="import-preview"
+              style={{ aspectRatio: physicalAspect }}
+            >
+              <CropPreview
+                image={image}
+                aspect={physicalAspect}
+                fit={fit}
+                position={cropPosition}
+                zoom={cropZoom}
+                onPositionChange={setCropPosition}
+              />
             </div>
 
-            {fit === "cover" ? <p className="crop-hint">Drag the image to choose the crop.</p> : null}
+            {fit === "cover" ? (
+              <p className="crop-hint">Drag the image to choose the crop.</p>
+            ) : null}
 
             <div className="import-options">
-              <label>Fit image
-                <select value={fit} onChange={(event) => {
-                  const nextFit = event.target.value as FitMode;
-                  setFit(nextFit);
-                  if (nextFit === "contain") setCropZoom(1);
-                }}>
+              <label>
+                Fit image
+                <select
+                  value={fit}
+                  onChange={(event) => {
+                    const nextFit = event.target.value as FitMode;
+                    setFit(nextFit);
+                    if (nextFit === "contain") setCropZoom(1);
+                  }}
+                >
                   <option value="cover">Fill chart</option>
                   <option value="contain">Show whole image</option>
                 </select>
               </label>
-              <label>Colours
-                <select value={paletteMode} onChange={(event) => setPaletteMode(event.target.value as PaletteMode)}>
+              <label>
+                Colours
+                <select
+                  value={paletteMode}
+                  onChange={(event) =>
+                    setPaletteMode(event.target.value as PaletteMode)
+                  }
+                >
                   <option value="image">Create from image</option>
                   <option value="existing">Use chart palette</option>
                 </select>
               </label>
               {paletteMode === "image" ? (
-                <label>Number of colours
-                  <select value={colorCount} onChange={(event) => setColorCount(Number(event.target.value))}>
-                    {[2, 3, 4, 5, 6, 7, 8].map((count) => <option key={count} value={count}>{count}</option>)}
+                <label>
+                  Number of colours
+                  <select
+                    value={colorCount}
+                    onChange={(event) =>
+                      setColorCount(Number(event.target.value))
+                    }
+                  >
+                    {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+                      <option key={count} value={count}>
+                        {count}
+                      </option>
+                    ))}
                   </select>
                 </label>
               ) : null}
-              <label>Chart size
-                <select value={sizeMode} onChange={(event) => setSizeMode(event.target.value as SizeMode)}>
-                  <option value="current">Keep {document.width} × {document.height}</option>
+              <label>
+                Chart size
+                <select
+                  value={sizeMode}
+                  onChange={(event) =>
+                    setSizeMode(event.target.value as SizeMode)
+                  }
+                >
+                  <option value="current">
+                    Keep {document.width} × {document.height}
+                  </option>
                   <option value="image">Match image proportions</option>
                 </select>
               </label>
               {sizeMode === "image" ? (
-                <label>Stitches wide
-                  <input type="number" min="1" max={MAX_CHART_STITCHES} value={targetWidth} onChange={(event) => setTargetWidth(Number(event.target.value) || 1)} />
+                <label>
+                  Stitches wide
+                  <input
+                    type="number"
+                    min="1"
+                    max={MAX_CHART_STITCHES}
+                    value={targetWidth}
+                    onChange={(event) =>
+                      setTargetWidth(Number(event.target.value) || 1)
+                    }
+                  />
                 </label>
               ) : null}
             </div>
 
             {fit === "cover" ? (
-              <label className="image-zoom">Image zoom
-                <input type="range" min="1" max="2.5" step="0.05" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} />
+              <label className="image-zoom">
+                Image zoom
+                <input
+                  type="range"
+                  min="1"
+                  max="2.5"
+                  step="0.05"
+                  value={cropZoom}
+                  onChange={(event) => setCropZoom(Number(event.target.value))}
+                />
               </label>
             ) : null}
 
             <p className="import-note">
-              Creates a {finalWidth} × {finalHeight} stitch chart. You can edit every stitch afterwards.
+              Creates a {finalWidth} × {finalHeight} stitch chart. You can edit
+              every stitch afterwards.
             </p>
-            {error ? <p className="import-error" role="alert">{error}</p> : null}
+            {error ? (
+              <p className="import-error" role="alert">
+                {error}
+              </p>
+            ) : null}
             <div className="import-actions">
               <button onClick={releaseImage}>Cancel</button>
-              <button className="primary-button" onClick={createChart}>Create chart</button>
+              <button className="primary-button" onClick={createChart}>
+                Create chart
+              </button>
             </div>
           </section>
         </div>

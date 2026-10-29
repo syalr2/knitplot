@@ -11,4 +11,3 @@ export function getDatabase() {
   database = neon(connectionString);
   return database;
 }
-

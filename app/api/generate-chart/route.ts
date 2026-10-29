@@ -1,5 +1,8 @@
 import { claimAiRequest, resolveOpenAIKey } from "@/lib/openai/credentials";
-import { generateSourceArtwork, SourceArtworkApiError } from "@/lib/openai/source-artwork";
+import {
+  generateSourceArtwork,
+  SourceArtworkApiError,
+} from "@/lib/openai/source-artwork";
 import { hasValidRequestOrigin } from "@/lib/security/origin";
 import { MAX_CHART_ROWS, MAX_CHART_STITCHES } from "@/lib/chart";
 
@@ -22,15 +25,19 @@ export const runtime = "nodejs";
 export const maxDuration = 180;
 
 function errorResponse(message: string, status: number) {
-  return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
+  return Response.json(
+    { error: message },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
-  if (!hasValidRequestOrigin(request)) return errorResponse("Invalid request origin.", 403);
+  if (!hasValidRequestOrigin(request))
+    return errorResponse("Invalid request origin.", 403);
 
   let body: GenerateRequest;
   try {
-    body = await request.json() as GenerateRequest;
+    body = (await request.json()) as GenerateRequest;
   } catch {
     return errorResponse("The generation request was not valid.", 400);
   }
@@ -44,41 +51,77 @@ export async function POST(request: Request) {
   const maximumColors = body.maximumColors;
   const chartAspect = body.chartAspect;
   const layoutMode = body.layoutMode === "repeat" ? "repeat" : "motif";
-  const referenceImage = typeof body.referenceImage === "string" ? body.referenceImage : "";
-  const referenceMimeType = typeof body.referenceMimeType === "string" ? body.referenceMimeType : "image/png";
+  const referenceImage =
+    typeof body.referenceImage === "string" ? body.referenceImage : "";
+  const referenceMimeType =
+    typeof body.referenceMimeType === "string"
+      ? body.referenceMimeType
+      : "image/png";
   const referenceUse = body.referenceUse === "style" ? "style" : "subject";
 
   if (prompt.length < 3 || prompt.length > 800) {
-    return errorResponse("Describe the motif in between 3 and 800 characters.", 400);
+    return errorResponse(
+      "Describe the motif in between 3 and 800 characters.",
+      400,
+    );
   }
-  const exactColorsAreValid = Number.isInteger(colorCount) && typeof colorCount === "number" && colorCount >= 2 && colorCount <= 8;
+  const exactColorsAreValid =
+    Number.isInteger(colorCount) &&
+    typeof colorCount === "number" &&
+    colorCount >= 2 &&
+    colorCount <= 8;
   const rangeColorsAreValid =
-    Number.isInteger(minimumColors) && typeof minimumColors === "number" && minimumColors >= 2 && minimumColors <= 8 &&
-    Number.isInteger(maximumColors) && typeof maximumColors === "number" && maximumColors >= minimumColors && maximumColors <= 8;
+    Number.isInteger(minimumColors) &&
+    typeof minimumColors === "number" &&
+    minimumColors >= 2 &&
+    minimumColors <= 8 &&
+    Number.isInteger(maximumColors) &&
+    typeof maximumColors === "number" &&
+    maximumColors >= minimumColors &&
+    maximumColors <= 8;
   if (
-    !Number.isInteger(width) || typeof width !== "number" || width < 1 || width > MAX_CHART_STITCHES ||
-    !Number.isInteger(height) || typeof height !== "number" || height < 1 || height > MAX_CHART_ROWS ||
+    !Number.isInteger(width) ||
+    typeof width !== "number" ||
+    width < 1 ||
+    width > MAX_CHART_STITCHES ||
+    !Number.isInteger(height) ||
+    typeof height !== "number" ||
+    height < 1 ||
+    height > MAX_CHART_ROWS ||
     (colorMode === "exact" ? !exactColorsAreValid : !rangeColorsAreValid) ||
-    typeof chartAspect !== "number" || !Number.isFinite(chartAspect) || chartAspect <= 0
+    typeof chartAspect !== "number" ||
+    !Number.isFinite(chartAspect) ||
+    chartAspect <= 0
   ) {
     return errorResponse("The chart settings were not valid.", 400);
   }
   if (
     referenceImage &&
-    (referenceImage.length > 25_000_000 || !["image/png", "image/jpeg", "image/webp"].includes(referenceMimeType))
+    (referenceImage.length > 25_000_000 ||
+      !["image/png", "image/jpeg", "image/webp"].includes(referenceMimeType))
   ) {
     return errorResponse("The reference image was not valid.", 400);
   }
 
   const keyResult = await resolveOpenAIKey();
-  if ("error" in keyResult) return errorResponse(keyResult.error, keyResult.status);
+  if ("error" in keyResult)
+    return errorResponse(keyResult.error, keyResult.status);
   const requestClaim = await claimAiRequest(keyResult.userId);
   if (!requestClaim.allowed) return errorResponse(requestClaim.message, 429);
 
   try {
-    const minimum = colorMode === "exact" ? colorCount as number : minimumColors as number;
-    const maximum = colorMode === "exact" ? colorCount as number : maximumColors as number;
-    const operationSignal = AbortSignal.any([request.signal, AbortSignal.timeout(150_000)]);
+    const minimum =
+      colorMode === "exact"
+        ? (colorCount as number)
+        : (minimumColors as number);
+    const maximum =
+      colorMode === "exact"
+        ? (colorCount as number)
+        : (maximumColors as number);
+    const operationSignal = AbortSignal.any([
+      request.signal,
+      AbortSignal.timeout(150_000),
+    ]);
     const sourceArtwork = await generateSourceArtwork({
       apiKey: keyResult.key,
       prompt,
@@ -88,7 +131,13 @@ export async function POST(request: Request) {
       minimumColors: minimum,
       maximumColors: maximum,
       layoutMode,
-      reference: referenceImage ? { base64: referenceImage, mimeType: referenceMimeType, use: referenceUse } : undefined,
+      reference: referenceImage
+        ? {
+            base64: referenceImage,
+            mimeType: referenceMimeType,
+            use: referenceUse,
+          }
+        : undefined,
       signal: operationSignal,
     });
     return Response.json(
@@ -96,10 +145,17 @@ export async function POST(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof SourceArtworkApiError) return errorResponse(error.message, error.status);
+    if (error instanceof SourceArtworkApiError)
+      return errorResponse(error.message, error.status);
     if (error instanceof Error && error.name === "TimeoutError") {
-      return errorResponse("Chart generation took too long. Please try again.", 504);
+      return errorResponse(
+        "Chart generation took too long. Please try again.",
+        504,
+      );
     }
-    return errorResponse("The app could not reach OpenAI. Please try again.", 502);
+    return errorResponse(
+      "The app could not reach OpenAI. Please try again.",
+      502,
+    );
   }
 }

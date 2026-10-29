@@ -30,7 +30,10 @@ export type SourceArtwork = {
 };
 
 export class SourceArtworkApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
     this.name = "SourceArtworkApiError";
   }
@@ -41,7 +44,8 @@ function imageSizeForAspect(inputAspect: number) {
   const targetPixels = 1024 * 1024;
   const height = Math.sqrt(targetPixels / aspect);
   const width = height * aspect;
-  const roundTo16 = (value: number) => Math.max(16, Math.round(value / 16) * 16);
+  const roundTo16 = (value: number) =>
+    Math.max(16, Math.round(value / 16) * 16);
   return `${roundTo16(width)}x${roundTo16(height)}`;
 }
 
@@ -62,12 +66,14 @@ function chartComplexityGuidance(width: number, height: number) {
 }
 
 export async function generateSourceArtwork(input: SourceArtworkInput) {
-  const colorRequirement = input.minimumColors === input.maximumColors
-    ? `Use exactly ${input.minimumColors} clearly distinct flat colours total, including the background.`
-    : `Use between ${input.minimumColors} and ${input.maximumColors} clearly distinct flat colours total, including the background.`;
-  const layoutRequirement = input.layoutMode === "repeat"
-    ? "Design one seamless repeating tile. The composition must continue naturally across its left/right and top/bottom edges, with no blank border."
-    : "Design one centered motif with a small, even background margin.";
+  const colorRequirement =
+    input.minimumColors === input.maximumColors
+      ? `Use exactly ${input.minimumColors} clearly distinct flat colours total, including the background.`
+      : `Use between ${input.minimumColors} and ${input.maximumColors} clearly distinct flat colours total, including the background.`;
+  const layoutRequirement =
+    input.layoutMode === "repeat"
+      ? "Design one seamless repeating tile. The composition must continue naturally across its left/right and top/bottom edges, with no blank border."
+      : "Design one centered motif with a small, even background margin.";
   const artworkPrompt = `
 Create clean visual source artwork that will immediately be translated into a knitting chart exactly ${input.width} stitches wide by ${input.height} rows tall.
 
@@ -90,12 +96,20 @@ Hard requirements:
   let response: Response;
   if (input.reference) {
     const decoded = Buffer.from(input.reference.base64, "base64");
-    if (!decoded.length) throw new SourceArtworkApiError("The reference image could not be read.", 400);
+    if (!decoded.length)
+      throw new SourceArtworkApiError(
+        "The reference image could not be read.",
+        400,
+      );
     const imageBytes = new ArrayBuffer(decoded.length);
     new Uint8Array(imageBytes).set(decoded);
     const form = new FormData();
     form.append("model", "gpt-image-2");
-    form.append("image", new Blob([imageBytes], { type: input.reference.mimeType }), "colorwork-reference.png");
+    form.append(
+      "image",
+      new Blob([imageBytes], { type: input.reference.mimeType }),
+      "colorwork-reference.png",
+    );
     form.append("prompt", artworkPrompt);
     form.append("n", "1");
     form.append("quality", "medium");
@@ -132,19 +146,40 @@ Hard requirements:
 
   let result: OpenAIImageResponse;
   try {
-    result = await response.json() as OpenAIImageResponse;
+    result = (await response.json()) as OpenAIImageResponse;
   } catch {
-    throw new SourceArtworkApiError("OpenAI returned an unreadable image response. Please try again.", 502);
+    throw new SourceArtworkApiError(
+      "OpenAI returned an unreadable image response. Please try again.",
+      502,
+    );
   }
   if (!response.ok) {
-    if (response.status === 401) throw new SourceArtworkApiError("The OpenAI API key was not accepted.", 502);
-    if (response.status === 429) throw new SourceArtworkApiError("OpenAI is busy or the account limit was reached. Please try again shortly.", 429);
+    if (response.status === 401)
+      throw new SourceArtworkApiError(
+        "The OpenAI API key was not accepted.",
+        502,
+      );
+    if (response.status === 429)
+      throw new SourceArtworkApiError(
+        "OpenAI is busy or the account limit was reached. Please try again shortly.",
+        429,
+      );
     if (result.error?.code === "moderation_blocked") {
-      throw new SourceArtworkApiError("That request could not be generated. Try describing the motif differently.", 400);
+      throw new SourceArtworkApiError(
+        "That request could not be generated. Try describing the motif differently.",
+        400,
+      );
     }
-    throw new SourceArtworkApiError("OpenAI could not create the source design. Please try again.", 502);
+    throw new SourceArtworkApiError(
+      "OpenAI could not create the source design. Please try again.",
+      502,
+    );
   }
   const image = result.data?.[0]?.b64_json;
-  if (!image) throw new SourceArtworkApiError("OpenAI did not return a source design. Please try again.", 502);
+  if (!image)
+    throw new SourceArtworkApiError(
+      "OpenAI did not return a source design. Please try again.",
+      502,
+    );
   return { base64: image, mimeType: "image/webp" } satisfies SourceArtwork;
 }

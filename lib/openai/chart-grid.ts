@@ -36,7 +36,10 @@ type ResponsesApiResult = {
 };
 
 export class ChartGridApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
     this.name = "ChartGridApiError";
   }
@@ -58,7 +61,10 @@ function extractOutputText(result: ResponsesApiResult) {
   for (const output of result.output ?? []) {
     for (const content of output.content ?? []) {
       if (content.type === "refusal" && content.refusal) {
-        throw new ChartGridApiError("That request could not be generated. Try describing the motif differently.", 400);
+        throw new ChartGridApiError(
+          "That request could not be generated. Try describing the motif differently.",
+          400,
+        );
       }
       if (content.type === "output_text" && content.text) return content.text;
     }
@@ -76,24 +82,37 @@ export function validateChartGrid(
 ): ChartGrid | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as { palette?: unknown; rows?: unknown };
-  if (!Array.isArray(candidate.palette) || !Array.isArray(candidate.rows)) return null;
-  if (candidate.palette.length < minimumColors || candidate.palette.length > maximumColors) return null;
+  if (!Array.isArray(candidate.palette) || !Array.isArray(candidate.rows))
+    return null;
+  if (
+    candidate.palette.length < minimumColors ||
+    candidate.palette.length > maximumColors
+  )
+    return null;
   if (candidate.rows.length !== height) return null;
 
-  const palette = candidate.palette.filter((color): color is string =>
-    typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color),
+  const palette = candidate.palette.filter(
+    (color): color is string =>
+      typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color),
   );
   if (palette.length !== candidate.palette.length) return null;
-  if (new Set(palette.map((color) => color.toLowerCase())).size !== palette.length) return null;
+  if (
+    new Set(palette.map((color) => color.toLowerCase())).size !== palette.length
+  )
+    return null;
 
-  const rows = candidate.rows.filter((row): row is string => typeof row === "string");
-  if (rows.length !== height || rows.some((row) => row.length !== width)) return null;
+  const rows = candidate.rows.filter(
+    (row): row is string => typeof row === "string",
+  );
+  if (rows.length !== height || rows.some((row) => row.length !== width))
+    return null;
   const used = new Set<number>();
   for (const row of rows) {
     for (const character of row) {
       if (!/^[0-7]$/.test(character)) return null;
       const index = Number(character);
-      if (!Number.isInteger(index) || index < 0 || index >= palette.length) return null;
+      if (!Number.isInteger(index) || index < 0 || index >= palette.length)
+        return null;
       used.add(index);
     }
   }
@@ -101,14 +120,17 @@ export function validateChartGrid(
   return { palette: palette.map((color) => color.toLowerCase()), rows };
 }
 
-export async function generateChartGrid(input: GenerateChartGridInput): Promise<ChartGrid> {
+export async function generateChartGrid(
+  input: GenerateChartGridInput,
+): Promise<ChartGrid> {
   const exactColors = input.minimumColors === input.maximumColors;
   const colorRequirement = exactColors
     ? `Use exactly ${input.minimumColors} colours, including the background, and use every palette colour in the grid.`
     : `Use between ${input.minimumColors} and ${input.maximumColors} colours, including the background. Use the fewest colours that clearly express the design, and use every listed palette colour.`;
-  const layoutRequirement = input.layoutMode === "repeat"
-    ? "The entire grid is one seamless repeating tile. Continue the pattern cleanly across both the left/right and top/bottom edges. Do not add a blank border or a centered isolated motif. Favor rhythmic Nordic-style geometry and symmetry when appropriate to the request."
-    : "Create one centered motif. Put the main background colour at palette index 0 and leave a small, even background margin where the design allows.";
+  const layoutRequirement =
+    input.layoutMode === "repeat"
+      ? "The entire grid is one seamless repeating tile. Continue the pattern cleanly across both the left/right and top/bottom edges. Do not add a blank border or a centered isolated motif. Favor rhythmic Nordic-style geometry and symmetry when appropriate to the request."
+      : "Create one centered motif. Put the main background colour at palette index 0 and leave a small, even background margin where the design allows.";
   const sourceRequirement = input.source
     ? `\nCurrent chart to edit (palette indexes correspond to the rows):\n${JSON.stringify(input.source)}\nPreserve everything the edit request does not ask to change.`
     : "";
@@ -132,7 +154,9 @@ Hard requirements:
 - ${layoutRequirement}
 ${sourceRequirement}`.trim();
 
-  const content: Array<Record<string, unknown>> = [{ type: "input_text", text: prompt }];
+  const content: Array<Record<string, unknown>> = [
+    { type: "input_text", text: prompt },
+  ];
   if (input.reference) {
     content.push({
       type: "input_image",
@@ -179,22 +203,39 @@ ${sourceRequirement}`.trim();
 
   let result: ResponsesApiResult;
   try {
-    result = await response.json() as ResponsesApiResult;
+    result = (await response.json()) as ResponsesApiResult;
   } catch {
-    throw new ChartGridApiError("OpenAI returned an unreadable response. Please try again.", 502);
+    throw new ChartGridApiError(
+      "OpenAI returned an unreadable response. Please try again.",
+      502,
+    );
   }
 
   if (!response.ok) {
-    if (response.status === 401) throw new ChartGridApiError("The OpenAI API key was not accepted.", 502);
-    if (response.status === 429) throw new ChartGridApiError("OpenAI is busy or the account limit was reached. Please try again shortly.", 429);
+    if (response.status === 401)
+      throw new ChartGridApiError("The OpenAI API key was not accepted.", 502);
+    if (response.status === 429)
+      throw new ChartGridApiError(
+        "OpenAI is busy or the account limit was reached. Please try again shortly.",
+        429,
+      );
     if (result.error?.code === "moderation_blocked") {
-      throw new ChartGridApiError("That request could not be generated. Try describing the motif differently.", 400);
+      throw new ChartGridApiError(
+        "That request could not be generated. Try describing the motif differently.",
+        400,
+      );
     }
-    throw new ChartGridApiError("OpenAI could not generate this chart. Please try again.", 502);
+    throw new ChartGridApiError(
+      "OpenAI could not generate this chart. Please try again.",
+      502,
+    );
   }
 
   if (result.incomplete_details) {
-    throw new ChartGridApiError("OpenAI did not finish the chart. Please try again.", 502);
+    throw new ChartGridApiError(
+      "OpenAI did not finish the chart. Please try again.",
+      502,
+    );
   }
 
   const outputText = extractOutputText(result);
@@ -202,11 +243,23 @@ ${sourceRequirement}`.trim();
   try {
     parsed = JSON.parse(outputText);
   } catch {
-    throw new ChartGridApiError("OpenAI returned an incomplete chart. Please try again.", 502);
+    throw new ChartGridApiError(
+      "OpenAI returned an incomplete chart. Please try again.",
+      502,
+    );
   }
-  const chart = validateChartGrid(parsed, input.width, input.height, input.minimumColors, input.maximumColors);
+  const chart = validateChartGrid(
+    parsed,
+    input.width,
+    input.height,
+    input.minimumColors,
+    input.maximumColors,
+  );
   if (!chart) {
-    throw new ChartGridApiError("OpenAI did not keep to the exact chart size. Please try once more.", 502);
+    throw new ChartGridApiError(
+      "OpenAI did not keep to the exact chart size. Please try once more.",
+      502,
+    );
   }
   return chart;
 }

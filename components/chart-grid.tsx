@@ -1,7 +1,18 @@
 "use client";
 
 import { PointerEvent, useRef } from "react";
-import { cellAspectRatio, CellSelection, ChartDocument, contrastTextColor, stitchActionAt, stitchActionLabel, stitchActionSymbol, chartCellDisplayColor, StitchAction, Tool } from "@/lib/chart";
+import {
+  cellAspectRatio,
+  CellSelection,
+  ChartDocument,
+  contrastTextColor,
+  stitchActionAt,
+  stitchActionLabel,
+  stitchActionSymbol,
+  chartCellDisplayColor,
+  StitchAction,
+  Tool,
+} from "@/lib/chart";
 
 type Props = {
   document: ChartDocument;
@@ -15,14 +26,26 @@ type Props = {
   onPaint: (row: number, column: number, flood: boolean) => void;
 };
 
-export function ChartGrid({ document, tool, structureAction, selectedColor, zoom, selection, onSelectionChange, onStrokeStart, onPaint }: Props) {
+export function ChartGrid({
+  document,
+  tool,
+  structureAction,
+  selectedColor,
+  zoom,
+  selection,
+  onSelectionChange,
+  onStrokeStart,
+  onPaint,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drawing = useRef(false);
   const selecting = useRef(false);
   const selectionStart = useRef<{ row: number; column: number } | null>(null);
   const previousCell = useRef("");
   const aspect = cellAspectRatio(document);
-  const palette = new Map(document.palette.map((color) => [color.id, color.hex]));
+  const palette = new Map(
+    document.palette.map((color) => [color.id, color.hex]),
+  );
   const columnStep = document.width > 40 ? 10 : 5;
   const showEveryRow = document.height <= 24;
 
@@ -37,7 +60,13 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
     const local = pointer.matrixTransform(screenMatrix.inverse());
     const column = Math.floor(local.x / aspect);
     const row = Math.floor(local.y);
-    if (row < 0 || row >= document.height || column < 0 || column >= document.width) return null;
+    if (
+      row < 0 ||
+      row >= document.height ||
+      column < 0 ||
+      column >= document.width
+    )
+      return null;
     return { row, column };
   }
 
@@ -50,7 +79,12 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
       selecting.current = true;
       drawing.current = false;
       selectionStart.current = cell;
-      onSelectionChange({ startRow: cell.row, startColumn: cell.column, endRow: cell.row, endColumn: cell.column });
+      onSelectionChange({
+        startRow: cell.row,
+        startColumn: cell.column,
+        endRow: cell.row,
+        endColumn: cell.column,
+      });
       return;
     }
     onStrokeStart();
@@ -87,12 +121,14 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
     selectionStart.current = null;
   }
 
-  const selectionBounds = selection ? {
-    row: Math.min(selection.startRow, selection.endRow),
-    column: Math.min(selection.startColumn, selection.endColumn),
-    rows: Math.abs(selection.endRow - selection.startRow) + 1,
-    columns: Math.abs(selection.endColumn - selection.startColumn) + 1,
-  } : null;
+  const selectionBounds = selection
+    ? {
+        row: Math.min(selection.startRow, selection.endRow),
+        column: Math.min(selection.startColumn, selection.endColumn),
+        rows: Math.abs(selection.endRow - selection.startRow) + 1,
+        columns: Math.abs(selection.endColumn - selection.startColumn) + 1,
+      }
+    : null;
 
   return (
     <div className="chart-frame" data-tour="chart-canvas">
@@ -103,18 +139,24 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
           style={{ gridTemplateColumns: `repeat(${document.width}, 1fr)` }}
         >
           {Array.from({ length: document.width }, (_, index) => (
-            <span key={index}>{(index + 1) % columnStep === 0 ? index + 1 : ""}</span>
+            <span key={index}>
+              {(index + 1) % columnStep === 0 ? index + 1 : ""}
+            </span>
           ))}
         </div>
         <div className="chart-body">
           <div
             className="chart-row-numbers"
             aria-hidden="true"
-            style={{ gridTemplateRows: `repeat(${document.height}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateRows: `repeat(${document.height}, minmax(0, 1fr))`,
+            }}
           >
             {Array.from({ length: document.height }, (_, index) => (
               <span key={index}>
-                {showEveryRow || (document.height - index) % 5 === 0 ? document.height - index : ""}
+                {showEveryRow || (document.height - index) % 5 === 0
+                  ? document.height - index
+                  : ""}
               </span>
             ))}
           </div>
@@ -122,7 +164,9 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
             ref={svgRef}
             className="chart-svg"
             viewBox={`0 0 ${document.width * aspect} ${document.height}`}
-            style={{ aspectRatio: `${document.width * aspect} / ${document.height}` }}
+            style={{
+              aspectRatio: `${document.width * aspect} / ${document.height}`,
+            }}
             role="img"
             aria-label={`${document.width} stitch by ${document.height} row colorwork chart`}
             onPointerDown={handlePointerDown}
@@ -133,30 +177,67 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
             <g shapeRendering="crispEdges">
               {document.cells.flatMap((row, rowIndex) =>
                 row.map((colorId, columnIndex) => {
-                  const action = stitchActionAt(document, rowIndex, columnIndex);
+                  const action = stitchActionAt(
+                    document,
+                    rowIndex,
+                    columnIndex,
+                  );
                   return (
                     <rect
                       key={`${rowIndex}-${columnIndex}`}
-                      className={action === "no-stitch" ? "chart-no-stitch" : undefined}
+                      className={
+                        action === "no-stitch" ? "chart-no-stitch" : undefined
+                      }
                       x={columnIndex * aspect}
                       y={rowIndex}
                       width={aspect}
                       height="1"
-                      fill={chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(colorId))}
+                      fill={chartCellDisplayColor(
+                        document,
+                        rowIndex,
+                        columnIndex,
+                        palette.get(colorId),
+                      )}
                     />
                   );
                 }),
               )}
             </g>
             <g className="chart-action-symbols" pointerEvents="none">
-              {document.cells.flatMap((row, rowIndex) => row.map((_, columnIndex) => {
-                const action = stitchActionAt(document, rowIndex, columnIndex);
-                if (action === "knit") return null;
-                const background = chartCellDisplayColor(document, rowIndex, columnIndex, palette.get(document.cells[rowIndex][columnIndex]));
-                return <text key={`${rowIndex}-${columnIndex}`} style={{ fill: contrastTextColor(background) }} x={(columnIndex + 0.5) * aspect} y={rowIndex + 0.69} textAnchor="middle" fontSize={Math.min(0.45, aspect * 0.35)}>{stitchActionSymbol(action)}</text>;
-              }))}
+              {document.cells.flatMap((row, rowIndex) =>
+                row.map((_, columnIndex) => {
+                  const action = stitchActionAt(
+                    document,
+                    rowIndex,
+                    columnIndex,
+                  );
+                  if (action === "knit") return null;
+                  const background = chartCellDisplayColor(
+                    document,
+                    rowIndex,
+                    columnIndex,
+                    palette.get(document.cells[rowIndex][columnIndex]),
+                  );
+                  return (
+                    <text
+                      key={`${rowIndex}-${columnIndex}`}
+                      style={{ fill: contrastTextColor(background) }}
+                      x={(columnIndex + 0.5) * aspect}
+                      y={rowIndex + 0.69}
+                      textAnchor="middle"
+                      fontSize={Math.min(0.45, aspect * 0.35)}
+                    >
+                      {stitchActionSymbol(action)}
+                    </text>
+                  );
+                }),
+              )}
             </g>
-            <g className="grid-lines" shapeRendering="crispEdges" pointerEvents="none">
+            <g
+              className="grid-lines"
+              shapeRendering="crispEdges"
+              pointerEvents="none"
+            >
               {Array.from({ length: document.width + 1 }, (_, column) => (
                 <line
                   key={`column-${column}`}
@@ -164,7 +245,9 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
                   x2={column * aspect}
                   y1="0"
                   y2={document.height}
-                  className={column % 5 === 0 ? "grid-line grid-line-major" : "grid-line"}
+                  className={
+                    column % 5 === 0 ? "grid-line grid-line-major" : "grid-line"
+                  }
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
@@ -175,15 +258,35 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
                   x2={document.width * aspect}
                   y1={row}
                   y2={row}
-                  className={row % 5 === 0 ? "grid-line grid-line-major" : "grid-line"}
+                  className={
+                    row % 5 === 0 ? "grid-line grid-line-major" : "grid-line"
+                  }
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
             </g>
             {document.guides.symmetry !== "none" ? (
               <g className="symmetry-guide-lines" pointerEvents="none">
-                {(document.guides.symmetry === "horizontal" || document.guides.symmetry === "both") ? <line x1={(document.width * aspect) / 2} x2={(document.width * aspect) / 2} y1="0" y2={document.height} vectorEffect="non-scaling-stroke" /> : null}
-                {(document.guides.symmetry === "vertical" || document.guides.symmetry === "both") ? <line x1="0" x2={document.width * aspect} y1={document.height / 2} y2={document.height / 2} vectorEffect="non-scaling-stroke" /> : null}
+                {document.guides.symmetry === "horizontal" ||
+                document.guides.symmetry === "both" ? (
+                  <line
+                    x1={(document.width * aspect) / 2}
+                    x2={(document.width * aspect) / 2}
+                    y1="0"
+                    y2={document.height}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
+                {document.guides.symmetry === "vertical" ||
+                document.guides.symmetry === "both" ? (
+                  <line
+                    x1="0"
+                    x2={document.width * aspect}
+                    y1={document.height / 2}
+                    y2={document.height / 2}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
               </g>
             ) : null}
             {selectionBounds ? (
@@ -200,12 +303,20 @@ export function ChartGrid({ document, tool, structureAction, selectedColor, zoom
           </svg>
         </div>
         <p className="chart-hint">
-          {structureAction === "knit" ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."
+          {structureAction === "knit"
+            ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."
             : structureAction
-            ? tool === "fill"
-              ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
-              : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
-            : tool === "fill" ? "Click an area to fill its yarn colour. Stitch symbols stay in place." : tool === "select" ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action." : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}{document.stitchActions && !structureAction ? " Use Remove stitch to erase symbols without changing yarn colours." : ""}
+              ? tool === "fill"
+                ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
+                : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
+              : tool === "fill"
+                ? "Click an area to fill its yarn colour. Stitch symbols stay in place."
+                : tool === "select"
+                  ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action."
+                  : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}
+          {document.stitchActions && !structureAction
+            ? " Use Remove stitch to erase symbols without changing yarn colours."
+            : ""}
         </p>
       </div>
     </div>

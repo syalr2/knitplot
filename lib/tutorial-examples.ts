@@ -1,4 +1,8 @@
-import { ChartDocument, cloneDocument, defaultInstructionSettings } from "@/lib/chart";
+import {
+  ChartDocument,
+  cloneDocument,
+  defaultInstructionSettings,
+} from "@/lib/chart";
 
 export type TutorialExample = {
   id: "dutch-bunny" | "simple-repeat";
@@ -16,7 +20,10 @@ function makeDocument(input: {
   patternUse: ChartDocument["instructions"]["patternUse"];
   trimBackground: boolean;
 }) {
-  const palette = input.colors.map((hex, index) => ({ id: `example-${input.name.toLowerCase().replace(/\s+/g, "-")}-${index}`, hex }));
+  const palette = input.colors.map((hex, index) => ({
+    id: `example-${input.name.toLowerCase().replace(/\s+/g, "-")}-${index}`,
+    hex,
+  }));
   return {
     name: input.name,
     width: input.rows[0].length,
@@ -38,7 +45,9 @@ function makeDocument(input: {
       repeatHeight: input.rows.length,
     },
     palette,
-    cells: input.rows.map((row) => Array.from(row, (character) => palette[Number(character)].id)),
+    cells: input.rows.map((row) =>
+      Array.from(row, (character) => palette[Number(character)].id),
+    ),
   };
 }
 
