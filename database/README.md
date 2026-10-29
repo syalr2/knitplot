@@ -31,6 +31,28 @@ New migrations must have an increasing numeric prefix and `-- Up Migration` /
 migrations. CI runs migrations against a disposable PostgreSQL database, never
 against production.
 
+## Integer chart revisions (003)
+
+Apply migration 003 before deploying the integer-revision application. It adds
+`version`, starting at 1 for existing charts, without changing chart content or
+timestamps. A database trigger increments the revision for saves and renames,
+including writes from the previous deployment during rollout or rollback. Pin
+changes do not invalidate an editor's revision. Keep the column and trigger when
+rolling the application back; do not run the down migration while new clients
+may still be open.
+
+New clients use numeric API revisions and persist their decimal representation
+as opaque browser tokens. `updatedAt` remains a display timestamp. Already-open
+clients and older browser workspaces may still send timezone-qualified timestamp
+tokens; the API compares those as `timestamptz`, never formatted text. Its UTC
+timestamp responses preserve microseconds for older clients. Both token formats
+retain ownership and compare-and-swap checks. Renaming deliberately invalidates
+an older editor so autosave cannot silently undo the rename.
+
+Compatibility review: after the integer-revision release has been established,
+remove timestamp-token support only with a safe upgrade path for dirty older
+workspaces. Do not discard their saved token or silently rebase pending edits.
+
 To run the database integration test locally, provision a disposable PostgreSQL
 database named `knitplot_test` on localhost, migrate it, and provide its connection
 string as `TEST_DATABASE_URL` to `npm run test:db`. The test deliberately refuses

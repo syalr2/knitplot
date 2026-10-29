@@ -1,6 +1,7 @@
 import { HttpError, responseJson } from "./http";
 import { readCloudChartPayload } from "./cloud-charts";
 import { tabSnapshot, type tabPayload } from "./workspace";
+import { cloudVersionToken, readCloudRevision } from "./cloud-revision";
 
 /** A successful write whose reply was lost must not become a false conflict. */
 export async function saveCloudChart(
@@ -12,24 +13,29 @@ export async function saveCloudChart(
   const url = `/api/charts/${encodeURIComponent(id)}`;
   const signal = AbortSignal.timeout(20_000);
   const verifyMatchingRemote = async () => {
-    const remote = await responseJson<{ updatedAt: string }>(
+    const remote = await responseJson<{ version: number }>(
       await transport(url, { signal }),
     );
     if (tabSnapshot(readCloudChartPayload(remote)) !== tabSnapshot(data))
       throw new HttpError("This chart changed elsewhere.", 409);
-    return remote.updatedAt;
+    return cloudVersionToken(remote);
   };
   try {
     if (!version) return await verifyMatchingRemote();
-    const result = await responseJson<{ updatedAt: string }>(
+    const expectedVersion = readCloudRevision(
+      /^\d+$/.test(version) ? Number(version) : version,
+    );
+    if (expectedVersion === undefined)
+      throw new HttpError("Reopen this chart before saving it.", 428);
+    const result = await responseJson<{ version: number }>(
       await transport(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, expectedVersion: version }),
+        body: JSON.stringify({ ...data, expectedVersion }),
         signal,
       }),
     );
-    return result.updatedAt;
+    return cloudVersionToken(result);
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") {
       throw new HttpError(
