@@ -25,7 +25,6 @@ import {
   ChartDocument,
   cloneDocument,
   copyStitchCellColors,
-  createStitchActions,
   defaultDocument,
   flipGrid,
   paintYarnCells,
@@ -40,7 +39,6 @@ import {
   rotateGridClockwise,
   scaleCells,
   scaleStitchActions,
-  stitchActionAt,
   stitchActionOptions,
   stitchPaletteFromActions,
   StitchAction,
@@ -48,6 +46,13 @@ import {
   Tool,
 } from "@/lib/chart";
 import type { Viewer } from "@/lib/auth";
+import {
+  canRotateSelection,
+  copySelectionBlock,
+  reduceSelectionEdit,
+  type SelectionBlock,
+  type SelectionEdit,
+} from "@/lib/chart-selection";
 import { cloudVersionToken } from "@/lib/cloud-revision";
 import {
   tutorialExampleDocument,
@@ -74,12 +79,7 @@ import { useCloudRecovery } from "@/components/use-cloud-recovery";
 const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
 
 type RepeatStyle = "normal" | "mirrored";
-type SelectionClipboard = {
-  tabId: string;
-  cells: string[][];
-  stitchActions: StitchAction[][];
-  stitchCellColors: (string | null)[][];
-};
+type SelectionClipboard = SelectionBlock & { tabId: string };
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -403,348 +403,53 @@ export function ChartMaker({
     setGaugeDraft((current) => ({ ...current, [field]: String(next) }));
   }
 
+  function applySelectionEdit(action: SelectionEdit) {
+    const state = { document, selection };
+    const next = reduceSelectionEdit(state, action);
+    if (next === state) return;
+    commit((current) =>
+      current === document
+        ? next.document
+        : reduceSelectionEdit({ document: current, selection }, action)
+            .document,
+    );
+    setSelection(next.selection);
+  }
+
   function fillSelection() {
-    if (!selection) return;
-    const startRow = Math.min(selection.startRow, selection.endRow);
-    const endRow = Math.max(selection.startRow, selection.endRow);
-    const startColumn = Math.min(selection.startColumn, selection.endColumn);
-    const endColumn = Math.max(selection.startColumn, selection.endColumn);
-    commit((current) => {
-      const targets: Array<[number, number]> = [];
-      for (let row = startRow; row <= endRow; row += 1) {
-        for (let column = startColumn; column <= endColumn; column += 1) {
-          targets.push([row, column]);
-        }
-      }
-      return paintYarnCells(current, targets, selectedColor);
-    });
-    setSelection(null);
+    applySelectionEdit({ type: "fill-yarn", color: selectedColor });
   }
 
   function applyStructureToSelection() {
-    const bounds = selectionBounds();
-    if (!bounds || !structureAction) return;
-    commit((current) => {
-      const targets: Array<[number, number]> = [];
-      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (
-          let column = bounds.startColumn;
-          column <= bounds.endColumn;
-          column += 1
-        ) {
-          targets.push([row, column]);
-        }
-      }
-      return paintStitchCells(current, targets, structureAction);
-    });
-    setSelection(null);
-  }
-
-  function selectionBounds() {
-    if (!selection) return null;
-    return {
-      startRow: Math.min(selection.startRow, selection.endRow),
-      endRow: Math.max(selection.startRow, selection.endRow),
-      startColumn: Math.min(selection.startColumn, selection.endColumn),
-      endColumn: Math.max(selection.startColumn, selection.endColumn),
-    };
+    if (structureAction)
+      applySelectionEdit({ type: "fill-stitch", stitch: structureAction });
   }
 
   function copySelection() {
-    const bounds = selectionBounds();
-    if (!bounds) return;
-    setSelectionClipboard({
-      tabId: activeTabId,
-      stitchCellColors: copyStitchCellColors(document)
-        .slice(bounds.startRow, bounds.endRow + 1)
-        .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1)),
-      cells: document.cells
-        .slice(bounds.startRow, bounds.endRow + 1)
-        .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1)),
-      stitchActions: Array.from(
-        { length: bounds.endRow - bounds.startRow + 1 },
-        (_, rowOffset) =>
-          Array.from(
-            { length: bounds.endColumn - bounds.startColumn + 1 },
-            (_, columnOffset) =>
-              stitchActionAt(
-                document,
-                bounds.startRow + rowOffset,
-                bounds.startColumn + columnOffset,
-              ),
-          ),
-      ),
-    });
+    const block = copySelectionBlock(document, selection);
+    if (block) setSelectionClipboard({ ...block, tabId: activeTabId });
   }
 
   function cutSelection() {
-    const bounds = selectionBounds();
-    if (!bounds) return;
     copySelection();
-    commit((current) => {
-      const cells = current.cells.map((row) => [...row]);
-      const stitchCellColors = copyStitchCellColors(current);
-      const stitchActions = (
-        current.stitchActions ??
-        createStitchActions(current.width, current.height)
-      ).map((row) => [...row]);
-      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (
-          let column = bounds.startColumn;
-          column <= bounds.endColumn;
-          column += 1
-        ) {
-          cells[row][column] = current.palette[0].id;
-          stitchCellColors[row][column] = null;
-          stitchActions[row][column] = "knit";
-        }
-      }
-      return {
-        ...current,
-        cells,
-        stitchCellColors,
-        stitchActions: stitchActions.some((row) =>
-          row.some((action) => action !== "knit"),
-        )
-          ? stitchActions
-          : undefined,
-      };
-    });
+    applySelectionEdit({ type: "cut" });
   }
 
   function pasteSelection() {
-    if (!selectionClipboard || selectionClipboard.tabId !== activeTabId) return;
-    const bounds = selectionBounds();
-    const startRow = bounds?.startRow ?? 0;
-    const startColumn = bounds?.startColumn ?? 0;
-    commit((current) => {
-      const cells = current.cells.map((row) => [...row]);
-      const stitchCellColors = copyStitchCellColors(current);
-      const stitchActions = (
-        current.stitchActions ??
-        createStitchActions(current.width, current.height)
-      ).map((row) => [...row]);
-      selectionClipboard.cells.forEach((clipboardRow, rowOffset) => {
-        clipboardRow.forEach((colorId, columnOffset) => {
-          if (
-            cells[startRow + rowOffset]?.[startColumn + columnOffset] !==
-            undefined
-          ) {
-            cells[startRow + rowOffset][startColumn + columnOffset] = colorId;
-            stitchCellColors[startRow + rowOffset][startColumn + columnOffset] =
-              selectionClipboard.stitchCellColors[rowOffset]?.[columnOffset] ??
-              null;
-            stitchActions[startRow + rowOffset][startColumn + columnOffset] =
-              selectionClipboard.stitchActions[rowOffset]?.[columnOffset] ??
-              "knit";
-          }
-        });
-      });
-      return {
-        ...current,
-        cells,
-        stitchCellColors,
-        stitchActions: stitchActions.some((row) =>
-          row.some((action) => action !== "knit"),
-        )
-          ? stitchActions
-          : undefined,
-      };
-    });
-    const pastedHeight = Math.min(
-      selectionClipboard.cells.length,
-      document.height - startRow,
-    );
-    const pastedWidth = Math.min(
-      selectionClipboard.cells[0]?.length ?? 0,
-      document.width - startColumn,
-    );
-    if (pastedHeight && pastedWidth) {
-      setSelection({
-        startRow,
-        startColumn,
-        endRow: startRow + pastedHeight - 1,
-        endColumn: startColumn + pastedWidth - 1,
-      });
-    }
+    if (selectionClipboard?.tabId === activeTabId)
+      applySelectionEdit({ type: "paste", block: selectionClipboard });
   }
 
-  function moveSelection(rowAmount: number, columnAmount: number) {
-    const bounds = selectionBounds();
-    if (!bounds) return;
-    const nextStartRow = bounds.startRow + rowAmount;
-    const nextEndRow = bounds.endRow + rowAmount;
-    const nextStartColumn = bounds.startColumn + columnAmount;
-    const nextEndColumn = bounds.endColumn + columnAmount;
-    if (
-      nextStartRow < 0 ||
-      nextEndRow >= document.height ||
-      nextStartColumn < 0 ||
-      nextEndColumn >= document.width
-    )
-      return;
-    commit((current) => {
-      const block = current.cells
-        .slice(bounds.startRow, bounds.endRow + 1)
-        .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
-      const actionBlock = Array.from(
-        { length: bounds.endRow - bounds.startRow + 1 },
-        (_, rowOffset) =>
-          Array.from(
-            { length: bounds.endColumn - bounds.startColumn + 1 },
-            (_, columnOffset) =>
-              stitchActionAt(
-                current,
-                bounds.startRow + rowOffset,
-                bounds.startColumn + columnOffset,
-              ),
-          ),
-      );
-      const cells = current.cells.map((row) => [...row]);
-      const stitchCellColors = copyStitchCellColors(current);
-      const colourBlock = stitchCellColors
-        .slice(bounds.startRow, bounds.endRow + 1)
-        .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
-      const stitchActions = (
-        current.stitchActions ??
-        createStitchActions(current.width, current.height)
-      ).map((row) => [...row]);
-      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (
-          let column = bounds.startColumn;
-          column <= bounds.endColumn;
-          column += 1
-        ) {
-          cells[row][column] = current.palette[0].id;
-          stitchCellColors[row][column] = null;
-          stitchActions[row][column] = "knit";
-        }
-      }
-      block.forEach((blockRow, rowOffset) =>
-        blockRow.forEach((colorId, columnOffset) => {
-          cells[nextStartRow + rowOffset][nextStartColumn + columnOffset] =
-            colorId;
-          stitchCellColors[nextStartRow + rowOffset][
-            nextStartColumn + columnOffset
-          ] = colourBlock[rowOffset][columnOffset];
-          stitchActions[nextStartRow + rowOffset][
-            nextStartColumn + columnOffset
-          ] = actionBlock[rowOffset][columnOffset];
-        }),
-      );
-      return {
-        ...current,
-        cells,
-        stitchCellColors,
-        stitchActions: stitchActions.some((row) =>
-          row.some((action) => action !== "knit"),
-        )
-          ? stitchActions
-          : undefined,
-      };
-    });
-    setSelection({
-      startRow: nextStartRow,
-      endRow: nextEndRow,
-      startColumn: nextStartColumn,
-      endColumn: nextEndColumn,
-    });
+  function moveSelection(rows: number, columns: number) {
+    applySelectionEdit({ type: "move", rows, columns });
   }
 
   function selectionRotationFits() {
-    const bounds = selectionBounds();
-    if (!bounds) return false;
-    const selectionWidth = bounds.endColumn - bounds.startColumn + 1;
-    const selectionHeight = bounds.endRow - bounds.startRow + 1;
-    return (
-      bounds.startRow + selectionWidth <= document.height &&
-      bounds.startColumn + selectionHeight <= document.width
-    );
+    return canRotateSelection(document, selection);
   }
 
   function transformSelection(transform: "horizontal" | "vertical" | "rotate") {
-    const bounds = selectionBounds();
-    if (!bounds || (transform === "rotate" && !selectionRotationFits())) return;
-    const block = document.cells
-      .slice(bounds.startRow, bounds.endRow + 1)
-      .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
-    const actionBlock = Array.from(
-      { length: bounds.endRow - bounds.startRow + 1 },
-      (_, rowOffset) =>
-        Array.from(
-          { length: bounds.endColumn - bounds.startColumn + 1 },
-          (_, columnOffset) =>
-            stitchActionAt(
-              document,
-              bounds.startRow + rowOffset,
-              bounds.startColumn + columnOffset,
-            ),
-        ),
-    );
-    const transformedCells =
-      transform === "rotate"
-        ? rotateGridClockwise(block)
-        : flipGrid(block, transform);
-    const transformedActions =
-      transform === "rotate"
-        ? rotateGridClockwise(actionBlock)
-        : flipGrid(actionBlock, transform);
-    const colourBlock = copyStitchCellColors(document)
-      .slice(bounds.startRow, bounds.endRow + 1)
-      .map((row) => row.slice(bounds.startColumn, bounds.endColumn + 1));
-    const transformedColours =
-      transform === "rotate"
-        ? rotateGridClockwise(colourBlock)
-        : flipGrid(colourBlock, transform);
-
-    commit((current) => {
-      const cells = current.cells.map((row) => [...row]);
-      const stitchCellColors = copyStitchCellColors(current);
-      const stitchActions = (
-        current.stitchActions ??
-        createStitchActions(current.width, current.height)
-      ).map((row) => [...row]);
-      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (
-          let column = bounds.startColumn;
-          column <= bounds.endColumn;
-          column += 1
-        ) {
-          cells[row][column] = current.palette[0].id;
-          stitchCellColors[row][column] = null;
-          stitchActions[row][column] = "knit";
-        }
-      }
-      transformedCells.forEach((blockRow, rowOffset) =>
-        blockRow.forEach((colorId, columnOffset) => {
-          cells[bounds.startRow + rowOffset][
-            bounds.startColumn + columnOffset
-          ] = colorId;
-          stitchCellColors[bounds.startRow + rowOffset][
-            bounds.startColumn + columnOffset
-          ] = transformedColours[rowOffset][columnOffset];
-          stitchActions[bounds.startRow + rowOffset][
-            bounds.startColumn + columnOffset
-          ] = transformedActions[rowOffset][columnOffset];
-        }),
-      );
-      return {
-        ...current,
-        cells,
-        stitchCellColors,
-        stitchActions: stitchActions.some((row) =>
-          row.some((action) => action !== "knit"),
-        )
-          ? stitchActions
-          : undefined,
-      };
-    });
-    setSelection({
-      startRow: bounds.startRow,
-      startColumn: bounds.startColumn,
-      endRow: bounds.startRow + transformedCells.length - 1,
-      endColumn: bounds.startColumn + (transformedCells[0]?.length ?? 1) - 1,
-    });
+    applySelectionEdit({ type: "transform", transform });
   }
 
   function flipChart(direction: "horizontal" | "vertical") {

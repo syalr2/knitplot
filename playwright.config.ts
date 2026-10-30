@@ -20,7 +20,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: "editor.spec.ts",
+      testMatch: ["editor.spec.ts", "selection.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
