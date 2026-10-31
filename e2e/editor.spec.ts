@@ -38,6 +38,59 @@ test("missing Clerk configuration never grants private chart access", async ({
   expect(response.status()).toBe(401);
 });
 
+test("chart image downloads offer grid lines on or off without changing the chart", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const cell = page.locator(".chart-svg > g:first-child > rect").first();
+  const originalColor = await cell.getAttribute("fill");
+  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Download chart image", exact: true })
+    .click();
+
+  const images: number[][] = [];
+  for (const showGrid of [true, false]) {
+    const downloadEvent = page.waitForEvent("download");
+    await page
+      .getByRole("menuitem", {
+        name: showGrid ? "With grid" : "Without grid",
+        exact: true,
+      })
+      .click();
+    const download = await downloadEvent;
+    expect(download.suggestedFilename()).toMatch(
+      showGrid ? /\.chart\.png$/ : /\.chart-no-grid\.png$/,
+    );
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    images.push(
+      await page.evaluate(async (base64) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${base64}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d")!;
+        context.drawImage(image, 0, 0);
+        // Left edge of the chart, away from labels and horizontal grid lines.
+        return [
+          image.width,
+          image.height,
+          ...context.getImageData(54, 80, 1, 1).data,
+          ...context.getImageData(60, 80, 1, 1).data,
+        ];
+      }, Buffer.concat(chunks).toString("base64")),
+    );
+  }
+  expect(images[0].slice(0, 2)).toEqual(images[1].slice(0, 2));
+  expect(images[0].slice(2, 6)).not.toEqual(images[0].slice(6, 10));
+  expect(images[1].slice(2, 6)).toEqual(images[1].slice(6, 10));
+  await expect(cell).toHaveAttribute("fill", originalColor!);
+});
+
 test("development samples are not production routes", async ({ request }) => {
   const response = await request.get("/stitch-samples/yarn");
   expect(response.status()).toBe(404);

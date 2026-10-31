@@ -61,7 +61,7 @@ function canvasBlob(canvas: HTMLCanvasElement) {
   });
 }
 
-function renderChart(document: ChartDocument) {
+function renderChart(document: ChartDocument, showGrid: boolean) {
   const aspect = cellAspectRatio(document);
   const maximumChartDimension = 4000;
   const cellHeight = Math.min(
@@ -129,7 +129,7 @@ function renderChart(document: ChartDocument) {
     }
   }
 
-  for (let column = 0; column <= document.width; column += 1) {
+  for (let column = 0; showGrid && column <= document.width; column += 1) {
     context.beginPath();
     context.strokeStyle =
       column % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
@@ -139,7 +139,7 @@ function renderChart(document: ChartDocument) {
     context.lineTo(x, top + chartHeight);
     context.stroke();
   }
-  for (let row = 0; row <= document.height; row += 1) {
+  for (let row = 0; showGrid && row <= document.height; row += 1) {
     context.beginPath();
     context.strokeStyle =
       row % 5 === 0 ? "rgba(28,31,29,.72)" : "rgba(28,31,29,.42)";
@@ -205,6 +205,7 @@ export function ExportTools({
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [choosingChartImage, setChoosingChartImage] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -238,11 +239,11 @@ export function ExportTools({
     setMessage("Editable KnitPlot file downloaded.");
   }
 
-  async function downloadChart() {
+  async function downloadChart(showGrid: boolean) {
     try {
       downloadBlob(
-        await canvasBlob(renderChart(document)),
-        fileName(document.name, "chart.png"),
+        await canvasBlob(renderChart(document, showGrid)),
+        fileName(document.name, showGrid ? "chart.png" : "chart-no-grid.png"),
       );
       setMessage("Chart downloaded.");
     } catch {
@@ -313,6 +314,7 @@ export function ExportTools({
           aria-expanded={open}
           onClick={() => {
             setOpen((value) => !value);
+            setChoosingChartImage(false);
             setMessage("");
           }}
         >
@@ -384,9 +386,33 @@ export function ExportTools({
             ) : null}
             <span className="file-menu-divider" />
             <p className="file-menu-section-label">Export</p>
-            <button role="menuitem" onClick={downloadChart}>
+            <button
+              role="menuitem"
+              aria-expanded={choosingChartImage}
+              onClick={() => setChoosingChartImage((value) => !value)}
+            >
               Download chart image
             </button>
+            {choosingChartImage ? (
+              <div
+                className="file-menu-export-options"
+                role="group"
+                aria-label="Chart image options"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => void downloadChart(true)}
+                >
+                  With grid
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => void downloadChart(false)}
+                >
+                  Without grid
+                </button>
+              </div>
+            ) : null}
             <button role="menuitem" onClick={downloadPreview}>
               Download knitted preview
             </button>
