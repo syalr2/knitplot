@@ -466,6 +466,25 @@ button:disabled {
   color: var(--accent-deep);
   transform: none;
 }
+.file-menu-export-options {
+  margin: 0 10px 6px 20px;
+  padding-left: 6px;
+}
+.file-menu-export-options button {
+  font-size: 12px;
+  gap: 8px;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+.file-menu-export-options button::before {
+  border: 1px solid var(--accent-deep);
+  border-radius: 50%;
+  content: "";
+  flex: 0 0 12px;
+  height: 12px;
+  outline: 1px solid var(--accent-deep);
+  outline-offset: -4px;
+}
 .file-menu-divider {
   border-top: 1px solid var(--line);
   margin: 5px 3px;
