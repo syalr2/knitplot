@@ -25,6 +25,7 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-A
 - Choose stranded, intarsia, or duplicate stitch instructions
 - Use Knit Mode with row and stitch progress, optional design-only cropping, and stitch markers
 - Download chart and preview PNGs or save an editable `.knitplot` project file
+- Export an exact-size stitch bitmap PNG (one pixel per stitch, yarn colours only) for colourwork image import into other tools. Stitch actions and shaping are not encoded; no-stitch cells require an explicit fill-colour choice.
 
 ### OpenAI API key needed
 

@@ -13,6 +13,7 @@ import {
   chartCellDisplayColor,
 } from "@/lib/chart";
 import { readProject } from "@/lib/project-file";
+import { stitchBitmap } from "@/lib/stitch-bitmap";
 
 type Props = {
   document: ChartDocument;
@@ -206,7 +207,12 @@ export function ExportTools({
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [choosingChartImage, setChoosingChartImage] = useState(false);
+  const [confirmingBitmap, setConfirmingBitmap] = useState(false);
+  const [noStitchColorId, setNoStitchColorId] = useState("");
   const [message, setMessage] = useState("");
+  const hasNoStitch = document.stitchActions?.some((row) =>
+    row.includes("no-stitch"),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -248,6 +254,30 @@ export function ExportTools({
       setMessage("Chart downloaded.");
     } catch {
       setMessage("The chart image could not be created.");
+    }
+  }
+
+  async function downloadBitmap() {
+    try {
+      const bitmap = stitchBitmap(document, noStitchColorId);
+      const canvas = window.document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("The stitch bitmap could not be created.");
+      const image = context.createImageData(bitmap.width, bitmap.height);
+      image.data.set(bitmap.pixels);
+      context.putImageData(image, 0, 0);
+      downloadBlob(
+        await canvasBlob(canvas),
+        fileName(document.name, "stitch-bitmap.png"),
+      );
+      setConfirmingBitmap(false);
+      setMessage(
+        `Stitch bitmap downloaded: ${bitmap.width} × ${bitmap.height} pixels.`,
+      );
+    } catch {
+      setMessage("The stitch bitmap could not be created.");
     }
   }
 
@@ -315,6 +345,8 @@ export function ExportTools({
           onClick={() => {
             setOpen((value) => !value);
             setChoosingChartImage(false);
+            setConfirmingBitmap(false);
+            setNoStitchColorId("");
             setMessage("");
           }}
         >
@@ -410,6 +442,68 @@ export function ExportTools({
                   onClick={() => void downloadChart(false)}
                 >
                   Without grid
+                </button>
+              </div>
+            ) : null}
+            <button
+              role="menuitem"
+              aria-expanded={confirmingBitmap}
+              onClick={() => {
+                setMessage("");
+                if (hasStructuralStitches(document)) {
+                  setConfirmingBitmap((value) => !value);
+                } else {
+                  void downloadBitmap();
+                }
+              }}
+            >
+              Download stitch bitmap · 1 pixel per stitch
+            </button>
+            {confirmingBitmap ? (
+              <div
+                className="file-menu-bitmap-options"
+                role="group"
+                aria-label="Stitch bitmap options"
+              >
+                <p>
+                  Yarn colours only. Stitch actions and shaping are not
+                  included.
+                </p>
+                {hasNoStitch ? (
+                  <label>
+                    Fill no-stitch cells with
+                    <select
+                      value={noStitchColorId}
+                      onChange={(event) =>
+                        setNoStitchColorId(event.target.value)
+                      }
+                    >
+                      <option value="">Choose a yarn colour</option>
+                      {document.palette.map((color, index) => (
+                        <option key={color.id} value={color.id}>
+                          Colour {index + 1} · {color.hex}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <button
+                  role="menuitem"
+                  disabled={Boolean(
+                    hasNoStitch &&
+                    !document.palette.some(
+                      (color) => color.id === noStitchColorId,
+                    ),
+                  )}
+                  onClick={() => void downloadBitmap()}
+                >
+                  Download colour-only bitmap
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => setConfirmingBitmap(false)}
+                >
+                  Cancel
                 </button>
               </div>
             ) : null}
