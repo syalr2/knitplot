@@ -101,6 +101,7 @@ test("development samples are not production routes", async ({ request }) => {
   const response = await request.get("/stitch-samples/yarn");
   expect(response.status()).toBe(404);
   expect((await request.get("/e2e/harness")).status()).toBe(404);
+  expect((await request.get("/yoke-designer")).status()).toBe(404);
 });
 
 test("chart dimensions allow typing intermediate values and reset on tab changes", async ({

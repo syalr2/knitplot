@@ -1,0 +1,156 @@
+.yoke-designer {
+  max-width: 1600px;
+  margin: auto;
+  padding: 24px;
+}
+.yoke-header,
+.yoke-header nav,
+.yoke-toolbar,
+.yoke-view-tabs,
+.yoke-summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.yoke-header {
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.yoke-header h1 {
+  font-size: 25px;
+  margin: 0;
+}
+.yoke-header h1 span {
+  color: var(--accent-deep);
+}
+.yoke-header p {
+  margin: 5px 0;
+  font-size: 12px;
+}
+.yoke-workspace {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.yoke-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 0;
+}
+.yoke-panel h2 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+.yoke-panel h3 {
+  font-size: 17px;
+  margin: 20px 0 8px;
+}
+.yoke-panel p,
+.yoke-panel li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.yoke-panel .yoke-hint,
+.yoke-panel small {
+  color: #686658;
+  font-size: 12px;
+}
+.yoke-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.yoke-panel .yoke-fields label {
+  display: flex;
+  flex-direction: column;
+}
+.yoke-panel label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.yoke-panel input:not([type="checkbox"]):not([type="color"]),
+.yoke-panel select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  font: inherit;
+}
+.yoke-panel small {
+  line-height: 1.4;
+}
+.yoke-schedule > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr 30px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.yoke-summary {
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.yoke-toolbar {
+  margin-top: 16px;
+}
+.yoke-toolbar label {
+  display: flex;
+  align-items: center;
+}
+.yoke-colour {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.yoke-colour button {
+  border: 2px solid transparent;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+.yoke-colour button[aria-pressed="true"] {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}
+.yoke-colour input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+}
+.yoke-canvas-scroll {
+  width: 100%;
+  overflow: auto;
+  background: white;
+  border-radius: 8px;
+}
+.yoke-canvas-scroll canvas {
+  display: block;
+  max-width: none;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+.yoke-drawing details {
+  margin-top: 14px;
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .yoke-workspace {
+    grid-template-columns: 1fr;
+  }
+  .yoke-designer {
+    padding: 12px;
+  }
+}
