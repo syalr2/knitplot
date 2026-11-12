@@ -9,7 +9,7 @@ import {
   type YokeMeasurements,
   type IncreaseEvent,
 } from "@/lib/yoke-plan";
-import { createYokeProject } from "@/lib/yoke-project";
+import { createYokeProject, type YokeProject } from "@/lib/yoke-project";
 import {
   reshapeYoke,
   yokeDocument,
@@ -22,6 +22,64 @@ import { YokeShortRowPlanner } from "./yoke-short-row-planner";
 import type { YokeField } from "@/lib/yoke-measurement-fields";
 import type { YokeMeasurementMode } from "@/lib/yoke-measurement-mode";
 import type { YokeShortRows } from "@/lib/yoke-short-rows";
+
+const noEdit = () => {};
+
+function PlanCanvas({
+  project,
+  view,
+  label,
+}: {
+  project: YokeProject;
+  view: "repeat" | "whole";
+  label: string;
+}) {
+  const [zoom, setZoom] = useState(25);
+  const [fitRequest, setFitRequest] = useState(1);
+  return (
+    <figure>
+      <figcaption>{label}</figcaption>
+      <div
+        className="zoom-controls yoke-plan-zoom"
+        role="group"
+        aria-label={`${label} zoom`}
+      >
+        <button
+          type="button"
+          aria-label="Zoom out"
+          disabled={zoom <= 1}
+          onClick={() => setZoom(Math.max(1, Math.floor(zoom / 1.25)))}
+        >
+          −
+        </button>
+        <output aria-label="Preview zoom">{zoom}%</output>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          disabled={zoom >= 400}
+          onClick={() => setZoom(Math.min(400, Math.ceil(zoom * 1.25)))}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => setFitRequest((request) => request + 1)}
+        >
+          Fit preview
+        </button>
+      </div>
+      <YokeCanvas
+        project={project}
+        view={view}
+        zoom={zoom}
+        fitRequest={fitRequest}
+        onZoomChange={setZoom}
+        onPaint={noEdit}
+        onStrokeStart={noEdit}
+      />
+    </figure>
+  );
+}
 
 export function YokePlanDialog({
   document,
@@ -194,27 +252,17 @@ export function YokePlanDialog({
             ) : null}
             <div className="yoke-plan-comparison">
               {base?.yoke ? (
-                <figure>
-                  <figcaption>Original · unchanged</figcaption>
-                  <YokeCanvas
-                    project={base.yoke}
-                    view="repeat"
-                    zoom={100}
-                    onPaint={() => {}}
-                    onStrokeStart={() => {}}
-                  />
-                </figure>
-              ) : null}
-              <figure>
-                <figcaption>{base ? "Proposed" : "Your yoke"}</figcaption>
-                <YokeCanvas
-                  project={proposal}
-                  view={base ? "repeat" : "whole"}
-                  zoom={100}
-                  onPaint={() => {}}
-                  onStrokeStart={() => {}}
+                <PlanCanvas
+                  project={base.yoke}
+                  view="repeat"
+                  label="Original · unchanged"
                 />
-              </figure>
+              ) : null}
+              <PlanCanvas
+                project={proposal}
+                view={base ? "repeat" : "whole"}
+                label={base ? "Proposed" : "Your yoke"}
+              />
             </div>
             <details>
               <summary>Neckline short rows</summary>

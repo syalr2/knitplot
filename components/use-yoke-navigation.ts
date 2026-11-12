@@ -66,7 +66,7 @@ export function useYokeNavigation(
   }
   const fit = useEffectEvent(() => {
     const parent = canvas.current?.parentElement;
-    if (!enabled || !parent || view !== "repeat") return;
+    if (!enabled || !parent || view === "chart") return;
     anchor.current = null;
     options.onZoom?.(
       fitYokeZoom(
