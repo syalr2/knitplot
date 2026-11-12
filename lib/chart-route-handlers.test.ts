@@ -60,6 +60,14 @@ test("bad JSON and invalid stitches return 400 without database writes", async (
   );
   assert.equal(queries.length, 0);
 });
+test("cloud chart writes enforce the raw byte budget before validation", async () => {
+  const { handlers, queries } = fixture();
+  const oversized = () =>
+    request({ document: defaultDocument, padding: "é".repeat(2_000_000) });
+  assert.equal((await handlers.POST(oversized())).status, 413);
+  assert.equal((await handlers.PUT(oversized(), params)).status, 413);
+  assert.equal(queries.length, 0);
+});
 test("a missing revision cannot overwrite a cloud chart", async () => {
   const { handlers, queries } = fixture();
   assert.equal(
@@ -81,6 +89,12 @@ test("cloud writes require both ownership and the exact loaded revision", async 
   assert.ok(queries[0].values.includes(7));
   assert.ok(queries[0].values.includes("user-one"));
   assert.doesNotMatch(queries[0].text, /updated_at::text/);
+  assert.match(queries[0].text, /not \(document \? 'yoke'\)/);
+  assert.match(
+    queries[0].text,
+    /coalesce\(\(document->'yoke'->>'version'\)::integer,1\) <= \?::integer/,
+  );
+  assert.equal(queries[0].values.at(-1), false);
 });
 test("a stale revision returns 409, not successful last-writer-wins", async () => {
   const { handlers } = fixture([]);

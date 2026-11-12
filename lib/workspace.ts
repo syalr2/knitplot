@@ -3,11 +3,15 @@ import { cloneDocument, type ChartDocument } from "./chart";
 import {
   createPreviewSettings,
   knitProgressSchema,
+  clampKnitProgress,
   readChartDocument,
   type KnitProgress,
   type PreviewSettings,
 } from "./chart-schema";
 import { HttpError, isRecord } from "./http";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
+import { stringifyKnitplot } from "./yoke-program-wire";
 
 export const STORAGE_KEY = "colorwork-chart-v1";
 export const MAX_CHART_TABS = 8;
@@ -37,16 +41,58 @@ export function tabPayload(
     preview: tab.preview,
   };
 }
-export function tabSnapshot(
-  tab: Pick<ChartTab, "document" | "knitProgress" | "preview">,
-) {
-  return JSON.stringify(tabPayload(tab), (_key, value: unknown) =>
+const documentDigests = new WeakMap<ChartDocument, string>();
+const snapshotPrefix = "sha256-v1:";
+const digest = (value: string) =>
+  bytesToHex(sha256(new TextEncoder().encode(value)));
+
+function canonicalJson(input: unknown) {
+  return JSON.stringify(input, (_key, value: unknown) =>
     isRecord(value)
       ? Object.fromEntries(
-          Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, value[key]]),
         )
       : value,
   );
+}
+
+/** Cache immutable documents so progress updates and changes to other tabs
+ * don't walk an entire chart again. Sort keys because Postgres JSONB reorders them. */
+export function tabSnapshot(
+  tab: Pick<ChartTab, "document" | "knitProgress" | "preview">,
+) {
+  let documentDigest = documentDigests.get(tab.document);
+  if (!documentDigest) {
+    documentDigest = digest(
+      canonicalJson(JSON.parse(stringifyKnitplot(tab.document))),
+    );
+    documentDigests.set(tab.document, documentDigest);
+  }
+  return (
+    snapshotPrefix +
+    digest(canonicalJson([documentDigest, tab.knitProgress, tab.preview]))
+  );
+}
+
+function readCloudSnapshot(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  if (/^sha256-v1:[0-9a-f]{64}$/.test(value)) return value;
+  try {
+    // Hash the saved baseline, never the current document: it may have unsynced edits.
+    const saved: unknown = JSON.parse(value);
+    if (
+      !isRecord(saved) ||
+      !isRecord(saved.document) ||
+      !isRecord(saved.knitProgress) ||
+      !isRecord(saved.preview)
+    )
+      return undefined;
+    return tabSnapshot(saved as Parameters<typeof tabSnapshot>[0]);
+  } catch {
+    return undefined;
+  }
 }
 export function newChartTab(document: ChartDocument, id: string): ChartTab {
   return {
@@ -103,15 +149,10 @@ export function readWorkspace(value: unknown): {
         cloudId,
         cloudVersion:
           typeof raw.cloudVersion === "string" ? raw.cloudVersion : undefined,
-        cloudSnapshot:
-          typeof raw.cloudSnapshot === "string" ? raw.cloudSnapshot : undefined,
+        cloudSnapshot: readCloudSnapshot(raw.cloudSnapshot),
         document,
         preview: createPreviewSettings(raw.preview ?? {}),
-        knitProgress: {
-          ...progress,
-          row: Math.min(progress.row, document.height),
-          stitch: Math.min(progress.stitch, document.width),
-        },
+        knitProgress: clampKnitProgress(progress, document),
       });
     } catch {
       rejectedTabs += 1;

@@ -27,11 +27,15 @@ export type ConnectedLoop = {
   x: number;
   y: number;
   span: number;
+  /** Local vertical pitch relative to the chart's regular knit gauge. */
+  heightScale?: number;
   left?: number;
   right?: number;
   boundary: boolean;
   inferred?: boolean;
   angle: number;
+  /** Explicit yarn from a yoke instruction, not the chart symbol colour. */
+  yarn?: string;
 };
 export type ConnectedFabric = {
   document: ChartDocument;
@@ -260,7 +264,41 @@ export function connectedFabric(
       }
     }
   }
+  return settleConnectedFabric(document, rows, all, {
+    unresolvedRows: [...unresolved].sort((a, b) => a - b),
+    inferredRows: [...new Set(all.filter((n) => n.inferred).map((n) => n.row))],
+    inputCountDecreaseRows: adapted.rows,
+  });
+}
+
+/** Shared photographic layout relaxation. Yokes supply real connections and a
+ * laid-out starting pose; imported rectangular charts keep their existing path. */
+export function settleConnectedFabric(
+  document: ChartDocument,
+  rows: ConnectedLoop[][],
+  all: ConnectedLoop[],
+  diagnostics = {
+    unresolvedRows: [] as number[],
+    inferredRows: [] as number[],
+    inputCountDecreaseRows: [] as number[],
+  },
+  iterationLimit = Infinity,
+  circularPitch?: number,
+): ConnectedFabric {
+  const rowHeight = document.gaugeStitches / document.gaugeRows;
+  const pitch = circularPitch ?? rowHeight;
+  const hasOpenings = all.some(
+    (n) => n.action === "cast-on" || n.action === "bind-off",
+  );
   const rest = all.map((n) => ({ x: n.x, y: n.y }));
+  const circularSpacing =
+    circularPitch === undefined
+      ? undefined
+      : all.map((n) => {
+          const right = n.right === undefined ? undefined : all[n.right];
+          return right ? Math.hypot(right.x - n.x, right.y - n.y) : 1;
+        });
+  const anchor = circularSpacing ? 2 : 0.002;
   const children = all.map(() => [] as number[]);
   for (const n of all)
     if (n.kind !== "bar") for (const p of n.parents) children[p].push(n.id);
@@ -304,7 +342,10 @@ export function connectedFabric(
   // birth is supported between parents but does not consume either parent.
   for (
     let iteration = 0;
-    iteration < (needsRelaxation ? (all.length < 6000 ? 2400 : 700) : 0);
+    iteration <
+    (needsRelaxation
+      ? Math.min(iterationLimit, all.length < 6000 ? 2400 : 700)
+      : 0);
     iteration++
   ) {
     for (const n of all) {
@@ -312,7 +353,7 @@ export function connectedFabric(
         b = n.right === undefined ? n : all[n.right];
       const dx = b.x - a.x,
         dy = b.y - a.y,
-        len = Math.hypot(dx, dy) || 1;
+        len = Math.sqrt(dx * dx + dy * dy) || 1;
       tx[n.id] = dx / len;
       ty[n.id] = dy / len;
       let px = 0,
@@ -332,9 +373,9 @@ export function connectedFabric(
         nextY[n.id] = rest[n.id].y;
         continue;
       }
-      let x = rest[n.id].x * 0.002,
-        y = rest[n.id].y * 0.002,
-        w = 0.002;
+      let x = rest[n.id].x * anchor,
+        y = rest[n.id].y * anchor,
+        w = anchor;
       for (let side = 0; side < 2; side++) {
         const id = side === 0 ? n.left : n.right,
           sign = side === 0 ? 1 : -1;
@@ -342,25 +383,24 @@ export function connectedFabric(
         const other = all[id],
           dx = tx[n.id] + tx[id],
           dy = ty[n.id] + ty[id],
-          len = Math.hypot(dx, dy) || 1;
-        x += (other.x + (sign * dx) / len) * 6;
-        y += (other.y + (sign * dy) / len) * 6;
+          len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const spacing = circularSpacing?.[side === 0 ? id : n.id] ?? 1;
+        x += (other.x + (sign * dx * spacing) / len) * 6;
+        y += (other.y + (sign * dy * spacing) / len) * 6;
         w += 6;
       }
       if (n.parents.length) {
         const weight = n.kind === "bar" ? 1 : 8,
           offset = splitOffset[n.id];
-        x +=
-          (parentX[n.id] + ty[n.id] * rowHeight + tx[n.id] * offset) * weight;
-        y +=
-          (parentY[n.id] - tx[n.id] * rowHeight + ty[n.id] * offset) * weight;
+        x += (parentX[n.id] + ty[n.id] * pitch + tx[n.id] * offset) * weight;
+        y += (parentY[n.id] - tx[n.id] * pitch + ty[n.id] * offset) * weight;
         w += weight;
       }
       for (const id of children[n.id]) {
         const c = all[id],
           weight = 8 / c.parents.length;
-        x += (c.x - ty[id] * rowHeight + n.x - parentX[id]) * weight;
-        y += (c.y + tx[id] * rowHeight + n.y - parentY[id]) * weight;
+        x += (c.x - ty[id] * pitch + n.x - parentX[id]) * weight;
+        y += (c.y + tx[id] * pitch + n.y - parentY[id]) * weight;
         w += weight;
       }
       nextX[n.id] = n.x * 0.35 + (x / w) * 0.65;
@@ -383,16 +423,26 @@ export function connectedFabric(
     const left = n.left === undefined ? 1 : Math.hypot(n.x - a.x, n.y - a.y),
       right = n.right === undefined ? 1 : Math.hypot(b.x - n.x, b.y - n.y);
     const nearDecrease = decreases[n.row].some(
-      (other) => Math.abs(other.x - n.x) < 2.5,
+      (other) =>
+        (document.yoke
+          ? Math.abs(other.packed - n.packed)
+          : Math.abs(other.x - n.x)) < 2.5,
     );
     const spacing = Math.max(left, right);
-    n.span = nearDecrease
-      ? Math.max(1, Math.min(1.4, spacing + (spacing > 1.01 ? 0.08 : 0)))
-      : Math.max(0.85, Math.min(1.2, (left + right) / 2));
-    minX = Math.min(minX, n.x - n.span * 0.8);
-    maxX = Math.max(maxX, n.x + n.span * 0.8);
-    minY = Math.min(minY, n.y - rowHeight);
-    maxY = Math.max(maxY, n.y + rowHeight);
+    n.span = circularSpacing
+      ? Math.max(
+          0.35,
+          Math.min(3, nearDecrease ? spacing + 0.08 : (left + right) / 2),
+        )
+      : nearDecrease
+        ? Math.max(1, Math.min(1.4, spacing + (spacing > 1.01 ? 0.08 : 0)))
+        : Math.max(0.85, Math.min(1.2, (left + right) / 2));
+    const xMargin = n.span * 0.8;
+    const margin = Math.max(xMargin, rowHeight);
+    minX = Math.min(minX, n.x - (circularSpacing ? margin : xMargin));
+    maxX = Math.max(maxX, n.x + (circularSpacing ? margin : xMargin));
+    minY = Math.min(minY, n.y - (circularSpacing ? margin : rowHeight));
+    maxY = Math.max(maxY, n.y + (circularSpacing ? margin : rowHeight));
   }
   if (!all.length) {
     minX = 0;
@@ -408,8 +458,6 @@ export function connectedFabric(
     minY,
     width: maxX - minX,
     height: maxY - minY,
-    unresolvedRows: [...unresolved].sort((a, b) => a - b),
-    inferredRows: [...new Set(all.filter((n) => n.inferred).map((n) => n.row))],
-    inputCountDecreaseRows: adapted.rows,
+    ...diagnostics,
   };
 }

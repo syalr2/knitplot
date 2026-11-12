@@ -1,4 +1,5 @@
 "use client";
+import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 
 import Link from "next/link";
 import { ChangeEvent, RefObject, useEffect, useRef, useState } from "react";
@@ -26,6 +27,10 @@ type Props = {
   cloudSaveMessage: string;
   onSaveToCloud: () => Promise<void>;
   onImportPattern: () => void;
+  onNewBlank?: () => void;
+  onNewYoke?: () => void;
+  tabsFull?: boolean;
+  onNavigateAway?: (event: { preventDefault(): void }) => void;
 };
 
 type ProjectFile = {
@@ -202,6 +207,10 @@ export function ExportTools({
   cloudSaveMessage,
   onSaveToCloud,
   onImportPattern,
+  onNewBlank,
+  onNewYoke,
+  tabsFull,
+  onNavigateAway,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -237,7 +246,7 @@ export function ExportTools({
       document: cloneDocument(document),
     };
     downloadBlob(
-      new Blob([JSON.stringify(project, null, 2)], {
+      new Blob([stringifyKnitplot(project, 2)], {
         type: "application/json",
       }),
       fileName(document.name, "knitplot"),
@@ -289,7 +298,11 @@ export function ExportTools({
       !canvas.height ||
       canvas.dataset.previewState === "rendering"
     ) {
-      setMessage("The knitted preview is still loading.");
+      setMessage(
+        !canvas && document.yoke
+          ? "Choose an available view in Knitted up before downloading the preview."
+          : "The knitted preview is still loading.",
+      );
       return;
     }
     if (canvas.dataset.previewState === "error") {
@@ -336,7 +349,7 @@ export function ExportTools({
           ref={inputRef}
           className="visually-hidden"
           type="file"
-          accept=".knitplot,.colorwork.json,application/json"
+          accept=".knitplot,.knitplot-yoke,.colorwork.json,application/json"
           onChange={openProject}
         />
         <button
@@ -358,9 +371,32 @@ export function ExportTools({
             role="menu"
             aria-label="Project and export options"
           >
+            <p className="file-menu-section-label">New</p>
+            <button
+              role="menuitem"
+              disabled={tabsFull || !onNewBlank}
+              onClick={() => {
+                setOpen(false);
+                onNewBlank?.();
+              }}
+            >
+              Blank chart
+            </button>
+            <button
+              role="menuitem"
+              disabled={tabsFull || !onNewYoke}
+              onClick={() => {
+                setOpen(false);
+                onNewYoke?.();
+              }}
+            >
+              Circular yoke
+            </button>
+            <span className="file-menu-divider" />
             <p className="file-menu-section-label">On this device</p>
             <button
               role="menuitem"
+              disabled={!!document.yoke}
               onClick={() => {
                 setOpen(false);
                 onImportPattern();
@@ -405,12 +441,20 @@ export function ExportTools({
                             : "Save to My Charts"}
                       </button>
                     )}
-                    <Link role="menuitem" href="/my-charts">
+                    <Link
+                      role="menuitem"
+                      href="/my-charts"
+                      onNavigate={onNavigateAway}
+                    >
                       View My Charts
                     </Link>
                   </>
                 ) : (
-                  <Link role="menuitem" href="/sign-in">
+                  <Link
+                    role="menuitem"
+                    href="/sign-in"
+                    onNavigate={onNavigateAway}
+                  >
                     Sign in to use My Charts
                   </Link>
                 )}
@@ -423,7 +467,9 @@ export function ExportTools({
               aria-expanded={choosingChartImage}
               onClick={() => setChoosingChartImage((value) => !value)}
             >
-              Download chart image
+              {document.yoke
+                ? "Download repeat chart image"
+                : "Download chart image"}
             </button>
             {choosingChartImage ? (
               <div

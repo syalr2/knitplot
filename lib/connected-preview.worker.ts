@@ -1,4 +1,7 @@
 import { connectedFabric } from "./connected-preview";
+import { yokeFabric } from "./yoke-fabric-preview";
+import { yokeSweaterFabric } from "./yoke-sweater-preview";
+import { isYokeSweaterView } from "./yoke-preview-view";
 import type {
   PreviewLayoutRequest,
   PreviewLayoutResponse,
@@ -13,7 +16,14 @@ const scope = self as unknown as {
 scope.onmessage = ({ data }) => {
   try {
     scope.postMessage({
-      fabric: connectedFabric(data.document, data.repeats, data.mirrored),
+      fabric: data.document.yoke
+        ? isYokeSweaterView(data.yokeView)
+          ? yokeSweaterFabric(
+              data.document,
+              data.yokeView === "sweater-front" ? "front" : "back",
+            )
+          : yokeFabric(data.document, data.yokeView, data.yokeRepeat)
+        : connectedFabric(data.document, data.repeats, data.mirrored),
     });
   } catch (error) {
     scope.postMessage({

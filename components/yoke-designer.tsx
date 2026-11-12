@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import {
   calculateYokeTargets,
   defaultYokeMeasurements,
@@ -16,8 +16,13 @@ import {
 } from "@/lib/yoke-project";
 import type { YokeView } from "@/lib/yoke-layout";
 import { YokePlanner } from "./yoke-planner";
+import { YokeShortRowPlanner } from "./yoke-short-row-planner";
 import { YokeCanvas } from "./yoke-canvas";
+import { YokeStandardChart } from "./yoke-standard-chart";
 import { useYokeDraft } from "./use-yoke-draft";
+import { YokeMeasurementHelp } from "./yoke-measurement-help";
+import type { YokeField } from "@/lib/yoke-measurement-fields";
+import type { YokeMeasurementMode } from "@/lib/yoke-measurement-mode";
 
 const initial = createYokeProject(
   defaultYokeMeasurements,
@@ -27,7 +32,7 @@ const initial = createYokeProject(
   ),
 );
 export function YokeDesigner() {
-  const { project, setProject, ready, error } = useYokeDraft(initial);
+  const { project, setProject, ready, error, flush } = useYokeDraft(initial);
   const [view, setView] = useState<YokeView>("repeat");
   const [color, setColor] = useState(1);
   const [allRepeats, setAllRepeats] = useState(true);
@@ -35,12 +40,21 @@ export function YokeDesigner() {
   const [history, setHistory] = useState<YokeProject[]>([]);
   const [future, setFuture] = useState<YokeProject[]>([]);
   const [message, setMessage] = useState("");
+  const measurementInputId = useId();
+  const [measurementGuide, setMeasurementGuide] = useState<{
+    field: YokeField;
+    mode: YokeMeasurementMode;
+    source: YokeMeasurements;
+  } | null>(null);
+  const [guideOpen, setGuideOpen] = useState(true);
   const input = useRef<HTMLInputElement>(null);
   const latestProject = useRef(project);
   useLayoutEffect(() => {
     latestProject.current = project;
   }, [project]);
   const plan = calculateYokeTargets(project.measurements);
+  // Undo/import can restore a smaller palette than the previously selected index.
+  const activeColor = Math.min(color, project.palette.length - 1);
   function remember() {
     setHistory((old) => [...old.slice(-19), project]);
     setFuture([]);
@@ -59,10 +73,26 @@ export function YokeDesigner() {
     setMessage("");
   }
   function apply(measurements: YokeMeasurements, events: IncreaseEvent[]) {
-    replace({
+    const next = {
       ...createYokeProject(measurements, events),
       palette: project.palette,
-    });
+    };
+    if (
+      next.cells.length === project.cells.length &&
+      next.cells.every(
+        (row, index) => row.length === project.cells[index].length,
+      )
+    ) {
+      remember();
+      setProject({
+        ...next,
+        cells: project.cells,
+        ...(project.shortRows?.distances.length ===
+        calculateYokeTargets(measurements).shortRowPairs
+          ? { shortRows: project.shortRows }
+          : {}),
+      });
+    } else replace(next);
   }
   function download() {
     const url = URL.createObjectURL(
@@ -90,7 +120,20 @@ export function YokeDesigner() {
           <p>Development preview</p>
         </div>
         <nav>
-          <Link href="/">Chart maker</Link>
+          <Link
+            href="/"
+            onClick={(event) => {
+              if (
+                !flush() &&
+                !window.confirm(
+                  "Your yoke could not be saved. Stay here and download it to keep your work. Leave without saving?",
+                )
+              )
+                event.preventDefault();
+            }}
+          >
+            Chart maker
+          </Link>
           <button className="secondary-button" onClick={download}>
             Download yoke draft
           </button>
@@ -138,6 +181,43 @@ export function YokeDesigner() {
           measurements={project.measurements}
           events={project.events}
           onApply={apply}
+          inputId={measurementInputId}
+          onMeasurementFocus={(field, mode) => {
+            setMeasurementGuide({ field, mode, source: project.measurements });
+            setGuideOpen(true);
+          }}
+          measurementHelp={
+            <YokeMeasurementHelp
+              active={
+                measurementGuide?.source === project.measurements
+                  ? measurementGuide.field
+                  : "chest"
+              }
+              mode={
+                (measurementGuide?.source === project.measurements
+                  ? measurementGuide.mode
+                  : undefined) ??
+                project.measurements.measurementMode ??
+                "body"
+              }
+              open={guideOpen}
+              onOpen={setGuideOpen}
+              onSelect={(field) =>
+                document
+                  .getElementById(`${measurementInputId}-${field}`)
+                  ?.focus()
+              }
+            />
+          }
+        />
+        <YokeShortRowPlanner
+          key={JSON.stringify([project.measurements, project.shortRows])}
+          measurements={project.measurements}
+          setup={project.shortRows}
+          onApply={(shortRows) => {
+            remember();
+            setProject({ ...project, shortRows });
+          }}
         />
         <section className="yoke-panel yoke-drawing">
           <div className="yoke-summary">
@@ -156,19 +236,41 @@ export function YokeDesigner() {
             {(
               [
                 ["whole", "Whole yoke"],
+                ["front", "Half yoke"],
                 ["repeat", "One repeat"],
                 ["chart", "Standard chart"],
               ] as const
             ).map(([id, label]) => (
               <button
                 key={id}
-                className={view === id ? "primary-button" : "secondary-button"}
-                aria-pressed={view === id}
+                className={
+                  view === id || (id === "front" && view === "back")
+                    ? "primary-button"
+                    : "secondary-button"
+                }
+                aria-pressed={
+                  view === id || (id === "front" && view === "back")
+                }
                 onClick={() => setView(id)}
               >
                 {label}
               </button>
             ))}
+            {view === "front" || view === "back" ? (
+              <label>
+                Show
+                <select
+                  aria-label="Half-yoke side"
+                  value={view}
+                  onChange={(event) =>
+                    setView(event.target.value as "front" | "back")
+                  }
+                >
+                  <option value="front">Front-facing half</option>
+                  <option value="back">Back-facing half</option>
+                </select>
+              </label>
+            ) : null}
           </div>
           <div className="yoke-toolbar">
             {project.palette.map((hex, index) => (
@@ -176,7 +278,7 @@ export function YokeDesigner() {
                 <button
                   style={{ backgroundColor: hex }}
                   aria-label={`Paint with yarn colour ${index + 1}`}
-                  aria-pressed={color === index}
+                  aria-pressed={activeColor === index}
                   onClick={() => setColor(index)}
                 />
                 <input
@@ -242,21 +344,41 @@ export function YokeDesigner() {
             </label>
           </div>
           <p className="yoke-hint">
-            Design layout · warm lines mark increase rounds. Repeat and standard
+            Design layout · M1L/M1R cells mark increases. Repeat and standard
             views edit the first repeat; the whole-yoke view can edit any
             repeat.
           </p>
-          <YokeCanvas
-            project={project}
-            view={view}
-            zoom={zoom}
-            onStrokeStart={remember}
-            onPaint={(row, column) =>
-              setProject((current) =>
-                paintYoke(current, row, column, color, allRepeats),
-              )
-            }
-          />
+          {view === "front" || view === "back" ? (
+            <p className="yoke-hint">
+              A stitch-aligned half of the yoke, including parts of the
+              sleeves—not just the front or back body panel.
+            </p>
+          ) : null}
+          {view === "chart" ? (
+            <YokeStandardChart
+              project={project}
+              zoom={zoom}
+              selectedColor={activeColor}
+              onStrokeStart={remember}
+              onPaint={(row, column) =>
+                setProject((current) =>
+                  paintYoke(current, row, column, activeColor, allRepeats),
+                )
+              }
+            />
+          ) : (
+            <YokeCanvas
+              project={project}
+              view={view}
+              zoom={zoom}
+              onStrokeStart={remember}
+              onPaint={(row, column) =>
+                setProject((current) =>
+                  paintYoke(current, row, column, activeColor, allRepeats),
+                )
+              }
+            />
+          )}
           <details>
             <summary>Current shaping plan</summary>
             <ul>
@@ -276,7 +398,8 @@ export function YokeDesigner() {
             </p>
             <p>
               {plan.shortRowPairs} short-row pairs planned before colourwork;
-              not included in these full-round drawing views.
+              shown at the back neckline in Whole yoke view, separately from the
+              full chart rounds.
             </p>
           </details>
         </section>

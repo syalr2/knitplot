@@ -231,6 +231,7 @@ export function MyChartsLibrary({
           <div className="library-card-title">
             <h2>{chart.name}</h2>
             <span>
+              {chart.kind === "yoke" ? "Yoke · " : ""}
               {chart.width} × {chart.height} st
             </span>
           </div>
@@ -427,6 +428,7 @@ export function MyChartsLibrary({
                       </div>
                       <h2>{chart.name}</h2>
                       <span className="library-size">
+                        {chart.kind === "yoke" ? "Yoke · " : ""}
                         {chart.width} × {chart.height} st
                       </span>
                       <Palette colors={chart.palette} />

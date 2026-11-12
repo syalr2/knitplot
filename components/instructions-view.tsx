@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { YokeInstructionsSheet } from "./yoke-instructions-sheet";
 import {
   cellAspectRatio,
   ChartDocument,
@@ -364,8 +365,9 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
   );
   const instructionDocument = region.document;
   const rows = useMemo(
-    () => writtenRows(instructionDocument, settings),
-    [instructionDocument, settings],
+    () =>
+      open && !document.yoke ? writtenRows(instructionDocument, settings) : [],
+    [document.yoke, instructionDocument, open, settings],
   );
   const size = useMemo(
     () => finishedSize(instructionDocument),
@@ -426,256 +428,262 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
               </button>
             </div>
 
-            <div className="instruction-settings no-print">
-              <label>
-                Technique
-                <select
-                  value={settings.technique}
-                  onChange={(event) =>
-                    updateSetting(
-                      "technique",
-                      event.target.value as InstructionSettings["technique"],
-                    )
-                  }
-                >
-                  <option value="stranded">Stranded colourwork</option>
-                  <option value="intarsia">Intarsia</option>
-                  <option value="duplicate">Duplicate stitch</option>
-                </select>
-              </label>
-              {!isDuplicate ? (
+            {!document.yoke ? (
+              <div className="instruction-settings no-print">
                 <label>
-                  Construction
+                  Technique
                   <select
-                    value={settings.construction}
+                    value={settings.technique}
                     onChange={(event) =>
                       updateSetting(
-                        "construction",
-                        event.target
-                          .value as InstructionSettings["construction"],
+                        "technique",
+                        event.target.value as InstructionSettings["technique"],
                       )
                     }
                   >
-                    <option value="flat">Worked flat</option>
-                    <option value="round">In the round</option>
+                    <option value="stranded">Stranded colourwork</option>
+                    <option value="intarsia">Intarsia</option>
+                    <option value="duplicate">Duplicate stitch</option>
                   </select>
                 </label>
-              ) : null}
-              <label>
-                Pattern use
-                <select
-                  value={settings.patternUse}
-                  onChange={(event) =>
-                    updateSetting(
-                      "patternUse",
-                      event.target.value as InstructionSettings["patternUse"],
-                    )
-                  }
-                >
-                  <option value="single">Single motif</option>
-                  <option value="repeat">Repeating pattern</option>
-                </select>
-              </label>
-              <label className="instruction-trim-option">
-                <input
-                  type="checkbox"
-                  checked={settings.trimBackground}
-                  onChange={(event) =>
-                    updateSetting("trimBackground", event.target.checked)
-                  }
-                />
-                <span>
-                  <strong>Trim empty background</strong>
-                  <small>
-                    Crop the instruction chart to the smallest rectangle
-                    containing the colourwork.
-                  </small>
-                </span>
-              </label>
-              <label className="instruction-trim-option">
-                <input
-                  type="checkbox"
-                  checked={settings.showSymbols}
-                  onChange={(event) =>
-                    updateSetting("showSymbols", event.target.checked)
-                  }
-                />
-                <span>
-                  <strong>Show colour symbols</strong>
-                  <small>
-                    Add a distinct symbol to every chart cell and the colour key
-                    for easier grayscale printing.
-                  </small>
-                </span>
-              </label>
-              {settings.trimBackground && !region.hasDesign ? (
-                <p className="instruction-setting-note">
-                  Add at least one non-background stitch before trimming.
-                </p>
-              ) : null}
-              {settings.trimBackground &&
-              region.hasDesign &&
-              !region.trimmed ? (
-                <p className="instruction-setting-note">
-                  The design already reaches every outer edge, so there is no
-                  empty border to trim.
-                </p>
-              ) : null}
-              {settings.trimBackground &&
-              region.hasDesign &&
-              settings.patternUse === "repeat" ? (
-                <p className="instruction-setting-note">
-                  The trimmed width becomes the new repeat width, so any removed
-                  background spacing will not appear between repeats.
-                </p>
-              ) : null}
-            </div>
-
-            <article className="instruction-sheet">
-              <header className="instruction-title-block">
-                <p className="eyebrow">Colorwork knitting chart</p>
-                <h1>{document.name || "Untitled chart"}</h1>
-                <p>
-                  {instructionDocument.width} stitches ×{" "}
-                  {instructionDocument.height} rows · Approximately{" "}
-                  {size.width.toFixed(1)} × {size.height.toFixed(1)}{" "}
-                  {document.gaugeUnit}
-                </p>
-                {region.trimmed ? (
-                  <p className="instruction-crop-note">
-                    Trimmed from the original {document.width} ×{" "}
-                    {document.height} chart. The motif begins{" "}
-                    {region.leftOffset}{" "}
-                    {region.leftOffset === 1 ? "stitch" : "stitches"} from the
-                    left and {region.bottomOffset}{" "}
-                    {region.bottomOffset === 1 ? "row" : "rows"} from the
-                    bottom.
+                {!isDuplicate ? (
+                  <label>
+                    Construction
+                    <select
+                      value={settings.construction}
+                      onChange={(event) =>
+                        updateSetting(
+                          "construction",
+                          event.target
+                            .value as InstructionSettings["construction"],
+                        )
+                      }
+                    >
+                      <option value="flat">Worked flat</option>
+                      <option value="round">In the round</option>
+                    </select>
+                  </label>
+                ) : null}
+                <label>
+                  Pattern use
+                  <select
+                    value={settings.patternUse}
+                    onChange={(event) =>
+                      updateSetting(
+                        "patternUse",
+                        event.target.value as InstructionSettings["patternUse"],
+                      )
+                    }
+                  >
+                    <option value="single">Single motif</option>
+                    <option value="repeat">Repeating pattern</option>
+                  </select>
+                </label>
+                <label className="instruction-trim-option">
+                  <input
+                    type="checkbox"
+                    checked={settings.trimBackground}
+                    onChange={(event) =>
+                      updateSetting("trimBackground", event.target.checked)
+                    }
+                  />
+                  <span>
+                    <strong>Trim empty background</strong>
+                    <small>
+                      Crop the instruction chart to the smallest rectangle
+                      containing the colourwork.
+                    </small>
+                  </span>
+                </label>
+                <label className="instruction-trim-option">
+                  <input
+                    type="checkbox"
+                    checked={settings.showSymbols}
+                    onChange={(event) =>
+                      updateSetting("showSymbols", event.target.checked)
+                    }
+                  />
+                  <span>
+                    <strong>Show colour symbols</strong>
+                    <small>
+                      Add a distinct symbol to every chart cell and the colour
+                      key for easier grayscale printing.
+                    </small>
+                  </span>
+                </label>
+                {settings.trimBackground && !region.hasDesign ? (
+                  <p className="instruction-setting-note">
+                    Add at least one non-background stitch before trimming.
                   </p>
                 ) : null}
-              </header>
+                {settings.trimBackground &&
+                region.hasDesign &&
+                !region.trimmed ? (
+                  <p className="instruction-setting-note">
+                    The design already reaches every outer edge, so there is no
+                    empty border to trim.
+                  </p>
+                ) : null}
+                {settings.trimBackground &&
+                region.hasDesign &&
+                settings.patternUse === "repeat" ? (
+                  <p className="instruction-setting-note">
+                    The trimmed width becomes the new repeat width, so any
+                    removed background spacing will not appear between repeats.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
-              <PrintableChart
-                document={instructionDocument}
-                showSymbols={settings.showSymbols}
-              />
+            {document.yoke ? (
+              <YokeInstructionsSheet document={document} />
+            ) : (
+              <article className="instruction-sheet">
+                <header className="instruction-title-block">
+                  <p className="eyebrow">Colorwork knitting chart</p>
+                  <h1>{document.name || "Untitled chart"}</h1>
+                  <p>
+                    {instructionDocument.width} stitches ×{" "}
+                    {instructionDocument.height} rows · Approximately{" "}
+                    {size.width.toFixed(1)} × {size.height.toFixed(1)}{" "}
+                    {document.gaugeUnit}
+                  </p>
+                  {region.trimmed ? (
+                    <p className="instruction-crop-note">
+                      Trimmed from the original {document.width} ×{" "}
+                      {document.height} chart. The motif begins{" "}
+                      {region.leftOffset}{" "}
+                      {region.leftOffset === 1 ? "stitch" : "stitches"} from the
+                      left and {region.bottomOffset}{" "}
+                      {region.bottomOffset === 1 ? "row" : "rows"} from the
+                      bottom.
+                    </p>
+                  ) : null}
+                </header>
 
-              <section className="instruction-section instruction-overview">
-                <div>
-                  <strong>Technique</strong>
-                  <span>
-                    {settings.technique === "stranded"
-                      ? "Stranded colourwork"
-                      : settings.technique === "intarsia"
-                        ? "Intarsia"
-                        : "Duplicate stitch"}
-                  </span>
-                </div>
-                {!isDuplicate ? (
+                <PrintableChart
+                  document={instructionDocument}
+                  showSymbols={settings.showSymbols}
+                />
+
+                <section className="instruction-section instruction-overview">
                   <div>
-                    <strong>Construction</strong>
+                    <strong>Technique</strong>
                     <span>
-                      {settings.construction === "flat"
-                        ? "Worked flat"
-                        : "In the round"}
+                      {settings.technique === "stranded"
+                        ? "Stranded colourwork"
+                        : settings.technique === "intarsia"
+                          ? "Intarsia"
+                          : "Duplicate stitch"}
                     </span>
                   </div>
-                ) : null}
-                <div>
-                  <strong>Pattern</strong>
-                  <span>
-                    {settings.patternUse === "single"
-                      ? "Single motif"
-                      : `${instructionDocument.width}-stitch repeat`}
-                  </span>
-                </div>
-                <div>
-                  <strong>Gauge</strong>
-                  <span>
-                    {document.gaugeStitches} sts and {document.gaugeRows} rows
-                    over {document.gaugeMeasure} {document.gaugeUnit}
-                  </span>
-                </div>
-              </section>
-
-              <section className="instruction-section">
-                <h2>Colour key</h2>
-                <div className="instruction-colours">
-                  {document.palette.map((color, index) => (
-                    <div key={color.id}>
-                      <span
-                        className="instruction-swatch"
-                        style={{ background: color.hex }}
-                      />
-                      {settings.showSymbols ? (
-                        <b className="instruction-key-symbol">
-                          {PRINT_SYMBOLS[index] ?? "?"}
-                        </b>
-                      ) : null}
-                      <strong>{index === 0 ? "MC" : `CC${index}`}</strong>
+                  {!isDuplicate ? (
+                    <div>
+                      <strong>Construction</strong>
                       <span>
-                        {index === 0
-                          ? "Main/background colour"
-                          : `Contrast colour ${index}`}
+                        {settings.construction === "flat"
+                          ? "Worked flat"
+                          : "In the round"}
                       </span>
-                      <code>{color.hex.toUpperCase()}</code>
                     </div>
-                  ))}
-                </div>
-              </section>
+                  ) : null}
+                  <div>
+                    <strong>Pattern</strong>
+                    <span>
+                      {settings.patternUse === "single"
+                        ? "Single motif"
+                        : `${instructionDocument.width}-stitch repeat`}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>Gauge</strong>
+                    <span>
+                      {document.gaugeStitches} sts and {document.gaugeRows} rows
+                      over {document.gaugeMeasure} {document.gaugeUnit}
+                    </span>
+                  </div>
+                </section>
 
-              <section className="instruction-section">
-                <h2>How to work the chart</h2>
-                <p>{techniqueInstructions(settings)}</p>
-                <p>
-                  Begin with {unitName.toLowerCase()} 1 at the bottom of the
-                  chart.{" "}
-                  {isDuplicate
-                    ? "Follow each chart row from left to right, or embroider the duplicate stitches in any order that feels comfortable."
-                    : settings.construction === "round"
-                      ? "Read every round from right to left."
-                      : "Read right-side rows from right to left and wrong-side rows from left to right."}
-                  {settings.patternUse === "repeat"
-                    ? ` Repeat the full ${instructionDocument.width}-stitch chart across the work as needed.`
-                    : " Work the chart once, positioning the motif as required in your project."}
-                </p>
-              </section>
+                <section className="instruction-section">
+                  <h2>Colour key</h2>
+                  <div className="instruction-colours">
+                    {document.palette.map((color, index) => (
+                      <div key={color.id}>
+                        <span
+                          className="instruction-swatch"
+                          style={{ background: color.hex }}
+                        />
+                        {settings.showSymbols ? (
+                          <b className="instruction-key-symbol">
+                            {PRINT_SYMBOLS[index] ?? "?"}
+                          </b>
+                        ) : null}
+                        <strong>{index === 0 ? "MC" : `CC${index}`}</strong>
+                        <span>
+                          {index === 0
+                            ? "Main/background colour"
+                            : `Contrast colour ${index}`}
+                        </span>
+                        <code>{color.hex.toUpperCase()}</code>
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
-              <section className="instruction-section written-instructions">
-                <h2>
-                  Written{" "}
-                  {isDuplicate
-                    ? "rows"
-                    : settings.construction === "round"
-                      ? "rounds"
-                      : "rows"}
-                </h2>
-                <p className="instruction-note">
-                  {settings.technique === "duplicate"
-                    ? "Sequences are written in chart-reading order. Skip counts are base stitches left unembroidered; other counts are duplicate stitches worked in that colour."
-                    : showStitchMath
-                      ? "Sequences are written in working order. Colour counts show ordinary knit stitches; special stitch actions show their own abbreviations. The count beneath each row accounts for stitches consumed and produced by those actions."
-                      : "Sequences are written in working order. Each number is the number of stitches to work in that colour."}
-                </p>
-                <ol className="written-row-list">
-                  {rows.map((row) => (
-                    <li key={row.number}>
-                      <strong>
-                        {unitName} {row.number}
-                        {row.side ? ` (${row.side})` : ""}:
-                      </strong>{" "}
-                      {row.sequence}
-                      {showStitchMath ? (
-                        <small className="written-row-math">
-                          {row.startingStitches} sts in → {row.endingStitches}{" "}
-                          sts out (
-                          {row.change > 0 ? `+${row.change}` : row.change})
-                        </small>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            </article>
+                <section className="instruction-section">
+                  <h2>How to work the chart</h2>
+                  <p>{techniqueInstructions(settings)}</p>
+                  <p>
+                    Begin with {unitName.toLowerCase()} 1 at the bottom of the
+                    chart.{" "}
+                    {isDuplicate
+                      ? "Follow each chart row from left to right, or embroider the duplicate stitches in any order that feels comfortable."
+                      : settings.construction === "round"
+                        ? "Read every round from right to left."
+                        : "Read right-side rows from right to left and wrong-side rows from left to right."}
+                    {settings.patternUse === "repeat"
+                      ? ` Repeat the full ${instructionDocument.width}-stitch chart across the work as needed.`
+                      : " Work the chart once, positioning the motif as required in your project."}
+                  </p>
+                </section>
+
+                <section className="instruction-section written-instructions">
+                  <h2>
+                    Written{" "}
+                    {isDuplicate
+                      ? "rows"
+                      : settings.construction === "round"
+                        ? "rounds"
+                        : "rows"}
+                  </h2>
+                  <p className="instruction-note">
+                    {settings.technique === "duplicate"
+                      ? "Sequences are written in chart-reading order. Skip counts are base stitches left unembroidered; other counts are duplicate stitches worked in that colour."
+                      : showStitchMath
+                        ? "Sequences are written in working order. Colour counts show ordinary knit stitches; special stitch actions show their own abbreviations. The count beneath each row accounts for stitches consumed and produced by those actions."
+                        : "Sequences are written in working order. Each number is the number of stitches to work in that colour."}
+                  </p>
+                  <ol className="written-row-list">
+                    {rows.map((row) => (
+                      <li key={row.number}>
+                        <strong>
+                          {unitName} {row.number}
+                          {row.side ? ` (${row.side})` : ""}:
+                        </strong>{" "}
+                        {row.sequence}
+                        {showStitchMath ? (
+                          <small className="written-row-math">
+                            {row.startingStitches} sts in → {row.endingStitches}{" "}
+                            sts out (
+                            {row.change > 0 ? `+${row.change}` : row.change})
+                          </small>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              </article>
+            )}
 
             <div className="import-actions no-print">
               <button onClick={() => setOpen(false)}>Close</button>

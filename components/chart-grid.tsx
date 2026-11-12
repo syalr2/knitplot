@@ -24,6 +24,8 @@ type Props = {
   onSelectionChange: (selection: CellSelection | null) => void;
   onStrokeStart: () => void;
   onPaint: (row: number, column: number, flood: boolean) => void;
+  yarnOnly?: boolean;
+  onStrokeEnd?: () => void;
 };
 
 export function ChartGrid({
@@ -35,9 +37,12 @@ export function ChartGrid({
   onSelectionChange,
   onStrokeStart,
   onPaint,
+  yarnOnly = false,
+  onStrokeEnd,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drawing = useRef(false);
+  const strokeActive = useRef(false);
   const selecting = useRef(false);
   const selectionStart = useRef<{ row: number; column: number } | null>(null);
   const previousCell = useRef("");
@@ -87,6 +92,7 @@ export function ChartGrid({
       return;
     }
     onStrokeStart();
+    strokeActive.current = true;
     drawing.current = tool !== "fill";
     previousCell.current = `${cell.row}:${cell.column}`;
     onPaint(cell.row, cell.column, tool === "fill");
@@ -115,9 +121,12 @@ export function ChartGrid({
   }
 
   function endPointerAction() {
+    const finish = strokeActive.current;
+    strokeActive.current = false;
     drawing.current = false;
     selecting.current = false;
     selectionStart.current = null;
+    if (finish) onStrokeEnd?.();
   }
 
   const selectionBounds = selection
@@ -311,9 +320,11 @@ export function ChartGrid({
               : tool === "fill"
                 ? "Click an area to fill its yarn colour. Stitch symbols stay in place."
                 : tool === "select"
-                  ? "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action."
+                  ? yarnOnly
+                    ? "Drag a rectangle to fill, copy, cut, paste or move yarn colours."
+                    : "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action."
                   : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}
-          {document.stitchActions && !structureAction
+          {document.stitchActions && !structureAction && !yarnOnly
             ? " Use Remove stitch to erase symbols without changing yarn colours."
             : ""}
         </p>

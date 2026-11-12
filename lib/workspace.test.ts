@@ -7,6 +7,7 @@ import {
   readWorkspace,
   workspaceSave,
   tabSnapshot,
+  tabPayload,
 } from "./workspace";
 
 for (const version of [1, 2, 3, 4])
@@ -77,4 +78,26 @@ test("opening a clean cloud tab refreshes renamed or remotely updated content", 
   const opened = openCloudTab(workspaceSave([clean], "local"), remote);
   assert.equal(opened.tabs[0].id, "local");
   assert.equal(opened.tabs[0].document.name, "renamed");
+});
+
+test("legacy cloud snapshots migrate the saved baseline, not unsynced edits", () => {
+  const local = {
+    ...newChartTab(defaultDocument, "local"),
+    cloudId: "a21d4c9a-1122-4234-8234-123456789abc",
+  };
+  const baseline = JSON.stringify(tabPayload(local));
+  const edited = {
+    ...local,
+    document: { ...local.document, name: "unsynced" },
+    cloudSnapshot: baseline,
+  };
+  const saved = readWorkspace(workspaceSave([edited], edited.id)).workspace;
+  assert.equal(saved.tabs[0].cloudSnapshot, tabSnapshot(local));
+  assert.notEqual(saved.tabs[0].cloudSnapshot, tabSnapshot(saved.tabs[0]));
+  const remote = {
+    ...local,
+    id: "remote",
+    document: { ...local.document, name: "remote" },
+  };
+  assert.equal(openCloudTab(saved, remote).tabs[0].document.name, "unsynced");
 });

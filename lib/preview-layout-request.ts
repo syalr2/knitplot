@@ -1,10 +1,13 @@
 import type { ChartDocument } from "./chart";
 import type { ConnectedFabric } from "./connected-preview";
+import type { YokePreviewView } from "./yoke-preview-view";
 
 export type PreviewLayoutRequest = {
   document: ChartDocument;
   repeats: number;
   mirrored: boolean;
+  yokeView?: YokePreviewView;
+  yokeRepeat?: number;
 };
 export type PreviewLayoutResponse =
   | { fabric: ConnectedFabric; error?: never }
@@ -17,6 +20,8 @@ export function requestPreviewLayout(
   repeats: number,
   mirrored: boolean,
   signal: AbortSignal,
+  yokeView?: YokePreviewView,
+  yokeRepeat?: number,
 ): Promise<ConnectedFabric> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
@@ -81,6 +86,8 @@ export function requestPreviewLayout(
         document,
         repeats,
         mirrored,
+        yokeView,
+        yokeRepeat,
       } satisfies PreviewLayoutRequest);
     } catch (error) {
       cleanup();

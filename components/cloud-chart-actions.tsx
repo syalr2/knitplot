@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { type FormEvent, useState } from "react";
 
 import {
@@ -46,7 +47,7 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
         cloudSnapshot: tabSnapshot(payload),
       };
       const workspace = openCloudTab(saved, tab);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+      window.localStorage.setItem(STORAGE_KEY, stringifyKnitplot(workspace));
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- A full navigation restores the updated workspace rather than reusing a mounted editor.
       window.location.assign("/");
     } catch (caught) {
@@ -88,7 +89,7 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
               }
             : tab,
         );
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+        localStorage.setItem(STORAGE_KEY, stringifyKnitplot(workspace));
       }
       setBusy(null);
       router.refresh();

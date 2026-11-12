@@ -1,3 +1,4 @@
+import { stringifyKnitplot } from "./yoke-program-wire";
 import { HttpError, responseJson } from "./http";
 import { readCloudChartPayload } from "./cloud-charts";
 import { tabSnapshot, type tabPayload } from "./workspace";
@@ -31,7 +32,7 @@ export async function saveCloudChart(
       await transport(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, expectedVersion }),
+        body: stringifyKnitplot({ ...data, expectedVersion }),
         signal,
       }),
     );

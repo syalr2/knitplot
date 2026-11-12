@@ -25,7 +25,12 @@ export default defineConfig({
     },
     {
       name: "saving",
-      testMatch: ["saving.spec.ts", "yoke.spec.ts"],
+      testMatch: [
+        "saving.spec.ts",
+        "yoke.spec.ts",
+        "yoke-editor.spec.ts",
+        "yoke-preview.spec.ts",
+      ],
       use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:3109" },
     },
   ],
