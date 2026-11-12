@@ -46,7 +46,7 @@ export function YokeRepeatControls({
 
   return (
     <>
-      <div className="yoke-editing-scope">
+      <div className="yoke-editing-scope" data-tour="yoke-editing-scope">
         <label>
           Viewing&nbsp;repeat
           <select

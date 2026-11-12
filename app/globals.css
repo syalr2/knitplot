@@ -657,7 +657,7 @@ button:disabled {
 .tutorial-examples {
   display: grid;
   gap: 12px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .tutorial-example-card {
   background: #f4f1e9;
@@ -672,7 +672,11 @@ button:disabled {
   display: block;
   height: 160px;
   image-rendering: pixelated;
+  object-fit: contain;
   width: 100%;
+}
+.tutorial-example-card .tutorial-yoke-preview {
+  image-rendering: auto;
 }
 .tutorial-example-card > div {
   align-content: start;
@@ -704,6 +708,29 @@ button:disabled {
   justify-self: start;
   margin-top: auto;
 }
+.tutorial-example-card .tutorial-yoke-shortcut {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 7px;
+  min-height: 28px;
+  padding: 3px 6px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tutorial-example-card .tutorial-yoke-shortcut:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.tutorial-example-card .tutorial-yoke-shortcut:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}
 .tutorial-limit-note {
   color: #943f32;
   font-size: 11px;
@@ -716,6 +743,21 @@ button:disabled {
   pointer-events: none;
   position: fixed;
   z-index: 60;
+}
+.tour-layer-guided {
+  pointer-events: auto;
+}
+.yoke-tour-editor {
+  background: var(--panel);
+  inset: 0;
+  overflow: auto;
+  padding: 18px;
+  position: fixed;
+  z-index: 46;
+}
+.yoke-tour-editor > h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
 }
 .tour-dim {
   background: rgba(31, 36, 33, 0.62);
@@ -741,9 +783,17 @@ button:disabled {
   border-radius: 13px;
   box-shadow: 0 18px 48px rgba(28, 34, 30, 0.28);
   display: grid;
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
   padding: 17px;
   pointer-events: auto;
   position: fixed;
+}
+.tour-card.tour-card-centered {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(350px, calc(100vw - 24px));
 }
 .tour-card-progress {
   align-items: center;
@@ -5094,8 +5144,6 @@ select:focus {
     border-top: 0;
   }
   .tour-card {
-    max-height: calc(100vh - 24px);
-    overflow: auto;
     width: auto;
   }
 }

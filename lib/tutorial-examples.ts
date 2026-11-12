@@ -3,9 +3,16 @@ import {
   cloneDocument,
   defaultInstructionSettings,
 } from "@/lib/chart";
+import { yokeDocument } from "./yoke-document";
+import {
+  calculateYokeTargets,
+  defaultYokeMeasurements,
+  suggestYokeSchedule,
+} from "./yoke-plan";
+import { createYokeProject } from "./yoke-project";
 
 export type TutorialExample = {
-  id: "dutch-bunny" | "simple-repeat";
+  id: "dutch-bunny" | "simple-repeat" | "tidal-fish-yoke";
   title: string;
   description: string;
   document: ChartDocument;
@@ -135,6 +142,49 @@ const simpleRepeat = makeDocument({
   ],
 });
 
+// One repeat of the supplied chart, indexed by round from the neckline.
+const tidalFishRounds: Partial<Record<number, string>> = {
+  5: "2222222222222222",
+  7: "3333333333333333",
+  30: "00000000000000022200000000000000",
+  31: "00000000000000221200000000000000",
+  32: "00000000000000111111000000000000",
+  33: "00000220000011111111110000000000",
+  34: "0000000222001111121111111100000000000",
+  35: "0000000022211111211111110110000000000",
+  36: "0000000002211111211111111111000000000",
+  37: "0000000022211111211111111110000000000",
+  38: "0000000222001111121111111100000000000",
+  39: "0000000220000011111111110000000000000",
+  40: "0000000000000000111111000000000000000",
+  41: "0000000000000000022200000000000000000",
+  47: "00022000000002200000000220000000022000000",
+  48: "00200200000020020000002002000000200200000",
+  49: "22000020000200002000020000200002000020000",
+  50: "00000002002000000200200000020020000002002",
+  51: "00000000220000000022000000002200000000220",
+  55: "33333333333333333333333333333333333333333",
+  57: "22222222222222222222222222222222222222222",
+};
+
+function makeExampleYoke() {
+  const measurements = { ...defaultYokeMeasurements, repeats: 8 };
+  const plan = calculateYokeTargets(measurements);
+  const project = createYokeProject(
+    measurements,
+    suggestYokeSchedule(plan, measurements.repeats),
+  );
+  project.palette = ["#192e40", "#f3dec0", "#78b4aa", "#d49a55"];
+  project.cells = project.cells.map((row, index) => {
+    const motif = tidalFishRounds[index + 1];
+    if (!motif) return row;
+    return Array.from(motif.repeat(measurements.repeats), Number);
+  });
+  return yokeDocument(project, "Tidal Fish Yoke");
+}
+
+const tidalFishYoke = makeExampleYoke();
+
 export const tutorialExamples: TutorialExample[] = [
   {
     id: "dutch-bunny",
@@ -149,6 +199,13 @@ export const tutorialExamples: TutorialExample[] = [
     description: "A compact stranded motif designed to repeat.",
     document: simpleRepeat,
     previewRepeats: { x: 2, y: 2 },
+  },
+  {
+    id: "tidal-fish-yoke",
+    title: tidalFishYoke.name,
+    description: "Cream fish and sea-glass waves on a deep navy circular yoke.",
+    document: tidalFishYoke,
+    previewRepeats: { x: 1, y: 1 },
   },
 ];
 

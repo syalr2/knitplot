@@ -13,6 +13,93 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("first visit and Help offer the yoke tour and an editable example", async ({
+  context,
+}) => {
+  const page = await context.newPage();
+  await page.goto("/");
+  const welcome = page.getByRole("dialog", {
+    name: "Plot something wonderful.",
+  });
+  const example = welcome
+    .getByRole("article")
+    .filter({ hasText: "Tidal Fish Yoke" });
+  await expect(example.getByRole("img")).toBeVisible();
+  await welcome.getByRole("button", { name: "Show me around" }).click();
+  const yokeStep = page.getByRole("heading", {
+    name: "Open the Yoke Design Studio",
+  });
+  for (let i = 0; i < 9; i++) {
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await expect(yokeStep).toBeVisible();
+  await expect(page.getByText(/Choose File → Circular yoke/)).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Circular yoke", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Skip tour" }).click();
+  await page.setViewportSize({ width: 900, height: 440 });
+  await page.getByRole("button", { name: "Help and examples" }).click();
+  await example.getByRole("button", { name: "Yoke tutorial" }).click();
+  await expect(yokeStep).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Back", exact: true }),
+  ).toHaveCount(0);
+  for (const title of [
+    "Start with your measurements",
+    "Move or spread out increases",
+    "Preview the shape and short rows",
+    "Choose a drawing view",
+    "Choose which repeats to edit",
+    "Refine your shaping as you draw",
+  ]) {
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    const scene = page.locator("[data-yoke-tour-scene]");
+    await expect(scene).toBeAttached();
+    if (title === "Start with your measurements")
+      await expect(
+        scene.getByText("Measurement input", { exact: true }),
+      ).toBeVisible();
+    if (title === "Move or spread out increases")
+      await expect(
+        scene.locator('[data-tour="yoke-increase-schedule"]'),
+      ).toBeVisible();
+    if (title === "Preview the shape and short rows")
+      await expect(
+        scene.locator('[data-tour="yoke-short-rows"]'),
+      ).toBeVisible();
+    if (title === "Choose which repeats to edit")
+      await expect(
+        scene.locator('select[aria-label="Edit scope"]'),
+      ).toBeVisible();
+  }
+  const finish = page.getByRole("button", { name: "Start creating" });
+  const lastStep = page.getByRole("dialog", { name: "Tutorial step 7 of 7" });
+  await expect(lastStep).toBeInViewport({ ratio: 1 });
+  await expect(finish).toBeInViewport({ ratio: 1 });
+  await page.setViewportSize({ width: 390, height: 500 });
+  await expect(lastStep).toBeInViewport({ ratio: 1 });
+  await expect(finish).toBeInViewport({ ratio: 1 });
+  await finish.click();
+  await expect(page.locator("[data-yoke-tour-scene]")).toHaveCount(0);
+  await expect(page.getByRole("tab")).toHaveCount(1);
+  await page.getByRole("button", { name: "Help and examples" }).click();
+  await example.getByRole("button", { name: "Open example" }).click();
+  await expect(page.getByRole("textbox", { name: "Chart name" })).toHaveValue(
+    "Tidal Fish Yoke",
+  );
+  await expect(
+    page.getByRole("button", { name: "Whole yoke", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Untitled chart", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Yoke tutorial: drawing", { exact: true }),
+  ).toHaveCount(0);
+});
+
 test("anonymous editor supports draw, undo, redo, and immediate save/reload", async ({
   page,
 }) => {
