@@ -6,6 +6,17 @@ import pg from "pg";
 import { createChartHandlers } from "../../lib/chart-route-handlers.ts";
 import { defaultDocument } from "../../lib/chart.ts";
 import { defaultAccountAvatar } from "../../lib/account-preferences.ts";
+import { createYokeProject } from "../../lib/yoke-project.ts";
+import {
+  defaultYokeMeasurements,
+  calculateYokeTargets,
+  suggestYokeSchedule,
+} from "../../lib/yoke-plan.ts";
+import { yokeDocument } from "../../lib/yoke-document.ts";
+import { yokeProgramFromProject } from "../../lib/yoke-program-from-project.ts";
+import { withYokeProgram } from "../../lib/yoke-program-state.ts";
+import { reviseYokeStitches } from "../../lib/yoke-stitch-revision.ts";
+import { readCloudChartPayload } from "../../lib/cloud-charts.ts";
 
 // Never silently use DATABASE_URL: it may point at a real user's database.
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -234,6 +245,84 @@ test(
         [ownerId],
       );
       assert.equal(remaining.rows[0].count, 1);
+      const yoke = yokeDocument(
+        createYokeProject(
+          defaultYokeMeasurements,
+          suggestYokeSchedule(
+            calculateYokeTargets(defaultYokeMeasurements),
+            defaultYokeMeasurements.repeats,
+          ),
+        ),
+      );
+      const createdYoke = await (
+        await owner.POST(request({ document: yoke }))
+      ).json();
+      const yokeParams = { params: Promise.resolve({ id: createdYoke.id }) };
+      const flattened = { ...yoke };
+      delete flattened.yoke;
+      assert.equal(
+        (
+          await owner.PUT(
+            request({
+              document: flattened,
+              expectedVersion: createdYoke.version,
+            }),
+            yokeParams,
+          )
+        ).status,
+        409,
+      );
+      const kept = await (await owner.GET(request({}), yokeParams)).json();
+      assert.deepEqual(kept.document.yoke, yoke.yoke);
+      assert.equal(
+        (
+          await owner.PUT(
+            request({ document: yoke, expectedVersion: createdYoke.version }),
+            yokeParams,
+          )
+        ).status,
+        200,
+      );
+      const program = yokeProgramFromProject(yoke.yoke);
+      const round = program.rounds.length - 1;
+      const revised = yokeDocument(
+        withYokeProgram(
+          yoke.yoke,
+          reviseYokeStitches(program, [
+            {
+              round,
+              section: 0,
+              operation: program.rounds[round][0][2].id,
+              action: "ssk",
+            },
+          ]),
+        ),
+      );
+      const createdRevision = await (
+        await owner.POST(request({ document: revised }))
+      ).json();
+      const revisionParams = {
+        params: Promise.resolve({ id: createdRevision.id }),
+      };
+      assert.equal(
+        (
+          await owner.PUT(
+            request({
+              document: yoke,
+              expectedVersion: createdRevision.version,
+            }),
+            revisionParams,
+          )
+        ).status,
+        409,
+      );
+      const restored = await (
+        await owner.GET(request({}), revisionParams)
+      ).json();
+      assert.deepEqual(
+        readCloudChartPayload(restored).document.yoke,
+        revised.yoke,
+      );
     } finally {
       // Only this test's random user records in the guarded disposable database.
       await pool.query(

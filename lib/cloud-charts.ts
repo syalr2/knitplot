@@ -1,14 +1,19 @@
 import {
   readChartDocument,
   knitProgressSchema,
+  clampKnitProgress,
   previewSettingsSchema,
 } from "./chart-schema";
-import { HttpError, isRecord } from "./http";
+import { HttpError, isRecord, readJsonObject } from "./http";
+
+export const readCloudChartRequest = (request: Request) =>
+  readJsonObject(request, {
+    bytes: 4_000_000,
+    message: "The chart data was too large.",
+  });
 
 export function readCloudChartPayload(value: unknown) {
   if (!isRecord(value)) throw new HttpError("The chart data was not valid.");
-  if (JSON.stringify(value).length > 2_000_000)
-    throw new HttpError("The chart data was too large.", 413);
   const progress = knitProgressSchema.safeParse(value.knitProgress ?? {});
   const preview = previewSettingsSchema.safeParse(value.preview ?? {});
   if (!progress.success || !preview.success)
@@ -16,11 +21,7 @@ export function readCloudChartPayload(value: unknown) {
   const document = readChartDocument(value.document);
   return {
     document,
-    knitProgress: {
-      ...progress.data,
-      row: Math.min(progress.data.row, document.height),
-      stitch: Math.min(progress.data.stitch, document.width),
-    },
+    knitProgress: clampKnitProgress(progress.data, document),
     preview: preview.data,
   };
 }

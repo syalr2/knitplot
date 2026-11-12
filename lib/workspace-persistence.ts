@@ -1,6 +1,7 @@
 import type { WorkspaceSave } from "./workspace";
 import { STORAGE_KEY } from "./workspace";
 import { HttpError } from "./http";
+import { stringifyKnitplot } from "./yoke-program-wire";
 
 export class WorkspacePersistence {
   private blocked = false;
@@ -19,7 +20,7 @@ export class WorkspacePersistence {
         "Your workspace changed in another window. Download this chart from File before reloading to avoid losing either copy.",
       );
     }
-    const serialized = JSON.stringify(workspace);
+    const serialized = stringifyKnitplot(workspace);
     this.storage.setItem(STORAGE_KEY, serialized);
     this.expected = serialized;
   }

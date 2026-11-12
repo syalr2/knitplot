@@ -3,6 +3,11 @@
 import { RefObject, useEffect, useRef, useState } from "react";
 import { ChartDocument, StitchAction } from "@/lib/chart";
 import { requestPreviewLayout } from "@/lib/preview-layout-request";
+import type { ConnectedFabric, ConnectedLoop } from "@/lib/connected-preview";
+import {
+  isYokeSweaterView,
+  type YokePreviewView,
+} from "@/lib/yoke-preview-view";
 import { makeReliefSource, makeStitchSprite } from "./knit-preview";
 
 type Props = {
@@ -15,7 +20,37 @@ type Props = {
   showDiagnostics?: boolean;
   /** Diagnostic sample scale; editor uses its normal automatic size. */
   stitchSize?: number;
+  yokeView?: YokePreviewView;
+  yokeRepeat?: number;
 };
+
+/** A yarn-coloured backing under each visible loop closes subpixel seams
+ * without painting across real openings or outside the garment. */
+function paintSweaterBacking(
+  ctx: CanvasRenderingContext2D,
+  fabric: ConnectedFabric,
+  unit: number,
+  bleed: number,
+  rowHeight: number,
+) {
+  for (const row of fabric.rows)
+    for (const node of row) {
+      if (!node.yarn || node.action === "bind-off") continue;
+      const w = node.span * unit * 1.09;
+      const h = rowHeight * (node.heightScale ?? 1) * 1.12;
+      ctx.save();
+      ctx.translate(
+        bleed + (node.x - fabric.minX) * unit,
+        bleed + (node.y - fabric.minY) * unit,
+      );
+      ctx.rotate(node.angle);
+      ctx.fillStyle = node.yarn;
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.15);
+      ctx.fill();
+      ctx.restore();
+    }
+}
 
 export function ConnectedKnitPreview({
   document,
@@ -26,18 +61,56 @@ export function ConnectedKnitPreview({
   canvasRef,
   showDiagnostics = true,
   stitchSize,
+  yokeView,
+  yokeRepeat,
 }: Props) {
   const internalRef = useRef<HTMLCanvasElement>(null),
     ref = canvasRef ?? internalRef;
   const [status, setStatus] = useState("Rendering…");
   const [failed, setFailed] = useState(false);
+  const yokeFrames = useRef<{
+    document: ChartDocument;
+    frames: Map<
+      string,
+      { canvas: HTMLCanvasElement; width: number; height: number }
+    >;
+  } | null>(null);
   const reflect =
     repeatStyle === undefined ? mirrored : repeatStyle === "mirrored";
   const down = Math.max(1, Math.min(3, Math.round(repeatY) || 1));
   useEffect(() => {
+    function display(canvas: HTMLCanvasElement, width: number, height: number) {
+      const target = ref.current;
+      if (!target) return;
+      target.width = canvas.width;
+      target.height = canvas.height;
+      target.style.width = `${Math.min(width, 1400)}px`;
+      target.style.height = "auto";
+      target.style.aspectRatio = `${width}/${height}`;
+      const context = target.getContext("2d");
+      if (!context) throw new Error("Canvas is unavailable.");
+      // Rotate the actual output pixels so the PNG also has the neckline up.
+      if (yokeView && !isYokeSweaterView(yokeView))
+        context.setTransform(-1, 0, 0, -1, canvas.width, canvas.height);
+      context.drawImage(canvas, 0, 0);
+      context.resetTransform();
+      target.dataset.previewState = "ready";
+    }
+    const key = `${yokeView}:${yokeRepeat}:${stitchSize}:${repeatX}:${down}:${reflect}:${window.devicePixelRatio}`;
+    if (yokeView && yokeFrames.current?.document !== document)
+      yokeFrames.current = { document, frames: new Map() };
+    const frames = yokeView ? yokeFrames.current?.frames : undefined;
+    const cached = frames?.get(key);
+    if (cached && frames) {
+      frames.delete(key);
+      frames.set(key, cached);
+      display(cached.canvas, cached.width, cached.height);
+      setStatus("");
+      setFailed(false);
+      return;
+    }
     const controller = new AbortController();
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset UI status when starting a cancellable worker/canvas render, not derived chart data.
     setStatus("Rendering…");
     setFailed(false);
     if (ref.current) ref.current.dataset.previewState = "rendering";
@@ -50,6 +123,8 @@ export function ConnectedKnitPreview({
           repeatX,
           reflect,
           controller.signal,
+          yokeView,
+          yokeRepeat,
         );
         if (cancelled || !ref.current) return;
         const source = makeReliefSource(image);
@@ -76,11 +151,13 @@ export function ConnectedKnitPreview({
           height = Math.ceil(
             (fabric.height + (down - 1) * verticalPitch) * unit + bleed * 2,
           );
+        // Keep both full-sweater sides in the same bounded preview cache.
+        const renderLimit = isYokeSweaterView(yokeView) ? 2400 : 3600;
         const scale = Math.min(
           2,
           window.devicePixelRatio || 1,
-          3600 / width,
-          3600 / height,
+          renderLimit / width,
+          renderLimit / height,
         );
         // Paint a staging canvas, then commit atomically. Cancelling a refresh
         // must not leave half a swatch in the visible preview or PNG export.
@@ -91,9 +168,13 @@ export function ConnectedKnitPreview({
         ctx.scale(scale, scale);
         ctx.fillStyle = "white";
         ctx.fillRect(0, 0, width, height);
+        if (isYokeSweaterView(yokeView))
+          paintSweaterBacking(ctx, fabric, unit, bleed, rowHeight);
         const palette = new Map(document.palette.map((c) => [c.id, c.hex]));
         const sprites = new Map(),
           masks = new Map();
+        const rowDistance = (a: ConnectedLoop, b: ConnectedLoop) =>
+          document.yoke ? Math.abs(a.packed - b.packed) : Math.abs(a.x - b.x);
         let lastYield = performance.now();
         for (let tile = down - 1; tile >= 0; tile--)
           for (let r = fabric.rows.length - 1; r >= 0; r--) {
@@ -115,13 +196,14 @@ export function ConnectedKnitPreview({
                 lastYield = performance.now();
               }
               const hex =
+                node.yarn ??
                 palette.get(fabric.document.cells[r]?.[node.column]) ??
                 document.palette[0]?.hex ??
                 "#f2eadf";
               const nearby = special.reduce<typeof node | undefined>(
                 (best, n) =>
-                  Math.abs(n.x - node.x) < 2.1 &&
-                  (!best || Math.abs(n.x - node.x) < Math.abs(best.x - node.x))
+                  rowDistance(n, node) < 2.1 &&
+                  (!best || rowDistance(n, node) < rowDistance(best, node))
                     ? n
                     : best,
                 undefined,
@@ -143,24 +225,31 @@ export function ConnectedKnitPreview({
                     ? 1.08
                     : 1;
               const hScale =
-                node.action === "cast-on"
+                (node.heightScale ?? 1) *
+                (node.action === "cast-on"
                   ? 0.72
                   : node.action === "bind-off"
                     ? 0.5
-                    : 1;
+                    : 1);
               const span = Math.round(node.span * widthScale * 16) / 16,
                 renderWidth = unit * span;
-              const offsets = node.parents.map((id) => {
-                const parent = fabric.loops[id];
-                return (
-                  Math.round(
-                    (((parent.x - node.x) * Math.cos(node.angle) +
-                      (parent.y - node.y) * Math.sin(node.angle)) /
-                      span) *
-                      16,
-                  ) / 16
+              const offsets = node.parents
+                .map((id) => {
+                  const parent = fabric.loops[id];
+                  return (
+                    Math.round(
+                      (((parent.x - node.x) * Math.cos(node.angle) +
+                        (parent.y - node.y) * Math.sin(node.angle)) /
+                        span) *
+                        16,
+                    ) / 16
+                  );
+                })
+                .map((offset) =>
+                  document.yoke
+                    ? Math.max(-2.5, Math.min(2.5, offset))
+                    : offset,
                 );
-              });
               // Reflected vertical tiles are decorative pattern repeats, not
               // another working sequence with reversed stitch ancestry.
               const sources = verticalMirror
@@ -171,7 +260,7 @@ export function ConnectedKnitPreview({
               // Sample the photo in knitting order, using actual loop positions
               // rather than placeholder chart columns. Inserting an unworked
               // chart cell must not introduce a new photographic fibre seam.
-              const photoRow = document.height - 1 - r;
+              const photoRow = fabric.rows.length - 1 - r;
               const col = node.packed % document.width,
                 tileCol = mirror ? document.width - 1 - col : col;
               const sprite = makeStitchSprite(
@@ -187,11 +276,12 @@ export function ConnectedKnitPreview({
                 sources,
               );
               const verticalOffset =
-                node.action === "cast-on"
+                (node.heightScale ?? 1) *
+                (node.action === "cast-on"
                   ? rowHeight * 0.28
                   : node.action === "bind-off"
                     ? rowHeight * 0.08
-                    : 0;
+                    : 0);
               const localY = node.y - fabric.minY;
               ctx.save();
               ctx.translate(
@@ -212,16 +302,20 @@ export function ConnectedKnitPreview({
             }
           }
         if (cancelled || !ref.current) return;
-        const target = ref.current;
-        target.width = canvas.width;
-        target.height = canvas.height;
-        target.style.width = `${Math.min(width, 1400)}px`;
-        target.style.height = "auto";
-        target.style.aspectRatio = `${width}/${height}`;
-        const targetContext = target.getContext("2d");
-        if (!targetContext) throw new Error("Canvas is unavailable.");
-        targetContext.drawImage(canvas, 0, 0);
-        target.dataset.previewState = "ready";
+        display(canvas, width, height);
+        if (frames) {
+          // Bound backing-store memory even when browsing many repeats.
+          frames.set(key, { canvas, width, height });
+          let pixels = [...frames.values()].reduce(
+            (sum, frame) => sum + frame.canvas.width * frame.canvas.height,
+            0,
+          );
+          for (const [oldKey, frame] of frames) {
+            if (frames.size <= 5 && pixels <= 12_000_000) break;
+            frames.delete(oldKey);
+            pixels -= frame.canvas.width * frame.canvas.height;
+          }
+        }
         setStatus(
           [
             fabric.unresolvedRows.length
@@ -262,7 +356,7 @@ export function ConnectedKnitPreview({
       image.onload = null;
       image.onerror = null;
     };
-  }, [document, repeatX, down, reflect, stitchSize, ref]);
+  }, [document, repeatX, down, reflect, stitchSize, ref, yokeView, yokeRepeat]);
   return (
     <div>
       <div

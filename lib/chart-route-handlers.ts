@@ -1,7 +1,8 @@
+import { stringifyKnitplot } from "./yoke-program-wire";
 import type { getViewer as ViewerGetter } from "./auth";
 import type { getDatabase as DatabaseGetter } from "./db";
 import { HttpError, errorResponse, readJsonObject, isUuid } from "./http";
-import { readCloudChartPayload } from "./cloud-charts";
+import { readCloudChartPayload, readCloudChartRequest } from "./cloud-charts";
 import { hasValidRequestOrigin } from "./security/origin";
 import { readCloudRevision } from "./cloud-revision";
 
@@ -66,7 +67,7 @@ export function createChartHandlers(dependencies: {
     const { id } = await params;
     if (!isUuid(id)) return errorResponse("That chart was not found.", 404);
     try {
-      const body = await readJsonObject(request);
+      const body = await readCloudChartRequest(request);
       const payload = readCloudChartPayload(body);
       const version = readCloudRevision(body.expectedVersion);
       if (version === undefined)
@@ -74,9 +75,11 @@ export function createChartHandlers(dependencies: {
       const integerVersion = typeof version === "number" ? version : null;
       const legacyTimestamp = typeof version === "string" ? version : null;
       const name = payload.document.name.trim() || "Untitled chart";
-      const documentJson = JSON.stringify(payload.document);
+      const documentJson = stringifyKnitplot(payload.document);
       const progressJson = JSON.stringify(payload.knitProgress);
       const previewJson = JSON.stringify(payload.preview);
+      // Older clients drop unknown document fields. A matching revision must not
+      // let them replace a complete yoke with its flattened one-repeat projection.
       const rows = (await sql`
       update knitplot_charts set
         name = ${name}, document = ${documentJson}::jsonb, knit_progress = ${progressJson}::jsonb,
@@ -85,6 +88,8 @@ export function createChartHandlers(dependencies: {
         case when ${integerVersion}::integer is not null
           then version = ${integerVersion}::integer
           else updated_at = ${legacyTimestamp}::timestamptz end
+        and coalesce((document->'yoke'->>'version')::integer,1) <= ${payload.document.yoke?.version ?? 1}::integer
+        and (not (document ? 'yoke') or ${Boolean(payload.document.yoke)}::boolean)
       returning id, version, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
     `) as Array<Record<string, unknown>>;
       const data = rows[0];
@@ -180,9 +185,11 @@ export function createChartHandlers(dependencies: {
       return errorResponse("Cloud chart storage is not configured.", 503);
 
     try {
-      const payload = readCloudChartPayload(await readJsonObject(request));
+      const payload = readCloudChartPayload(
+        await readCloudChartRequest(request),
+      );
       const name = payload.document.name.trim() || "Untitled chart";
-      const documentJson = JSON.stringify(payload.document);
+      const documentJson = stringifyKnitplot(payload.document);
       const progressJson = JSON.stringify(payload.knitProgress);
       const previewJson = JSON.stringify(payload.preview);
       const rows = (await sql`

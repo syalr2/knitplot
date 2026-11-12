@@ -1,0 +1,539 @@
+.yoke-designer {
+  max-width: 1600px;
+  margin: auto;
+  padding: 24px;
+}
+.yoke-plan-dialog {
+  width: min(1250px, 95vw);
+  max-width: 1250px;
+  max-height: 92vh;
+  overflow: auto;
+}
+.yoke-plan-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.yoke-plan-comparison figure {
+  min-width: 0;
+  margin: 0;
+}
+.yoke-plan-comparison figcaption {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.yoke-transfer-options {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.yoke-transfer-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 20px 8px 0;
+}
+.yoke-gauge-field {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0;
+}
+.yoke-gauge-field input,
+.yoke-gauge-field select {
+  min-width: 0;
+  width: 100%;
+}
+.yoke-gauge-panel .yoke-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 12px;
+}
+.yoke-gauge-panel .yoke-update-gauge {
+  font-size: 12px;
+  min-height: 32px;
+  width: 100%;
+}
+.yoke-gauge-panel .text-button {
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 8px;
+  text-align: left;
+}
+.yoke-editing-scope .secondary-button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.editor > .yoke-view-tabs {
+  margin: 0;
+  padding: 16px 20px 6px;
+}
+.yoke-editor-panel .yoke-view-tabs {
+  gap: 12px 18px;
+}
+.yoke-editor-panel .yoke-view-tabs > select {
+  font-size: 12px;
+  min-height: 32px;
+  width: auto;
+}
+.yoke-editor-panel .yoke-repeat-toggle {
+  margin-left: 0;
+  font-size: 12px;
+  width: auto;
+}
+.yoke-plan-summary p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0;
+}
+.yoke-plan-summary p:first-child {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+.yoke-plan-summary button {
+  font-size: 12px;
+  min-height: 32px;
+  margin-top: 6px;
+}
+.yoke-zoom-controls select {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 32px;
+  padding: 3px;
+  width: 65px;
+}
+.yoke-header,
+.yoke-header nav,
+.yoke-toolbar,
+.yoke-view-tabs,
+.yoke-summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.yoke-header {
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.yoke-header h1 {
+  font-size: 25px;
+  margin: 0;
+}
+.yoke-header h1 span {
+  color: var(--accent-deep);
+}
+.yoke-header p {
+  margin: 5px 0;
+  font-size: 12px;
+}
+.yoke-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.yoke-short-row-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.yoke-short-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.yoke-short-row-map {
+  display: block;
+  max-width: 700px;
+  width: 100%;
+  margin: 20px auto;
+  font: 12px sans-serif;
+  fill: var(--ink);
+}
+.yoke-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 0;
+}
+.yoke-planner-measurements {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+.yoke-planner-measurements .yoke-measurement-guide {
+  position: static;
+}
+.yoke-panel h2 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+.yoke-panel h3 {
+  font-size: 17px;
+  margin: 20px 0 8px;
+}
+.yoke-panel p,
+.yoke-panel li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.yoke-panel .yoke-hint,
+.yoke-panel small {
+  color: #686658;
+  font-size: 12px;
+}
+.yoke-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.yoke-panel .yoke-fields label {
+  display: flex;
+  flex-direction: column;
+}
+.yoke-panel label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.yoke-panel input:not([type="checkbox"]):not([type="color"]),
+.yoke-panel select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  font: inherit;
+}
+.yoke-panel small {
+  line-height: 1.4;
+}
+.yoke-measurement-control {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 12px;
+}
+.yoke-panel .yoke-measurement-toggle {
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  white-space: normal;
+}
+.yoke-measurement-toggle .knit-toggle-track {
+  flex-shrink: 0;
+}
+.yoke-measurement-toggle input:not(:checked) ~ span:last-child,
+.yoke-measurement-toggle:has(input:checked) > span:first-child {
+  color: var(--muted);
+  font-weight: 400;
+}
+.yoke-schedule > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr 30px;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.yoke-summary {
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.yoke-toolbar {
+  margin-top: 16px;
+}
+.yoke-toolbar label {
+  display: flex;
+  align-items: center;
+}
+.yoke-colour {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.yoke-colour button {
+  border: 2px solid transparent;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+.yoke-colour button[aria-pressed="true"] {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}
+.yoke-colour input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+}
+.yoke-canvas-scroll {
+  width: 100%;
+  overflow: auto;
+  background: white;
+  border-radius: 8px;
+  max-height: 75vh;
+}
+.yoke-editing-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 12px 20px;
+  font-size: 13px;
+}
+.yoke-editing-scope label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.yoke-repeat-notice {
+  font-size: 13px;
+  margin: 0;
+  padding: 0 20px 12px;
+  color: #675b47;
+}
+.yoke-selection-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+.yoke-selection-tools button {
+  font-size: 12px;
+  min-height: 30px;
+}
+.yoke-canvas-scroll canvas {
+  display: block;
+  max-width: none;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+.yoke-canvas-navigable {
+  height: min(70vh, 700px);
+  overscroll-behavior: contain;
+}
+.yoke-canvas-navigable canvas {
+  margin-inline: auto;
+}
+.yoke-repeat-navigation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 12px;
+  padding: 0;
+}
+.yoke-repeat-navigation > button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.yoke-drawing details {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.yoke-measurement-help {
+  margin: 12px 0;
+  font-size: 12px;
+}
+.yoke-measurement-help svg {
+  display: block;
+  max-width: 260px;
+  margin: 8px auto;
+}
+.yoke-schedule-editor fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  min-width: 0;
+}
+.yoke-schedule-editor legend {
+  font-size: 12px;
+  font-weight: 600;
+}
+.yoke-schedule-editor label {
+  margin-bottom: 8px;
+}
+.yoke-schedule-editor small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-bottom: 8px;
+}
+.yoke-standard-chart {
+  min-width: 0;
+}
+.yoke-pending-shaping {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 20px 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--accent-soft);
+  font-size: 12px;
+}
+.yoke-pending-shaping button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.yoke-measurement-guide {
+  margin-bottom: 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #faf8f1;
+}
+.yoke-measurement-guide summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.yoke-measurement-diagrams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.yoke-measurement-diagrams figure {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 340px;
+}
+.yoke-measurement-diagrams figcaption {
+  font-size: 13px;
+  text-align: center;
+  padding: 8px 0;
+}
+.yoke-measurement-diagrams svg {
+  width: 100%;
+  display: block;
+}
+.measurement-outline {
+  fill: #ece9df;
+  stroke: #5b6258;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.measurement-lines {
+  fill: none;
+  stroke: #bba78c;
+  stroke-width: 1.8;
+}
+.measurement-lines.is-active {
+  stroke: #b45439;
+  stroke-width: 3;
+}
+.measurement-point {
+  cursor: pointer;
+}
+.measurement-point circle {
+  fill: #fff;
+  stroke: #7b8979;
+  stroke-width: 1.5;
+}
+.measurement-point text {
+  fill: #334c44;
+  font: 600 13px sans-serif;
+}
+.measurement-point.is-active circle,
+.measurement-point:focus circle {
+  fill: #334c44;
+  stroke: #334c44;
+}
+.measurement-point.is-active text,
+.measurement-point:focus text {
+  fill: white;
+}
+.measurement-point[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.measurement-labels {
+  fill: #555c50;
+  font: 11px sans-serif;
+}
+.measurement-detail {
+  align-self: start;
+}
+.measurement-detail p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.measurement-guide-selection {
+  border-left: 3px solid #b45439;
+  padding: 8px 12px;
+  margin: 12px 0;
+}
+.measurement-guide-selection p {
+  margin: 6px 0 0;
+}
+.measurement-guide-legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.measurement-guide-legend button {
+  font-size: 11px;
+  padding: 6px 9px;
+}
+.measurement-guide-legend button[aria-pressed="true"] {
+  color: white;
+  background: #334c44;
+}
+@media (max-width: 500px) {
+  .yoke-measurement-diagrams {
+    grid-template-columns: 1fr;
+  }
+}
+.yoke-rounding-review {
+  border: 1px solid #c79d63;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #fff8eb;
+}
+.yoke-rounding-review button {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  text-align: left;
+}
+.yoke-rounding-review label {
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .yoke-planner-measurements {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .yoke-planner-measurements .yoke-measurement-guide {
+    position: static;
+    grid-row: 1;
+  }
+  .yoke-workspace {
+    grid-template-columns: 1fr;
+  }
+  .yoke-designer {
+    padding: 12px;
+  }
+}

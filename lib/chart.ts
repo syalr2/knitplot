@@ -190,6 +190,7 @@ export const defaultInstructionSettings: InstructionSettings = {
 };
 
 export type ChartDocument = {
+  yoke?: import("./yoke-project").YokeProject;
   name: string;
   width: number;
   height: number;
@@ -773,6 +774,7 @@ export function finishedSize(document: ChartDocument) {
 export function cloneDocument(document: ChartDocument): ChartDocument {
   return {
     ...document,
+    ...(document.yoke ? { yoke: structuredClone(document.yoke) } : {}),
     instructions: { ...defaultInstructionSettings, ...document.instructions },
     guides: {
       symmetry: document.guides?.symmetry ?? "none",

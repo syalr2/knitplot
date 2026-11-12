@@ -16,19 +16,21 @@ import {
   rowStitchMath,
   rowStitchSteps,
   stitchActionAt,
-  stitchActionLabel,
   stitchActionMath,
   stitchActionSymbol,
   chartCellDisplayColor,
   copyStitchCellColors,
 } from "@/lib/chart";
-
-export type KnitProgress = {
-  row: number;
-  stitch: number;
-  trimBorder: boolean;
-  markerStyle: MarkerStyle;
-};
+import type { KnitProgress } from "@/lib/chart-schema";
+import { rowSequence, workedStepLabel } from "@/lib/knit-sequence";
+import {
+  moveYokeKnitStep,
+  moveYokeKnitPage,
+  yokeKnitModel,
+  yokeKnitPages,
+} from "@/lib/yoke-knit";
+import { planYokeShortRows, shortRowInstructions } from "@/lib/yoke-short-rows";
+export type { KnitProgress } from "@/lib/chart-schema";
 
 export type MarkerStyle = "none" | "flower" | "heart" | "star" | "yarn";
 
@@ -59,8 +61,8 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function majorColumnBoundary(column: number, width: number) {
-  return column > 0 && column < width && column % 10 === 0;
+function majorColumnBoundary(column: number, width: number, offset = 0) {
+  return column > 0 && column < width && (column + offset) % 10 === 0;
 }
 
 function majorRowBoundary(chartRow: number, height: number) {
@@ -71,57 +73,6 @@ function majorRowBoundary(chartRow: number, height: number) {
 function isRightToLeft(document: ChartDocument, row: number) {
   if (document.instructions.technique === "duplicate") return false;
   return document.instructions.construction === "round" || row % 2 === 1;
-}
-
-function rowSequence(document: ChartDocument, rowNumber: number) {
-  const source = rowStitchSteps(document, rowNumber);
-  const ordered = isRightToLeft(document, rowNumber)
-    ? [...source].reverse()
-    : source;
-  const labels = new Map(
-    document.palette.map((color, index) => [
-      color.id,
-      index === 0 ? "MC" : `CC${index}`,
-    ]),
-  );
-  if (document.instructions.technique === "duplicate")
-    labels.set(document.palette[0].id, "Skip");
-  return ordered.reduce<
-    Array<{
-      key: string;
-      colorId: string;
-      label: string;
-      count: number;
-      showCount: boolean;
-    }>
-  >((runs, step) => {
-    if (step.action !== "knit") {
-      const isEdgeAction =
-        step.action === "cast-on" || step.action === "bind-off";
-      const previous = runs[runs.length - 1];
-      if (isEdgeAction && previous?.key === step.action) previous.count += 1;
-      else
-        runs.push({
-          key: isEdgeAction ? step.action : `${step.action}-${step.column}`,
-          colorId: step.colorId,
-          label: stitchActionLabel(step.action),
-          count: 1,
-          showCount: isEdgeAction,
-        });
-      return runs;
-    }
-    const previous = runs[runs.length - 1];
-    if (previous?.key === step.colorId) previous.count += 1;
-    else
-      runs.push({
-        key: step.colorId,
-        colorId: step.colorId,
-        label: labels.get(step.colorId) ?? "?",
-        count: 1,
-        showCount: true,
-      });
-    return runs;
-  }, []);
 }
 
 function knitRegion(document: ChartDocument, shouldTrim: boolean) {
@@ -188,35 +139,119 @@ export function KnitMode({
     () => false,
   );
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const yoke = document.yoke;
+  const model = useMemo(() => (yoke ? yokeKnitModel(yoke) : null), [yoke]);
+  const sectionColumns = progress.sectionColumns ?? 100;
+  const pages = useMemo(
+    () => (yoke && model ? yokeKnitPages(yoke, model, sectionColumns) : null),
+    [yoke, model, sectionColumns],
+  );
+  const pageRounds = useMemo(
+    () =>
+      model && pages
+        ? model.rounds.map((round, r) => ({
+            ...round,
+            lengths: pages.map((page) => page.rows[r].steps.length),
+          }))
+        : null,
+    [model, pages],
+  );
+  const roundNumber = clamp(progress.row, 1, document.height);
+  const markerSourceSection = model?.identical ? 0 : (progress.section ?? 0);
+  const markerPage =
+    pages?.findIndex((page) =>
+      page.rows[roundNumber - 1].steps.some(
+        (step) =>
+          step.sourceSection === markerSourceSection &&
+          step.sourceStep === progress.stitch,
+      ),
+    ) ?? -1;
+  const requestedPage = clamp(
+    progress.viewSection ?? Math.max(0, markerPage),
+    0,
+    (pages?.length ?? 1) - 1,
+  );
+  const section =
+    pages && !pages[requestedPage].rows[roundNumber - 1].steps.length
+      ? pages.findIndex(
+          (page, index) =>
+            index > requestedPage && page.rows[roundNumber - 1].steps.length,
+        ) >= 0
+        ? pages.findIndex(
+            (page, index) =>
+              index > requestedPage && page.rows[roundNumber - 1].steps.length,
+          )
+        : Math.max(
+            0,
+            pages.findIndex((page) => page.rows[roundNumber - 1].steps.length),
+          )
+      : requestedPage;
+  const sectionChart = pages?.[section] ?? null;
+  const shortRows = useMemo(() => {
+    if (!yoke?.measurements.backRise) return null;
+    try {
+      const plan = planYokeShortRows(yoke.measurements, yoke.shortRows);
+      return plan.extraRows ? shortRowInstructions(plan) : null;
+    } catch {
+      return [
+        "Review the back-neck turns in Edit shaping before starting Round 1.",
+      ];
+    }
+  }, [yoke]);
   const region = useMemo(
-    () => knitRegion(document, progress.trimBorder),
+    () => knitRegion(document, !document.yoke && progress.trimBorder),
     [document, progress.trimBorder],
   );
-  const activeDocument = region.document;
+  const activeDocument = sectionChart?.document ?? region.document;
   const aspect = cellAspectRatio(activeDocument);
   const palette = new Map(
     activeDocument.palette.map((color) => [color.id, color.hex]),
   );
   const row = clamp(progress.row, 1, activeDocument.height);
-  const structural = hasStructuralStitches(activeDocument);
+  const structural = Boolean(yoke) || hasStructuralStitches(activeDocument);
   const rowSteps = rowStitchSteps(activeDocument, row);
-  const rowMath = rowStitchMath(activeDocument, row);
-  const orderedRowSteps = isRightToLeft(activeDocument, row)
-    ? [...rowSteps].reverse()
-    : rowSteps;
-  const stitch = clamp(progress.stitch, 0, orderedRowSteps.length);
+  const rowMath = model?.rounds[row - 1] ?? rowStitchMath(activeDocument, row);
+  const rightToLeft = !yoke && isRightToLeft(activeDocument, row);
+  const orderedRowSteps =
+    sectionChart?.rows[row - 1].steps ??
+    (rightToLeft ? [...rowSteps].reverse() : rowSteps);
+  const stitch = sectionChart
+    ? sectionChart.rows[row - 1].steps.findIndex(
+        (step) =>
+          step.sourceSection === markerSourceSection &&
+          step.sourceStep === progress.stitch,
+      ) + 1
+    : clamp(progress.stitch, 0, orderedRowSteps.length);
   const activeStep = stitch > 0 ? orderedRowSteps[stitch - 1] : undefined;
+  const activeStepLabel = activeStep
+    ? workedStepLabel(activeDocument, activeStep, Boolean(yoke))
+    : "";
   const activeStepMath = activeStep
     ? stitchActionMath(activeStep.action)
     : undefined;
   const rowIndex = activeDocument.height - row;
-  const rightToLeft = isRightToLeft(activeDocument, row);
   const markerColumn =
     stitch > 0 ? (orderedRowSteps[stitch - 1]?.column ?? -1) : -1;
   const markerX = (markerColumn + 0.5) * aspect;
   const marker =
     MARKERS.find((choice) => choice.id === progress.markerStyle) ?? MARKERS[1];
-  const sequence = rowSequence(activeDocument, row);
+  const sequence = rowSequence(activeDocument, orderedRowSteps, Boolean(yoke));
+  const position = { row, section, stitch };
+  const nextYokeStep =
+    pageRounds && pages
+      ? moveYokeKnitStep(pageRounds, pages.length, position, 1)
+      : null;
+  const previousYokeStep =
+    pageRounds && pages
+      ? moveYokeKnitStep(pageRounds, pages.length, position, -1)
+      : null;
+  const pageLengths = pageRounds?.map((round) => round.lengths);
+  const nextPage = pageLengths
+    ? moveYokeKnitPage(pageLengths, row, section, 1)
+    : null;
+  const previousPage = pageLengths
+    ? moveYokeKnitPage(pageLengths, row, section, -1)
+    : null;
   const isDuplicate = activeDocument.instructions.technique === "duplicate";
   const unitName = isDuplicate
     ? "Row"
@@ -280,21 +315,60 @@ export function KnitMode({
     };
   }, [keepScreenAwake, wakeLockSupported]);
 
-  function update(nextRow: number, nextStitch: number) {
+  function update(nextRow: number, nextStitch: number, nextSection = section) {
     const clampedRow = clamp(nextRow, 1, activeDocument.height);
-    const maximumStep = rowStitchSteps(activeDocument, clampedRow).length;
+    const maximumStep =
+      pageRounds?.[clampedRow - 1].lengths[nextSection] ??
+      rowStitchSteps(activeDocument, clampedRow).length;
+    if (pages) {
+      const page = pages[nextSection];
+      const local = clamp(nextStitch, 0, maximumStep);
+      const step = local
+        ? page.rows[clampedRow - 1].steps[local - 1]
+        : undefined;
+      onProgressChange({
+        ...progress,
+        shortRowNoteSeen: true,
+        row: clampedRow,
+        viewSection: nextSection,
+        section: step?.sourceSection ?? 0,
+        stitch: step?.sourceStep ?? 0,
+      });
+      return;
+    }
     onProgressChange({
       ...progress,
       row: clampedRow,
       stitch: clamp(nextStitch, 0, maximumStep),
+      ...(yoke ? { section: nextSection } : {}),
     });
   }
 
   function changeRow(amount: number) {
-    update(row + amount, 0);
+    const next = amount > 0 ? nextPage : previousPage;
+    if (next) {
+      navigate(next.row, next.section);
+      return;
+    }
+    update(row + amount, 0, 0);
+  }
+
+  function navigate(nextRow: number, nextSection: number) {
+    onProgressChange({
+      ...progress,
+      ...(yoke ? { shortRowNoteSeen: true } : {}),
+      row: nextRow,
+      viewSection: nextSection,
+      ...(nextRow !== row ? { section: 0, stitch: 0 } : {}),
+    });
   }
 
   function changeStitch(amount: number) {
+    const yokeStep = amount > 0 ? nextYokeStep : previousYokeStep;
+    if (yokeStep) {
+      update(yokeStep.row, yokeStep.stitch, yokeStep.section);
+      return;
+    }
     const next = stitch + amount;
     if (next > orderedRowSteps.length && row < activeDocument.height)
       update(row + 1, 0);
@@ -306,6 +380,14 @@ export function KnitMode({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      else if (
+        event.target instanceof HTMLElement &&
+        (event.target.closest(
+          "input, select, textarea, summary, [contenteditable=true]",
+        ) ||
+          (event.key === " " && event.target.closest("button")))
+      )
+        return;
       else if (event.key === "ArrowRight" || event.key === " ") changeStitch(1);
       else if (event.key === "ArrowLeft") changeStitch(-1);
       else if (event.key === "ArrowUp") changeRow(1);
@@ -316,6 +398,114 @@ export function KnitMode({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
+
+  const progressionControls = (
+    <div className="knit-row-controls">
+      <button
+        onClick={() => changeRow(-1)}
+        disabled={
+          previousPage
+            ? previousPage.row === row && previousPage.section === section
+            : row === 1
+        }
+      >
+        Previous{" "}
+        {previousPage?.row === row && previousPage.section !== section
+          ? "section"
+          : yoke
+            ? "round"
+            : "row"}
+      </button>
+      <button
+        className="primary-button"
+        onClick={() => changeRow(1)}
+        disabled={
+          nextPage
+            ? nextPage.row === row && nextPage.section === section
+            : row === activeDocument.height
+        }
+      >
+        Next{" "}
+        {nextPage?.row === row && nextPage.section !== section
+          ? "section"
+          : yoke
+            ? "round"
+            : "row"}
+      </button>
+    </div>
+  );
+  const sectionSizeControl =
+    model && pages ? (
+      <label className="knit-section-size">
+        Max columns per section
+        <select
+          value={sectionColumns}
+          onChange={(event) => {
+            const columns = Number(event.target.value);
+            const next = yokeKnitPages(yoke!, model, columns);
+            const anchor = pages[section];
+            const viewSection = next.findIndex(
+              (page) => page.start <= anchor.start && page.end > anchor.start,
+            );
+            onProgressChange({
+              ...progress,
+              sectionColumns: columns,
+              viewSection: Math.max(0, viewSection),
+            });
+          }}
+        >
+          {[50, 75, 100, 150, 200].map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+  const jumpControl =
+    model && pages ? (
+      <details className="knit-jump-control">
+        <summary>Jump to…</summary>
+        <div className="knit-jump-fields">
+          <label>
+            Round
+            <select
+              value={row}
+              onChange={(event) => {
+                const target = Number(event.target.value);
+                const first = pages.findIndex(
+                  (page) => page.rows[target - 1].steps.length,
+                );
+                navigate(target, Math.max(0, first));
+              }}
+            >
+              {Array.from({ length: document.height }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Section
+            <select
+              value={section}
+              onChange={(event) => navigate(row, Number(event.target.value))}
+            >
+              {pages.map((page, i) => (
+                <option
+                  key={i}
+                  value={i}
+                  disabled={!page.rows[row - 1].steps.length}
+                >
+                  {i + 1} / {pages.length}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </details>
+    ) : null;
 
   return (
     <section
@@ -333,6 +523,14 @@ export function KnitMode({
           <strong>
             {unitName} {row} of {activeDocument.height}
           </strong>
+          {pages && pages.length > 1 ? (
+            <span>
+              Section {section + 1} of {pages.length}
+            </span>
+          ) : null}
+          {markerPage >= 0 && markerPage !== section ? (
+            <span>Marker saved in section {markerPage + 1}</span>
+          ) : null}
           <span>
             {stitch > 0
               ? progress.markerStyle === "none"
@@ -388,6 +586,14 @@ export function KnitMode({
                       onClick={() => {
                         if (action === "no-stitch") return;
                         const nextRow = activeDocument.height - chartRowIndex;
+                        if (sectionChart) {
+                          const step =
+                            sectionChart.rows[nextRow - 1].atColumn.get(
+                              columnIndex,
+                            );
+                          if (step !== undefined) update(nextRow, step);
+                          return;
+                        }
                         const steps = rowStitchSteps(activeDocument, nextRow);
                         const orderedSteps = isRightToLeft(
                           activeDocument,
@@ -468,7 +674,11 @@ export function KnitMode({
                 <line
                   key={`column-${column}`}
                   className={
-                    majorColumnBoundary(column, activeDocument.width)
+                    majorColumnBoundary(
+                      column,
+                      activeDocument.width,
+                      sectionChart?.start,
+                    )
                       ? "major"
                       : undefined
                   }
@@ -521,7 +731,8 @@ export function KnitMode({
             ) : null}
             <g className="knit-mode-chart-labels" pointerEvents="none">
               {Array.from({ length: activeDocument.width }, (_, columnIndex) =>
-                (columnIndex + 1) % columnStep === 0 ? (
+                (columnIndex + 1 + (sectionChart?.start ?? 0)) % columnStep ===
+                0 ? (
                   <text
                     key={`column-label-${columnIndex}`}
                     x={(columnIndex + 0.5) * aspect}
@@ -529,7 +740,7 @@ export function KnitMode({
                     textAnchor="middle"
                     fontSize={labelSize}
                   >
-                    {columnIndex + 1}
+                    {columnIndex + 1 + (sectionChart?.start ?? 0)}
                   </text>
                 ) : null,
               )}
@@ -569,61 +780,91 @@ export function KnitMode({
               </label>
             </div>
           ) : null}
+          {sectionSizeControl}
+          {sectionChart ? (
+            <div className="knit-section-location">
+              <span>
+                Columns {sectionChart.start + 1}–{sectionChart.end}
+              </span>
+              {jumpControl}
+            </div>
+          ) : null}
           <div className="knit-mode-options">
-            <div
-              className={`knit-mode-settings-grid ${isDuplicate ? "single" : ""}`}
-            >
-              <label>
-                Technique
-                <select
-                  value={document.instructions.technique}
-                  onChange={(event) =>
-                    onSettingsChange({
-                      ...document.instructions,
-                      technique: event.target
-                        .value as InstructionSettings["technique"],
-                    })
-                  }
+            {model?.identical ? (
+              <p>
+                Work{" "}
+                {pages && pages.length > 1
+                  ? "all sections of this repeat"
+                  : "this repeat"}{" "}
+                {model.program.startingCounts.length} times per round.
+              </p>
+            ) : null}
+            {model && pages ? (
+              <>
+                {markerPage >= 0 && markerPage !== section ? (
+                  <button onClick={() => navigate(row, markerPage)}>
+                    Go to marker
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div
+                  className={`knit-mode-settings-grid ${isDuplicate ? "single" : ""}`}
                 >
-                  <option value="stranded">Stranded colourwork</option>
-                  <option value="intarsia">Intarsia</option>
-                  <option value="duplicate">Duplicate stitch</option>
-                </select>
-              </label>
-              {!isDuplicate ? (
-                <label>
-                  Construction
-                  <select
-                    value={document.instructions.construction}
+                  <label>
+                    Technique
+                    <select
+                      value={document.instructions.technique}
+                      onChange={(event) =>
+                        onSettingsChange({
+                          ...document.instructions,
+                          technique: event.target
+                            .value as InstructionSettings["technique"],
+                        })
+                      }
+                    >
+                      <option value="stranded">Stranded colourwork</option>
+                      <option value="intarsia">Intarsia</option>
+                      <option value="duplicate">Duplicate stitch</option>
+                    </select>
+                  </label>
+                  {!isDuplicate ? (
+                    <label>
+                      Construction
+                      <select
+                        value={document.instructions.construction}
+                        onChange={(event) =>
+                          onSettingsChange({
+                            ...document.instructions,
+                            construction: event.target
+                              .value as InstructionSettings["construction"],
+                          })
+                        }
+                      >
+                        <option value="flat">Worked flat</option>
+                        <option value="round">In the round</option>
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+                <label className="knit-trim-option">
+                  <input
+                    type="checkbox"
+                    checked={progress.trimBorder}
                     onChange={(event) =>
-                      onSettingsChange({
-                        ...document.instructions,
-                        construction: event.target
-                          .value as InstructionSettings["construction"],
+                      onProgressChange({
+                        ...progress,
+                        trimBorder: event.target.checked,
+                        row: 1,
+                        stitch: 0,
                       })
                     }
-                  >
-                    <option value="flat">Worked flat</option>
-                    <option value="round">In the round</option>
-                  </select>
+                  />{" "}
+                  Trim empty border
                 </label>
-              ) : null}
-            </div>
-            <label className="knit-trim-option">
-              <input
-                type="checkbox"
-                checked={progress.trimBorder}
-                onChange={(event) =>
-                  onProgressChange({
-                    ...progress,
-                    trimBorder: event.target.checked,
-                    row: 1,
-                    stitch: 0,
-                  })
-                }
-              />{" "}
-              Trim empty border
-            </label>
+              </>
+            )}
             <div className="marker-picker" aria-label="Stitch marker style">
               <span>Marker</span>
               {MARKERS.map((choice) => (
@@ -642,14 +883,16 @@ export function KnitMode({
                 </button>
               ))}
             </div>
-            {progress.trimBorder && !region.trimmed ? (
+            {!yoke && progress.trimBorder && !region.trimmed ? (
               <small>There is no empty outer border to trim.</small>
             ) : null}
           </div>
           <p className="knit-direction">
-            {isDuplicate
-              ? "Follow each chart row from left to right, or work the duplicate stitches in any order that feels comfortable."
-              : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`}{" "}
+            {yoke
+              ? "Start at centre back and follow the chart left to right, in section order."
+              : isDuplicate
+                ? "Follow each chart row from left to right, or work the duplicate stitches in any order that feels comfortable."
+                : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`}{" "}
             {structural
               ? "Skip no-stitch cells and work special stitch actions as shown."
               : "Click any stitch to place your marker there."}
@@ -689,9 +932,10 @@ export function KnitMode({
             >
               <span>Current {structural ? "step" : "stitch"}</span>
               <strong>
-                {activeStep.action === "knit"
-                  ? `Work ${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId) === 0 ? "MC" : `CC${activeDocument.palette.findIndex((color) => color.id === activeStep.colorId)}`}`
-                  : stitchActionLabel(activeStep.action)}
+                {activeStep.action === "knit" && activeStepLabel !== "Skip"
+                  ? "Work "
+                  : ""}
+                {activeStepLabel}
               </strong>
               {activeStep.action === "purl" ? (
                 <small>Work one purl stitch as marked.</small>
@@ -699,9 +943,28 @@ export function KnitMode({
                 <small>
                   {activeStepMath.consumes} stitch
                   {activeStepMath.consumes === 1 ? "" : "es"} in →{" "}
-                  {activeStepMath.produces} out. This is not an MC stitch.
+                  {activeStepMath.produces} out.
+                  {yoke ? "" : " This is not an MC stitch."}
                 </small>
               ) : null}
+            </div>
+          ) : null}
+          {shortRows &&
+          !progress.shortRowNoteSeen &&
+          row === 1 &&
+          section === 0 &&
+          progress.stitch === 0 ? (
+            <div
+              className="knit-short-row-prelude"
+              aria-label="Before Round 1 instructions"
+            >
+              <p>First, work the back-neck short rows.</p>
+              <details>
+                <summary>Written steps</summary>
+                {shortRows.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </details>
             </div>
           ) : null}
           <div
@@ -710,53 +973,49 @@ export function KnitMode({
           >
             {sequence.map((run, index) => (
               <span
-                key={`${run.key}-${index}`}
-                className={run.key === run.colorId ? "" : "stitch-action"}
+                key={`${run.action}-${run.colorId}-${index}`}
+                className={run.action === "knit" ? "" : "stitch-action"}
               >
-                {run.key === run.colorId ? (
+                {run.action === "knit" ? (
                   <i style={{ background: palette.get(run.colorId) }} />
                 ) : null}
                 {run.label} {run.showCount ? run.count : ""}
               </span>
             ))}
           </div>
-          <div className="knit-row-controls">
-            <button onClick={() => changeRow(-1)} disabled={row === 1}>
-              Previous row
-            </button>
-            <button
-              className="primary-button"
-              onClick={() => changeRow(1)}
-              disabled={row === activeDocument.height}
-            >
-              Next row
-            </button>
-          </div>
+          {progressionControls}
           <div className="knit-step-controls">
             <button
               onClick={() => changeStitch(-1)}
-              disabled={row === 1 && stitch === 0}
+              disabled={
+                model
+                  ? previousYokeStep === position
+                  : row === 1 && stitch === 0
+              }
             >
               Previous {structural ? "step" : "stitch"}
             </button>
             <button
               onClick={() => changeStitch(1)}
               disabled={
-                row === activeDocument.height &&
-                stitch === orderedRowSteps.length
+                model
+                  ? nextYokeStep === position
+                  : row === activeDocument.height &&
+                    stitch === orderedRowSteps.length
               }
             >
               Next {structural ? "step" : "stitch"}
             </button>
           </div>
-          <button className="knit-reset" onClick={() => update(1, 0)}>
-            Start again from row 1
+          <button className="knit-reset" onClick={() => update(1, 0, 0)}>
+            Start again from {yoke ? "round" : "row"} 1
           </button>
           <p className="knit-keyboard-hint">
             Use the left and right arrow keys for{" "}
             {structural ? "steps" : "stitches"}, the up and down arrow keys for
-            rows, or press Space for the next {structural ? "step" : "stitch"}.
-            Your place is remembered for this chart.
+            {yoke ? "sections and rounds" : "rows"}, or press Space for the next{" "}
+            {structural ? "step" : "stitch"}. Your place is remembered for this
+            chart.
           </p>
         </aside>
       </div>

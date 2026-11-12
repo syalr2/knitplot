@@ -1,4 +1,5 @@
 export type ChartSummary = {
+  kind?: "yoke";
   id: string;
   name: string;
   width: number;
@@ -124,6 +125,7 @@ export function chartSummaryFromRow(
 
   const rawDate = new Date(String(row.updated_at ?? ""));
   return {
+    ...(record(document.yoke) ? { kind: "yoke" as const } : {}),
     id: String(row.id),
     name: String(row.name || document.name || "Untitled chart"),
     width,

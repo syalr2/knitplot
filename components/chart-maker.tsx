@@ -1,14 +1,24 @@
 "use client";
+import "@/app/yoke-designer/yoke.css";
 
 import Link from "next/link";
+import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { useSyncedDraft } from "@/components/use-synced-draft";
 import { ColourPalettePanel } from "@/components/colour-palette-panel";
 import { StitchPalettePanel } from "@/components/stitch-palette-panel";
 import { ChartMeasurementsPanel } from "@/components/chart-measurements-panel";
 import { AccountAvatar } from "@/components/account-avatar";
-import { SetStateAction, useEffect, useRef, useState } from "react";
+import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { AiChartGenerator } from "@/components/ai-chart-generator";
 import { ChartGrid } from "@/components/chart-grid";
+import { YokeEditor } from "@/components/yoke-editor";
+import { YokeKnittedPreview } from "@/components/yoke-knitted-preview";
+import { restoreYokeHistoryDocument } from "@/lib/yoke-history";
+import {
+  emptyStitchDraft,
+  type YokeStitchDraft,
+} from "@/components/use-yoke-stitches";
+import { YokePlanDialog } from "@/components/yoke-plan-dialog";
 import { ExportTools } from "@/components/export-tools";
 import { ImageImporter } from "@/components/image-importer";
 import { InstructionsView } from "@/components/instructions-view";
@@ -74,6 +84,7 @@ import { remember, travelHistory, type TabHistory } from "@/lib/history";
 import { useCloudSync } from "@/components/use-cloud-sync";
 import { responseJson } from "@/lib/http";
 import { tabSnapshot, workspaceSave } from "@/lib/workspace";
+import { samePreviewFabric } from "@/lib/preview-freshness";
 import { useLocalWorkspace } from "@/components/use-local-workspace";
 import { useCloudRecovery } from "@/components/use-cloud-recovery";
 const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
@@ -88,12 +99,14 @@ type ChartMakerProps = {
   viewer: Viewer | null;
   accountsEnabled: boolean;
   aiConnected: boolean;
+  localTestChart?: ChartDocument;
 };
 
 export function ChartMaker({
   viewer,
   accountsEnabled,
   aiConnected,
+  localTestChart,
 }: ChartMakerProps) {
   const [tabs, setTabs] = useState<ChartTab[]>([
     {
@@ -104,6 +117,30 @@ export function ChartMaker({
     },
   ]);
   const [activeTabId, setActiveTabId] = useState(INITIAL_TAB_ID);
+  const [yokeStitchDrafts, setYokeStitchDrafts] = useState<
+    Record<string, YokeStitchDraft>
+  >({});
+  const hasPendingYokeStitches = tabs.some(
+    (tab) => yokeStitchDrafts[tab.id]?.edits.length,
+  );
+  function confirmLeavingEditor(event: { preventDefault(): void }) {
+    if (
+      hasPendingYokeStitches &&
+      !window.confirm(
+        "You have unapplied shaping changes. Leave without applying them?",
+      )
+    )
+      event.preventDefault();
+  }
+  useEffect(() => {
+    if (!hasPendingYokeStitches) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasPendingYokeStitches]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const document = activeTab.document;
   const [tool, setTool] = useState<Tool>("pencil");
@@ -119,9 +156,7 @@ export function ChartMaker({
   });
   const [previewDocuments, setPreviewDocuments] = useState<
     Record<string, ChartDocument>
-  >({
-    [INITIAL_TAB_ID]: cloneDocument(defaultDocument),
-  });
+  >(() => ({ [INITIAL_TAB_ID]: tabs[0].document }));
   const preview = activeTab.preview;
   const previewDocument = previewDocuments[activeTabId] ?? document;
   const [chartZoom, setChartZoom] = useState(100);
@@ -129,6 +164,7 @@ export function ChartMaker({
   const [selectionClipboard, setSelectionClipboard] =
     useState<SelectionClipboard | null>(null);
   const [knitModeOpen, setKnitModeOpen] = useState(false);
+  const [newYokeOpen, setNewYokeOpen] = useState(false);
   const [patternImporterOpen, setPatternImporterOpen] = useState(false);
   const [dimensionDraft, setDimensionDraft] = useSyncedDraft(
     `${activeTabId}:${document.width}:${document.height}`,
@@ -183,7 +219,7 @@ export function ChartMaker({
       setActiveTabId(next.activeTabId);
       setPreviewDocuments((current) => ({
         ...current,
-        [incoming.id]: cloneDocument(incoming.document),
+        [incoming.id]: incoming.document,
       }));
       if (next.activeTabId !== activeTabId) prepareTabView(incoming.document);
     },
@@ -259,7 +295,7 @@ export function ChartMaker({
         );
         setPreviewDocuments(
           Object.fromEntries(
-            workspace.tabs.map((tab) => [tab.id, cloneDocument(tab.document)]),
+            workspace.tabs.map((tab) => [tab.id, tab.document]),
           ),
         );
         const active = workspace.tabs.find(
@@ -301,14 +337,14 @@ export function ChartMaker({
     if (!past.length) return;
     const next = travelHistory(history, document, "undo");
     setHistories((current) => ({ ...current, [activeTabId]: next.history }));
-    setDocument(next.document);
+    setDocument(restoreYokeHistoryDocument(document, next.document));
   }
 
   function redo() {
     if (!future.length) return;
     const next = travelHistory(history, document, "redo");
     setHistories((current) => ({ ...current, [activeTabId]: next.history }));
-    setDocument(next.document);
+    setDocument(restoreYokeHistoryDocument(document, next.document));
   }
 
   function paint(row: number, column: number, shouldFill: boolean) {
@@ -497,7 +533,8 @@ export function ChartMaker({
   function refreshPreview() {
     setPreviewDocuments((current) => ({
       ...current,
-      [activeTabId]: cloneDocument(document),
+      // Give the renderer a fresh reference so the button can also retry a failure.
+      [activeTabId]: { ...document },
     }));
     updatePreviewSettings({
       renderedRepeatX: preview.repeatX,
@@ -748,6 +785,11 @@ export function ChartMaker({
   }
 
   function openProject(nextDocument: ChartDocument) {
+    if (nextDocument.yoke || document.yoke) {
+      if (!addDocumentTab(cloneDocument(nextDocument)))
+        throw new Error("Close a chart tab before opening another project.");
+      return;
+    }
     commit(() => cloneDocument(nextDocument));
     setSelectedColor(nextDocument.palette[1]?.id ?? nextDocument.palette[0].id);
     setTool("pencil");
@@ -777,10 +819,9 @@ export function ChartMaker({
     prepareTabView(nextTab.document);
   }
 
-  function addTab() {
-    if (tabs.length >= MAX_CHART_TABS) return;
+  function addDocumentTab(nextDocument: ChartDocument) {
+    if (tabs.length >= MAX_CHART_TABS) return false;
     const id = `chart-${crypto.randomUUID()}`;
-    const nextDocument = cloneDocument(defaultDocument);
     setTabs((current) => [
       ...current,
       {
@@ -792,20 +833,24 @@ export function ChartMaker({
     ]);
     setPreviewDocuments((current) => ({
       ...current,
-      [id]: cloneDocument(nextDocument),
+      [id]: nextDocument,
     }));
     setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
     setActiveTabId(id);
     prepareTabView(nextDocument);
+    return true;
+  }
+  function addTab() {
+    addDocumentTab(cloneDocument(defaultDocument));
   }
 
   function duplicateTab() {
     if (tabs.length >= MAX_CHART_TABS) return;
     const id = `chart-${crypto.randomUUID()}`;
-    const nextDocument = cloneDocument({
+    const nextDocument = {
       ...document,
       name: `${document.name || "Untitled chart"} copy`,
-    });
+    };
     setTabs((current) => [
       ...current,
       {
@@ -817,7 +862,7 @@ export function ChartMaker({
     ]);
     setPreviewDocuments((current) => ({
       ...current,
-      [id]: cloneDocument(current[activeTabId] ?? document),
+      [id]: current[activeTabId] ?? document,
     }));
     setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
     setActiveTabId(id);
@@ -846,7 +891,7 @@ export function ChartMaker({
     ]);
     setPreviewDocuments((current) => ({
       ...current,
-      [id]: cloneDocument(example.document),
+      [id]: example.document,
     }));
     setHistories((current) => ({ ...current, [id]: { past: [], future: [] } }));
     setActiveTabId(id);
@@ -861,7 +906,7 @@ export function ChartMaker({
       const response = await fetch("/api/charts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: stringifyKnitplot({
           document,
           knitProgress: activeTab.knitProgress,
           preview: activeTab.preview,
@@ -946,6 +991,11 @@ export function ChartMaker({
       return;
     }
     setTabs((current) => current.filter((tab) => tab.id !== id));
+    setYokeStitchDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     setHistories((current) => {
       const next = { ...current };
       delete next[id];
@@ -965,11 +1015,16 @@ export function ChartMaker({
     setClosingTabId(null);
   }
 
+  const previewMatchesChart = useMemo(
+    () => samePreviewFabric(document, previewDocument),
+    [document, previewDocument],
+  );
   const previewOutdated =
-    JSON.stringify(document) !== JSON.stringify(previewDocument) ||
-    preview.repeatX !== preview.renderedRepeatX ||
-    preview.repeatY !== preview.renderedRepeatY ||
-    preview.repeatStyle !== preview.renderedRepeatStyle;
+    !previewMatchesChart ||
+    (!document.yoke &&
+      (preview.repeatX !== preview.renderedRepeatX ||
+        preview.repeatY !== preview.renderedRepeatY ||
+        preview.repeatStyle !== preview.renderedRepeatStyle));
   const knitProgress =
     tabs.find((tab) => tab.id === activeTabId)?.knitProgress ??
     defaultKnitProgress;
@@ -1060,21 +1115,47 @@ export function ChartMaker({
         </div>
         <div className="topbar-actions">
           <div className="workflow-actions" data-tour="workflow-actions">
+            {process.env.NODE_ENV === "development" && localTestChart ? (
+              <button
+                className="secondary-button"
+                disabled={
+                  !storageReady ||
+                  (tabs.length >= MAX_CHART_TABS &&
+                    !tabs.some(
+                      (tab) => tab.document.name === localTestChart.name,
+                    ))
+                }
+                title="Opens as a separate tab. Close an unused chart tab if the workspace is full."
+                onClick={() => {
+                  const existing = tabs.find(
+                    (tab) => tab.document.name === localTestChart.name,
+                  );
+                  if (existing) switchTab(existing.id);
+                  else openProject(localTestChart);
+                }}
+              >
+                Open Idun test chart
+              </button>
+            ) : null}
             <button
               className="primary-button knit-mode-button"
               onClick={() => setKnitModeOpen(true)}
             >
               Knit mode
             </button>
-            {viewer && aiConnected ? (
-              <AiChartGenerator
-                document={document}
-                onImport={importAiChart}
-                signedIn={true}
-                aiConnected={true}
-              />
+            {!document.yoke ? (
+              <>
+                {viewer && aiConnected ? (
+                  <AiChartGenerator
+                    document={document}
+                    onImport={importAiChart}
+                    signedIn={true}
+                    aiConnected={true}
+                  />
+                ) : null}
+                <ImageImporter document={document} onImport={importImage} />
+              </>
             ) : null}
-            <ImageImporter document={document} onImport={importImage} />
             <InstructionsView
               document={document}
               onSettingsChange={updateInstructionSettings}
@@ -1095,6 +1176,10 @@ export function ChartMaker({
             }
             onSaveToCloud={saveActiveChartToCloud}
             onImportPattern={() => setPatternImporterOpen(true)}
+            onNewBlank={addTab}
+            onNewYoke={() => setNewYokeOpen(true)}
+            tabsFull={tabs.length >= MAX_CHART_TABS}
+            onNavigateAway={confirmLeavingEditor}
           />
           <OnboardingTour
             tabsFull={tabs.length >= MAX_CHART_TABS}
@@ -1107,13 +1192,18 @@ export function ChartMaker({
                   <Link
                     className="account-chip"
                     href="/account"
+                    onNavigate={confirmLeavingEditor}
                     title={viewer.email ?? "Account"}
                   >
                     <AccountAvatar avatar={viewer.avatar} />
                   </Link>
                 </>
               ) : (
-                <Link className="header-link sign-in-link" href="/sign-in">
+                <Link
+                  className="header-link sign-in-link"
+                  href="/sign-in"
+                  onNavigate={confirmLeavingEditor}
+                >
                   Sign in
                 </Link>
               )}
@@ -1168,356 +1258,406 @@ export function ChartMaker({
       </div>
 
       <div className="workspace">
-        <aside className="sidebar panel">
-          <ColourPalettePanel
-            document={document}
-            selectedColor={selectedColor}
-            structureAction={structureAction}
-            setSelectedColor={setSelectedColor}
-            setStructureAction={setStructureAction}
-            setStitchPickerOpen={setStitchPickerOpen}
-            addColor={addColor}
-            changePaletteColor={changePaletteColor}
-            removeColor={removeColor}
-          />
-          <StitchPalettePanel
-            document={document}
-            structureAction={structureAction}
-            stitchPickerOpen={stitchPickerOpen}
-            stitchPalette={stitchPalette}
-            setStructureAction={setStructureAction}
-            setStitchPickerOpen={setStitchPickerOpen}
-            addStitchToPalette={addStitchToPalette}
-            selectStitchAction={selectStitchAction}
-            changeStitchColor={changeStitchColor}
-            removeStitchFromPalette={removeStitchFromPalette}
-            resetStitchColor={resetStitchColor}
-          />
-          <ChartMeasurementsPanel
-            document={document}
-            setDocument={setDocument}
-            dimensionDraft={dimensionDraft}
-            setDimensionDraft={setDimensionDraft}
-            gaugeDraft={gaugeDraft}
-            setGaugeDraft={setGaugeDraft}
-            applyGaugeDraft={applyGaugeDraft}
-            setResizeDialogOpen={setResizeDialogOpen}
-            dimensionsValid={dimensionsValid}
-            dimensionsChanged={dimensionsChanged}
-          />
-        </aside>
+        {document.yoke ? (
+          <>
+            <YokeEditor
+              key={activeTabId}
+              stitchDraft={yokeStitchDrafts[activeTabId] ?? emptyStitchDraft}
+              onStitchDraftChange={(next) =>
+                setYokeStitchDrafts((old) => ({ ...old, [activeTabId]: next }))
+              }
+              document={document}
+              onChange={setDocument}
+              onCreate={addDocumentTab}
+              onStrokeStart={rememberCurrent}
+              undo={undo}
+              redo={redo}
+              canUndo={past.length > 0}
+              canRedo={future.length > 0}
+              tabsFull={tabs.length >= MAX_CHART_TABS}
+              view={preview.yokeView ?? "chart"}
+              onViewChange={(yokeView) => updatePreviewSettings({ yokeView })}
+            >
+              <YokeKnittedPreview
+                document={previewDocument}
+                canvasRef={previewCanvasRef}
+                stale={previewOutdated}
+                onRefresh={refreshPreview}
+              />
+            </YokeEditor>
+          </>
+        ) : (
+          <>
+            <aside className="sidebar panel">
+              <ColourPalettePanel
+                document={document}
+                selectedColor={selectedColor}
+                structureAction={structureAction}
+                setSelectedColor={setSelectedColor}
+                setStructureAction={setStructureAction}
+                setStitchPickerOpen={setStitchPickerOpen}
+                addColor={addColor}
+                changePaletteColor={changePaletteColor}
+                removeColor={removeColor}
+              />
+              <StitchPalettePanel
+                document={document}
+                structureAction={structureAction}
+                stitchPickerOpen={stitchPickerOpen}
+                stitchPalette={stitchPalette}
+                setStructureAction={setStructureAction}
+                setStitchPickerOpen={setStitchPickerOpen}
+                addStitchToPalette={addStitchToPalette}
+                selectStitchAction={selectStitchAction}
+                changeStitchColor={changeStitchColor}
+                removeStitchFromPalette={removeStitchFromPalette}
+                resetStitchColor={resetStitchColor}
+              />
+              <ChartMeasurementsPanel
+                document={document}
+                setDocument={setDocument}
+                dimensionDraft={dimensionDraft}
+                setDimensionDraft={setDimensionDraft}
+                gaugeDraft={gaugeDraft}
+                setGaugeDraft={setGaugeDraft}
+                applyGaugeDraft={applyGaugeDraft}
+                setResizeDialogOpen={setResizeDialogOpen}
+                dimensionsValid={dimensionsValid}
+                dimensionsChanged={dimensionsChanged}
+              />
+            </aside>
 
-        <section className="editor panel">
-          <div className="panel-heading editor-heading">
-            <h1 className="visually-hidden">Chart editor</h1>
-            <div className="editor-actions">
-              <div
-                className="tool-group"
-                data-tour="drawing-tools"
-                aria-label="Drawing tools"
+            <div className="chart-stack">
+              <section className="editor panel">
+                <div className="panel-heading editor-heading">
+                  <h1 className="visually-hidden">Chart editor</h1>
+                  <div className="editor-actions">
+                    <div
+                      className="tool-group"
+                      data-tour="drawing-tools"
+                      aria-label="Drawing tools"
+                    >
+                      <button
+                        className={tool === "pencil" ? "active" : ""}
+                        onClick={() => {
+                          setTool("pencil");
+                          setStitchPickerOpen(false);
+                        }}
+                      >
+                        Draw
+                      </button>
+                      <button
+                        className={tool === "fill" ? "active" : ""}
+                        onClick={() => {
+                          setTool("fill");
+                          setStitchPickerOpen(false);
+                        }}
+                      >
+                        Fill
+                      </button>
+                      <button
+                        className={
+                          tool === "eraser" && !structureAction ? "active" : ""
+                        }
+                        onClick={() => {
+                          setTool("eraser");
+                          setStructureAction(null);
+                          setStitchPickerOpen(false);
+                        }}
+                      >
+                        Erase
+                      </button>
+                      <button
+                        className={tool === "select" ? "active" : ""}
+                        onClick={() => setTool("select")}
+                      >
+                        Select
+                      </button>
+                      {selection && !structureAction ? (
+                        <button
+                          className="selection-fill-button"
+                          onClick={fillSelection}
+                        >
+                          Fill selection
+                        </button>
+                      ) : null}
+                      {selection && structureAction ? (
+                        <button
+                          className="selection-fill-button"
+                          onClick={applyStructureToSelection}
+                        >
+                          Apply{" "}
+                          {
+                            stitchActionOptions.find(
+                              (option) => option.value === structureAction,
+                            )?.shortLabel
+                          }
+                        </button>
+                      ) : null}
+                      {selection ? (
+                        <button onClick={copySelection}>Copy</button>
+                      ) : null}
+                      {selection ? (
+                        <button onClick={cutSelection}>Cut</button>
+                      ) : null}
+                      {selectionClipboard?.tabId === activeTabId ? (
+                        <button
+                          onClick={pasteSelection}
+                          title="Paste at the top-left corner of the current selection"
+                        >
+                          Paste
+                        </button>
+                      ) : null}
+                      {selection ? (
+                        <span
+                          className="selection-move-controls"
+                          aria-label="Move selection"
+                        >
+                          <button
+                            aria-label="Move selection left"
+                            onClick={() => moveSelection(0, -1)}
+                          >
+                            ←
+                          </button>
+                          <button
+                            aria-label="Move selection up"
+                            onClick={() => moveSelection(-1, 0)}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            aria-label="Move selection down"
+                            onClick={() => moveSelection(1, 0)}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            aria-label="Move selection right"
+                            onClick={() => moveSelection(0, 1)}
+                          >
+                            →
+                          </button>
+                        </span>
+                      ) : null}
+                      {selection ? (
+                        <button onClick={() => setSelection(null)}>
+                          Deselect
+                        </button>
+                      ) : null}
+                      <button onClick={clearChart}>Clear</button>
+                    </div>
+                    <span className="toolbar-divider" aria-hidden="true" />
+                    <div
+                      className="transform-controls"
+                      aria-label={
+                        selection ? "Transform selection" : "Transform chart"
+                      }
+                    >
+                      <button
+                        aria-label={
+                          selection
+                            ? "Mirror selection left to right"
+                            : "Mirror chart left to right"
+                        }
+                        onClick={() => flipChart("horizontal")}
+                        title={
+                          selection
+                            ? "Mirror selection left to right"
+                            : "Mirror chart left to right"
+                        }
+                      >
+                        ↔
+                      </button>
+                      <button
+                        aria-label={
+                          selection
+                            ? "Flip selection upside down"
+                            : "Flip chart upside down"
+                        }
+                        onClick={() => flipChart("vertical")}
+                        title={
+                          selection
+                            ? "Flip selection upside down"
+                            : "Flip chart upside down"
+                        }
+                      >
+                        ↕
+                      </button>
+                      <button
+                        className="rotate-chart-button"
+                        aria-label={
+                          selection
+                            ? "Rotate selection 90 degrees clockwise"
+                            : "Rotate chart 90 degrees clockwise"
+                        }
+                        onClick={rotateChartClockwise}
+                        disabled={
+                          selection
+                            ? !selectionRotationFits()
+                            : document.width > MAX_CHART_ROWS ||
+                              document.height > MAX_CHART_STITCHES
+                        }
+                        title={
+                          selection
+                            ? selectionRotationFits()
+                              ? "Rotate selection 90° clockwise"
+                              : "The rotated selection would extend beyond the chart"
+                            : document.width > MAX_CHART_ROWS
+                              ? `Rotation would exceed ${MAX_CHART_ROWS} rows`
+                              : "Rotate chart 90° clockwise"
+                        }
+                      >
+                        90°
+                      </button>
+                    </div>
+                    <span className="toolbar-divider" aria-hidden="true" />
+                    <div className="undo-controls" aria-label="Edit history">
+                      <button
+                        aria-label="Undo"
+                        onClick={undo}
+                        disabled={!past.length}
+                      >
+                        ↺
+                      </button>
+                      <button
+                        aria-label="Redo"
+                        onClick={redo}
+                        disabled={!future.length}
+                      >
+                        ↻
+                      </button>
+                    </div>
+                    <div className="zoom-controls" aria-label="Chart zoom">
+                      <button
+                        aria-label="Zoom out"
+                        onClick={() =>
+                          setChartZoom((value) => Math.max(100, value - 50))
+                        }
+                        disabled={chartZoom === 100}
+                      >
+                        −
+                      </button>
+                      <span>{chartZoom}%</span>
+                      <button
+                        aria-label="Zoom in"
+                        onClick={() =>
+                          setChartZoom((value) => Math.min(400, value + 50))
+                        }
+                        disabled={chartZoom === 400}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <ChartGrid
+                  document={document}
+                  tool={tool}
+                  structureAction={structureAction}
+                  selectedColor={selectedColor}
+                  zoom={chartZoom}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onStrokeStart={rememberCurrent}
+                  onPaint={paint}
+                />
+              </section>
+
+              <details
+                className="preview panel"
+                data-tour="knitted-preview"
+                open
               >
-                <button
-                  className={tool === "pencil" ? "active" : ""}
-                  onClick={() => {
-                    setTool("pencil");
-                    setStitchPickerOpen(false);
-                  }}
-                >
-                  Draw
-                </button>
-                <button
-                  className={tool === "fill" ? "active" : ""}
-                  onClick={() => {
-                    setTool("fill");
-                    setStitchPickerOpen(false);
-                  }}
-                >
-                  Fill
-                </button>
-                <button
-                  className={
-                    tool === "eraser" && !structureAction ? "active" : ""
-                  }
-                  onClick={() => {
-                    setTool("eraser");
-                    setStructureAction(null);
-                    setStitchPickerOpen(false);
-                  }}
-                >
-                  Erase
-                </button>
-                <button
-                  className={tool === "select" ? "active" : ""}
-                  onClick={() => setTool("select")}
-                >
-                  Select
-                </button>
-                {selection && !structureAction ? (
-                  <button
-                    className="selection-fill-button"
-                    onClick={fillSelection}
-                  >
-                    Fill selection
-                  </button>
-                ) : null}
-                {selection && structureAction ? (
-                  <button
-                    className="selection-fill-button"
-                    onClick={applyStructureToSelection}
-                  >
-                    Apply{" "}
-                    {
-                      stitchActionOptions.find(
-                        (option) => option.value === structureAction,
-                      )?.shortLabel
-                    }
-                  </button>
-                ) : null}
-                {selection ? (
-                  <button onClick={copySelection}>Copy</button>
-                ) : null}
-                {selection ? <button onClick={cutSelection}>Cut</button> : null}
-                {selectionClipboard?.tabId === activeTabId ? (
-                  <button
-                    onClick={pasteSelection}
-                    title="Paste at the top-left corner of the current selection"
-                  >
-                    Paste
-                  </button>
-                ) : null}
-                {selection ? (
-                  <span
-                    className="selection-move-controls"
-                    aria-label="Move selection"
-                  >
-                    <button
-                      aria-label="Move selection left"
-                      onClick={() => moveSelection(0, -1)}
-                    >
-                      ←
-                    </button>
-                    <button
-                      aria-label="Move selection up"
-                      onClick={() => moveSelection(-1, 0)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      aria-label="Move selection down"
-                      onClick={() => moveSelection(1, 0)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      aria-label="Move selection right"
-                      onClick={() => moveSelection(0, 1)}
-                    >
-                      →
-                    </button>
+                <summary className="panel-heading collapsible-heading">
+                  <div className="preview-heading-copy">
+                    <h1>Knitted up</h1>
+                    <span>approximate fabric at your gauge</span>
+                  </div>
+                  <span className="collapse-label">
+                    Show / hide <span aria-hidden="true">⌄</span>
                   </span>
-                ) : null}
-                {selection ? (
-                  <button onClick={() => setSelection(null)}>Deselect</button>
-                ) : null}
-                <button onClick={clearChart}>Clear</button>
-              </div>
-              <span className="toolbar-divider" aria-hidden="true" />
-              <div
-                className="transform-controls"
-                aria-label={
-                  selection ? "Transform selection" : "Transform chart"
-                }
-              >
-                <button
-                  aria-label={
-                    selection
-                      ? "Mirror selection left to right"
-                      : "Mirror chart left to right"
-                  }
-                  onClick={() => flipChart("horizontal")}
-                  title={
-                    selection
-                      ? "Mirror selection left to right"
-                      : "Mirror chart left to right"
-                  }
-                >
-                  ↔
-                </button>
-                <button
-                  aria-label={
-                    selection
-                      ? "Flip selection upside down"
-                      : "Flip chart upside down"
-                  }
-                  onClick={() => flipChart("vertical")}
-                  title={
-                    selection
-                      ? "Flip selection upside down"
-                      : "Flip chart upside down"
-                  }
-                >
-                  ↕
-                </button>
-                <button
-                  className="rotate-chart-button"
-                  aria-label={
-                    selection
-                      ? "Rotate selection 90 degrees clockwise"
-                      : "Rotate chart 90 degrees clockwise"
-                  }
-                  onClick={rotateChartClockwise}
-                  disabled={
-                    selection
-                      ? !selectionRotationFits()
-                      : document.width > MAX_CHART_ROWS ||
-                        document.height > MAX_CHART_STITCHES
-                  }
-                  title={
-                    selection
-                      ? selectionRotationFits()
-                        ? "Rotate selection 90° clockwise"
-                        : "The rotated selection would extend beyond the chart"
-                      : document.width > MAX_CHART_ROWS
-                        ? `Rotation would exceed ${MAX_CHART_ROWS} rows`
-                        : "Rotate chart 90° clockwise"
-                  }
-                >
-                  90°
-                </button>
-              </div>
-              <span className="toolbar-divider" aria-hidden="true" />
-              <div className="undo-controls" aria-label="Edit history">
-                <button
-                  aria-label="Undo"
-                  onClick={undo}
-                  disabled={!past.length}
-                >
-                  ↺
-                </button>
-                <button
-                  aria-label="Redo"
-                  onClick={redo}
-                  disabled={!future.length}
-                >
-                  ↻
-                </button>
-              </div>
-              <div className="zoom-controls" aria-label="Chart zoom">
-                <button
-                  aria-label="Zoom out"
-                  onClick={() =>
-                    setChartZoom((value) => Math.max(100, value - 50))
-                  }
-                  disabled={chartZoom === 100}
-                >
-                  −
-                </button>
-                <span>{chartZoom}%</span>
-                <button
-                  aria-label="Zoom in"
-                  onClick={() =>
-                    setChartZoom((value) => Math.min(400, value + 50))
-                  }
-                  disabled={chartZoom === 400}
-                >
-                  +
-                </button>
-              </div>
+                </summary>
+                <div className="preview-content">
+                  <div className="repeat-controls">
+                    <span>Repeats</span>
+                    <label className="repeat-style">
+                      Style
+                      <select
+                        value={preview.repeatStyle}
+                        onChange={(event) =>
+                          updatePreviewSettings({
+                            repeatStyle: event.target.value as RepeatStyle,
+                          })
+                        }
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="mirrored">Mirrored</option>
+                      </select>
+                    </label>
+                    <label>
+                      Across
+                      <select
+                        value={preview.repeatX}
+                        onChange={(event) =>
+                          updatePreviewSettings({
+                            repeatX: Number(event.target.value),
+                          })
+                        }
+                      >
+                        <option>1</option>
+                        <option>2</option>
+                        <option>3</option>
+                      </select>
+                    </label>
+                    <label>
+                      Down
+                      <select
+                        value={preview.repeatY}
+                        onChange={(event) =>
+                          updatePreviewSettings({
+                            repeatY: Number(event.target.value),
+                          })
+                        }
+                      >
+                        <option>1</option>
+                        <option>2</option>
+                        <option>3</option>
+                      </select>
+                    </label>
+                    <button
+                      className="primary-button refresh-preview-button"
+                      onClick={refreshPreview}
+                    >
+                      Refresh preview
+                    </button>
+                  </div>
+                  {previewOutdated ? (
+                    <p className="preview-stale-note" role="status">
+                      Preview needs a refresh.
+                    </p>
+                  ) : null}
+                  <ConnectedKnitPreview
+                    document={previewDocument}
+                    repeatX={preview.renderedRepeatX}
+                    repeatY={preview.renderedRepeatY}
+                    repeatStyle={preview.renderedRepeatStyle}
+                    canvasRef={previewCanvasRef}
+                    showDiagnostics={false}
+                  />
+                </div>
+              </details>
             </div>
-          </div>
-          <ChartGrid
-            document={document}
-            tool={tool}
-            structureAction={structureAction}
-            selectedColor={selectedColor}
-            zoom={chartZoom}
-            selection={selection}
-            onSelectionChange={setSelection}
-            onStrokeStart={rememberCurrent}
-            onPaint={paint}
-          />
-        </section>
-
-        <details className="preview panel" data-tour="knitted-preview" open>
-          <summary className="panel-heading collapsible-heading">
-            <div className="preview-heading-copy">
-              <h1>Knitted up</h1>
-              <span>approximate fabric at your gauge</span>
-            </div>
-            <span className="collapse-label">
-              Show / hide <span aria-hidden="true">⌄</span>
-            </span>
-          </summary>
-          <div className="preview-content">
-            <div className="repeat-controls">
-              <span>Repeats</span>
-              <label className="repeat-style">
-                Style
-                <select
-                  value={preview.repeatStyle}
-                  onChange={(event) =>
-                    updatePreviewSettings({
-                      repeatStyle: event.target.value as RepeatStyle,
-                    })
-                  }
-                >
-                  <option value="normal">Normal</option>
-                  <option value="mirrored">Mirrored</option>
-                </select>
-              </label>
-              <label>
-                Across
-                <select
-                  value={preview.repeatX}
-                  onChange={(event) =>
-                    updatePreviewSettings({
-                      repeatX: Number(event.target.value),
-                    })
-                  }
-                >
-                  <option>1</option>
-                  <option>2</option>
-                  <option>3</option>
-                </select>
-              </label>
-              <label>
-                Down
-                <select
-                  value={preview.repeatY}
-                  onChange={(event) =>
-                    updatePreviewSettings({
-                      repeatY: Number(event.target.value),
-                    })
-                  }
-                >
-                  <option>1</option>
-                  <option>2</option>
-                  <option>3</option>
-                </select>
-              </label>
-              <button
-                className="primary-button refresh-preview-button"
-                onClick={refreshPreview}
-              >
-                Refresh preview
-              </button>
-            </div>
-            {previewOutdated ? (
-              <p className="preview-stale-note" role="status">
-                Preview needs a refresh.
-              </p>
-            ) : null}
-            <ConnectedKnitPreview
-              document={previewDocument}
-              repeatX={preview.renderedRepeatX}
-              repeatY={preview.renderedRepeatY}
-              repeatStyle={preview.renderedRepeatStyle}
-              canvasRef={previewCanvasRef}
-              showDiagnostics={false}
-            />
-          </div>
-        </details>
+          </>
+        )}
       </div>
+
+      {newYokeOpen ? (
+        <YokePlanDialog
+          tabsFull={tabs.length >= MAX_CHART_TABS}
+          onClose={() => setNewYokeOpen(false)}
+          onCommit={(next) => addDocumentTab(next)}
+        />
+      ) : null}
 
       {!knitModeOpen ? (
         <footer className="support-footer">
@@ -1643,6 +1783,13 @@ export function ChartMaker({
               ” will be removed from this browser workspace. Save an editable
               project first if you want to keep a separate copy.
             </p>
+            {yokeStitchDrafts[closingTabId]?.edits.length ? (
+              <p role="alert">
+                This tab has pending shaping edits. Review them before closing
+                if you want to keep them; they are not included in saved files
+                yet.
+              </p>
+            ) : null}
             <div className="import-actions">
               <button
                 type="button"
