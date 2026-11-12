@@ -8,6 +8,7 @@ import {
   type StitchAction,
   type StitchPaletteAction,
 } from "@/lib/chart";
+const yokeStitchOptions = new Set<StitchAction>(["purl", "m1l", "m1r"]);
 type Props = {
   document: ChartDocument;
   structureAction: StitchAction | null;
@@ -34,6 +35,12 @@ export function StitchPalettePanel({
   removeStitchFromPalette,
   resetStitchColor,
 }: Props) {
+  const availableStitches = stitchActionOptions.filter(
+    (option): option is typeof option & { value: StitchPaletteAction } =>
+      option.value !== "knit" &&
+      (!document.yoke || yokeStitchOptions.has(option.value)) &&
+      !stitchPalette.includes(option.value),
+  );
   return (
     <details
       className="settings-group stitch-settings"
@@ -59,30 +66,16 @@ export function StitchPalettePanel({
           <div className="stitch-picker" aria-label="Stitch tools">
             <p>Add a stitch type to this chart’s palette.</p>
             <div>
-              {stitchActionOptions
-                .filter(
-                  (
-                    option,
-                  ): option is typeof option & {
-                    value: StitchPaletteAction;
-                  } =>
-                    option.value !== "knit" &&
-                    !stitchPalette.includes(
-                      option.value as StitchPaletteAction,
-                    ),
-                )
-                .map((option) => (
-                  <button
-                    key={option.value}
-                    title={option.help}
-                    onClick={() => addStitchToPalette(option.value)}
-                  >
-                    {option.shortLabel}
-                  </button>
-                ))}
-              {stitchPalette.length ===
-              stitchActionOptions.filter((option) => option.value !== "knit")
-                .length ? (
+              {availableStitches.map((option) => (
+                <button
+                  key={option.value}
+                  title={option.help}
+                  onClick={() => addStitchToPalette(option.value)}
+                >
+                  {option.shortLabel}
+                </button>
+              ))}
+              {!availableStitches.length ? (
                 <span>All stitch types have been added.</span>
               ) : null}
             </div>

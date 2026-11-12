@@ -57,6 +57,28 @@ async function create(page: Page) {
     .toBe(true);
 }
 
+// Older saved yokes may still have SSK in their palette. Keep exercising
+// those documents even though the new-stitch picker no longer offers it.
+async function seedLegacySsk(page: Page) {
+  const state = await saved(page);
+  const tab = state.tabs.find((tab) => tab.id === state.activeTabId)!;
+  tab.document = yokeDocument(
+    {
+      ...tab.document.yoke!,
+      stitchPalette: [...(tab.document.stitchPalette ?? []), "ssk"],
+    },
+    tab.document.name,
+  );
+  await page.evaluate(
+    ({ key, state }) => localStorage.setItem(key, JSON.stringify(state)),
+    { key, state },
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Draw Slip, slip, knit", exact: true }),
+  ).toBeVisible();
+}
+
 test("the planning preview fits on a small screen and can zoom while editing short rows", async ({
   page,
 }) => {
@@ -96,6 +118,7 @@ for (const custom of [false, true]) {
       route.fulfill({ path: resolve("public/textures/merino-relief.png") }),
     );
     await create(page);
+    if (custom) await seedLegacySsk(page);
     const before = await active(page);
     const original = before.document.yoke!;
     const round = original.cells.length;
@@ -121,9 +144,8 @@ for (const custom of [false, true]) {
     if (custom) {
       await page.getByLabel("Edit scope").selectOption("one");
       await page
-        .getByRole("button", { name: "+ Add stitch", exact: true })
+        .getByRole("button", { name: "Draw Slip, slip, knit", exact: true })
         .click();
-      await page.getByRole("button", { name: "SSK", exact: true }).click();
       await cells.nth(2).click();
       await page
         .getByRole("button", { name: "Review shaping changes", exact: true })
@@ -1184,9 +1206,11 @@ test("several shaping strokes wait for one review and remain pending across char
   page,
 }) => {
   await create(page);
+  await seedLegacySsk(page);
   await page.getByLabel("Edit scope").selectOption("one");
-  await page.getByRole("button", { name: "+ Add stitch", exact: true }).click();
-  await page.getByRole("button", { name: "SSK", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Draw Slip, slip, knit", exact: true })
+    .click();
   const cells = page.locator(".chart-svg > g:first-child > rect");
   await cells.nth(2).click();
   await cells.nth(6).click();
@@ -1453,9 +1477,11 @@ test("reviewed shaping applies in place at eight tabs and supports undo, redo an
   for (let i = 0; i < 6; i++)
     await page.getByRole("button", { name: "Duplicate", exact: true }).click();
   await expect.poll(async () => (await saved(page)).tabs.length).toBe(8);
+  await seedLegacySsk(page);
   await page.getByLabel("Edit scope").selectOption("one");
-  await page.getByRole("button", { name: "+ Add stitch", exact: true }).click();
-  await page.getByRole("button", { name: "SSK", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Draw Slip, slip, knit", exact: true })
+    .click();
   await expect
     .poll(async () =>
       (await active(page)).document.yoke!.stitchPalette?.includes("ssk"),
@@ -1532,9 +1558,11 @@ test("shaping one repeat previews, cancels safely, forks a revision and stays ed
   page,
 }) => {
   await create(page);
+  await seedLegacySsk(page);
   await page.getByLabel("Edit scope").selectOption("one");
-  await page.getByRole("button", { name: "+ Add stitch", exact: true }).click();
-  await page.getByRole("button", { name: "SSK", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Draw Slip, slip, knit", exact: true })
+    .click();
   await expect
     .poll(async () =>
       (await active(page)).document.yoke!.stitchPalette?.includes("ssk"),

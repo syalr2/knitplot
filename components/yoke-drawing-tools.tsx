@@ -15,6 +15,7 @@ export function YokeDrawingTools({
   onErase,
   onFillSelection,
   selectionLabel,
+  moveIncreaseUnavailable,
 }: {
   tools: YokeTools;
   color: number;
@@ -28,6 +29,7 @@ export function YokeDrawingTools({
   onErase?: () => void;
   onFillSelection?: () => void;
   selectionLabel?: string;
+  moveIncreaseUnavailable?: string;
 }) {
   const { selection } = tools;
   return (
@@ -55,6 +57,22 @@ export function YokeDrawingTools({
               {label}
             </button>
           ))}
+          <button
+            aria-pressed={tools.tool === "move-increase"}
+            className={tools.tool === "move-increase" ? "active" : ""}
+            disabled={Boolean(moveIncreaseUnavailable)}
+            title={
+              moveIncreaseUnavailable ??
+              "Pick an M1L or M1R, then choose its new cell"
+            }
+            onClick={() => {
+              tools.setSelection(null);
+              tools.setTool("move-increase");
+              onErase?.();
+            }}
+          >
+            Move increase
+          </button>
           <button onClick={tools.clearAll}>Clear</button>
         </div>
         <span className="toolbar-divider" aria-hidden="true" />

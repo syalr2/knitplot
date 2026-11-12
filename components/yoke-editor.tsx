@@ -17,6 +17,7 @@ import { StitchPalettePanel } from "./stitch-palette-panel";
 import { useYokeStitches, type YokeStitchDraft } from "./use-yoke-stitches";
 import { YokeStitchRevisionDialog } from "./yoke-stitch-revision-dialog";
 import { withYokeProgram } from "@/lib/yoke-program-state";
+import { useYokeIncreaseMove } from "./use-yoke-increase-move";
 
 export function YokeEditor({
   document,
@@ -53,6 +54,8 @@ export function YokeEditor({
   const target = calculateYokeTargets(project.measurements);
   function setView(next: YokeView) {
     tools.setSelection(null);
+    if (next !== "chart" && tools.tool === "move-increase")
+      tools.setTool("pencil");
     onViewChange(next);
   }
   const [selected, setSelected] = useState("yarn-1");
@@ -77,7 +80,8 @@ export function YokeEditor({
   }
   function selectStitch(action: import("@/lib/chart").StitchAction) {
     stitches.select(action);
-    if (tools.tool === "eraser") tools.setTool("pencil");
+    if (tools.tool === "eraser" || tools.tool === "move-increase")
+      tools.setTool("pencil");
   }
   const [zoom, setZoom] = useState(100);
   const [sideways, setSideways] = useState(false);
@@ -94,6 +98,20 @@ export function YokeEditor({
     if (remember) onStrokeStart();
     onChange(yokeDocument(next, document.name));
   }
+  const moveIncreaseUnavailable =
+    view !== "chart"
+      ? "Switch to Standard chart to move increases."
+      : stitches.draft.edits.length
+        ? "Apply or discard pending shaping changes first."
+        : undefined;
+  const moving = tools.tool === "move-increase";
+  const move = useYokeIncreaseMove(
+    project,
+    tools.repeat,
+    tools.scope,
+    moving && !moveIncreaseUnavailable,
+    change,
+  );
   return (
     <>
       <aside className="sidebar panel">
@@ -199,6 +217,7 @@ export function YokeEditor({
         <section className="editor panel yoke-editor-panel">
           <YokeDrawingTools
             tools={tools}
+            moveIncreaseUnavailable={moveIncreaseUnavailable}
             color={color}
             zoom={visibleZoom}
             minimumZoom={view === "chart" ? 100 : 1}
@@ -307,6 +326,27 @@ export function YokeEditor({
             count={project.measurements.repeats}
             tools={tools}
           />
+          {moving && (moveIncreaseUnavailable || move.source) ? (
+            <div className="increase-move-hint">
+              <span className="yoke-hint">
+                {moveIncreaseUnavailable ??
+                  "Point at a cell to preview, then click to place."}
+              </span>
+              {move.source ? (
+                <button onClick={move.cancel}>Cancel move</button>
+              ) : null}
+              {move.source ? (
+                <button disabled={!move.chart} onClick={move.apply}>
+                  Apply move
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {move.error ? (
+            <p className="error-message increase-move-hint" role="alert">
+              {move.error}
+            </p>
+          ) : null}
           {stitches.error ? <p role="alert">{stitches.error}</p> : null}
           {tools.error ? (
             <p role="alert" className="error-message">
@@ -354,9 +394,31 @@ export function YokeEditor({
               project={project}
               zoom={visibleZoom}
               selectedColor={tools.tool === "eraser" ? 0 : color}
-              drawing={stitches.markedDrawing}
-              tool={tools.tool === "row-fill" ? "fill" : tools.tool}
-              selection={tools.selection}
+              drawing={
+                move.chart
+                  ? { ...stitches.markedDrawing, document: move.chart }
+                  : stitches.markedDrawing
+              }
+              tool={
+                tools.tool === "row-fill"
+                  ? "fill"
+                  : tools.tool === "move-increase"
+                    ? "pencil"
+                    : tools.tool
+              }
+              onCellPick={moving ? move.click : undefined}
+              onCellPoint={moving ? move.pointAt : undefined}
+              moveTarget={move.target}
+              selection={
+                move.source
+                  ? {
+                      startRow: move.source.row,
+                      endRow: move.source.row,
+                      startColumn: move.source.column,
+                      endColumn: move.source.column,
+                    }
+                  : tools.selection
+              }
               onSelectionChange={tools.setSelection}
               onPaint={(row, column) => tools.paint(row, column, color)}
               onChartPaint={

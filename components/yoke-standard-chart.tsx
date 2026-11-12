@@ -4,6 +4,7 @@ import { ChartGrid } from "./chart-grid";
 import type { YokeProject } from "@/lib/yoke-project";
 import type { CellSelection, Tool } from "@/lib/chart";
 import { yokeDrawing } from "@/lib/yoke-editing";
+import type { ChartPoint } from "@/lib/yoke-move-increase";
 
 export function YokeStandardChart({
   project,
@@ -17,6 +18,9 @@ export function YokeStandardChart({
   onSelectionChange = () => {},
   onStrokeEnd,
   onChartPaint,
+  onCellPick,
+  onCellPoint,
+  moveTarget,
 }: {
   project: YokeProject;
   zoom: number;
@@ -29,6 +33,9 @@ export function YokeStandardChart({
   onSelectionChange?: (value: CellSelection | null) => void;
   onStrokeEnd?: () => void;
   onChartPaint?: (row: number, column: number) => void;
+  onCellPick?: (point: ChartPoint) => void;
+  onCellPoint?: (point: ChartPoint | null) => void;
+  moveTarget?: ChartPoint;
 }) {
   const fallback = useMemo(
     () => suppliedDrawing ?? yokeDrawing(project, 0),
@@ -48,6 +55,9 @@ export function YokeStandardChart({
         onSelectionChange={onSelectionChange}
         onStrokeStart={onStrokeStart}
         onStrokeEnd={onStrokeEnd}
+        onCellPick={onCellPick}
+        onCellPoint={onCellPoint}
+        moveTarget={moveTarget}
         onPaint={(chartRow, chartColumn) => {
           if (onChartPaint) {
             onChartPaint(chartRow, chartColumn);
