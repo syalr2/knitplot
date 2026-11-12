@@ -26,7 +26,7 @@ const active = async (page: Page) => {
   const state = await saved(page);
   return state.tabs.find((tab) => tab.id === state.activeTabId)!;
 };
-async function create(page: Page) {
+async function previewPlan(page: Page) {
   await page.addInitScript(() =>
     localStorage.setItem("knitplot-tutorial-v1", "seen"),
   );
@@ -42,6 +42,10 @@ async function create(page: Page) {
   await dialog
     .getByRole("button", { name: "Preview yoke", exact: true })
     .click();
+  return dialog;
+}
+async function create(page: Page) {
+  const dialog = await previewPlan(page);
   await dialog
     .getByRole("button", { name: "Create yoke", exact: true })
     .click();
@@ -52,6 +56,35 @@ async function create(page: Page) {
     .poll(async () => !!(await active(page)).document.yoke)
     .toBe(true);
 }
+
+test("the planning preview fits on a small screen and can zoom while editing short rows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 700, height: 600 });
+  const dialog = await previewPlan(page);
+  await dialog
+    .locator("summary")
+    .filter({ hasText: "Neckline short rows" })
+    .click();
+  const zoom = dialog.getByRole("group", { name: "Your yoke zoom" });
+  const canvas = dialog.getByRole("img", { name: "Whole yoke drawing canvas" });
+  const fits = () =>
+    canvas.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const parent = element.parentElement!;
+      return (
+        box.width <= parent.clientWidth && box.height <= parent.clientHeight
+      );
+    });
+  const width = async () => (await canvas.boundingBox())!.width;
+  await expect.poll(fits).toBe(true);
+  const fitted = await width();
+  await zoom.getByRole("button", { name: "Zoom out" }).click();
+  expect(await width()).toBeLessThan(fitted);
+  await zoom.getByRole("button", { name: "Zoom in" }).click();
+  await zoom.getByRole("button", { name: "Fit preview" }).click();
+  await expect.poll(width).toBeCloseTo(fitted, 1);
+});
 
 for (const custom of [false, true]) {
   test(`complete yoke workflow: ${custom ? "non-repeating custom shaping" : "identical repeats and short rows"}`, async ({

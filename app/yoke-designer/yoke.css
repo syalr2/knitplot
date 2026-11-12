@@ -23,6 +23,19 @@
   font-weight: 600;
   margin-bottom: 8px;
 }
+.yoke-plan-comparison .yoke-canvas-navigable {
+  height: min(48vh, 440px);
+}
+.yoke-plan-zoom {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  margin-left: 0;
+}
+.yoke-plan-zoom output {
+  min-width: 42px;
+  text-align: center;
+}
 .yoke-transfer-options {
   padding: 16px;
   border: 1px solid var(--line);
