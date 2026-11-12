@@ -6,6 +6,19 @@ import {
   suggestIncreasePositions,
 } from "./yoke-plan";
 
+test("the yoke planner still rejects more than 150 rounds", () => {
+  assert.throws(
+    () =>
+      calculateYokeTargets({
+        ...defaultYokeMeasurements,
+        depth:
+          (151 * defaultYokeMeasurements.gaugeMeasure) /
+          defaultYokeMeasurements.gaugeRows,
+      }),
+    /150 full rounds/,
+  );
+});
+
 test("repeat rounding cannot erase the body portion at the sleeve split", () => {
   assert.throws(
     () =>

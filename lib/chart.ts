@@ -1,7 +1,7 @@
 export type Tool = "pencil" | "fill" | "eraser" | "select";
 
 export const MAX_CHART_STITCHES = 200;
-export const MAX_CHART_ROWS = 150;
+export const MAX_CHART_ROWS = 300;
 
 export type CellSelection = {
   startRow: number;

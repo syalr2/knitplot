@@ -140,17 +140,17 @@ test("chart dimensions allow typing intermediate values and reset on tab changes
 });
 
 for (const structural of [false, true]) {
-  test(`stitch bitmap exports exact yarn pixels${structural ? " with explicit no-stitch handling" : " at 114 × 150"}`, async ({
+  test(`stitch bitmap exports exact yarn pixels${structural ? " with explicit no-stitch handling" : " at 114 × 300"}`, async ({
     page,
   }) => {
     const doc = cloneDocument(defaultDocument);
     doc.width = 114;
-    doc.height = 150;
+    doc.height = structural ? 150 : 300;
     doc.palette = [
       { id: "pink", hex: "#ff809a" },
       { id: "green", hex: "#123456" },
     ];
-    doc.cells = Array.from({ length: 150 }, (_, row) =>
+    doc.cells = Array.from({ length: doc.height }, (_, row) =>
       Array.from({ length: 114 }, (_, column) =>
         (row + column) % 3 === 0 ? "pink" : "green",
       ),
@@ -243,7 +243,7 @@ for (const structural of [false, true]) {
     );
     expect(result).toEqual({
       width: 114,
-      height: 150,
+      height: doc.height,
       mismatches: 0,
       colours: 2,
     });
