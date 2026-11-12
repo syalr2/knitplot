@@ -32,6 +32,7 @@ type Candidate = {
   source: string;
 };
 type Props = {
+  tourShowSchedule?: boolean;
   applyLabel?: string;
   measurements: YokeMeasurements;
   events: IncreaseEvent[];
@@ -42,6 +43,7 @@ type Props = {
 };
 
 export function YokePlanner({
+  tourShowSchedule = false,
   applyLabel = "Apply plan to drawing",
   measurements,
   events,
@@ -55,19 +57,12 @@ export function YokePlanner({
     measurements.measurementMode ?? "body",
   );
   const [values, setValues] = useState(() => drafts(measurements));
-  const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [calculated, setCandidate] = useState<Candidate | null>(null);
   const [schedule, setSchedule] = useState(scheduleDrafts(events));
   const [increaseRounds, setIncreaseRounds] = useState(String(events.length));
   const [automatic, setAutomatic] = useState(true);
   const [error, setError] = useState("");
   const [roundingAccepted, setRoundingAccepted] = useState(false);
-  const rounding = useMemo(
-    () =>
-      candidate
-        ? yokeRoundingReview(candidate.measurements, candidate.targets)
-        : null,
-    [candidate],
-  );
   const source = JSON.stringify({
     values,
     unit,
@@ -75,6 +70,21 @@ export function YokePlanner({
     automatic,
     increaseRounds,
   });
+  const candidate = useMemo(
+    () =>
+      calculated ??
+      (tourShowSchedule
+        ? { measurements, targets: calculateYokeTargets(measurements), source }
+        : null),
+    [calculated, tourShowSchedule, measurements, source],
+  );
+  const rounding = useMemo(
+    () =>
+      candidate
+        ? yokeRoundingReview(candidate.measurements, candidate.targets)
+        : null,
+    [candidate],
+  );
   const fields = yokeMeasurementFields(mode);
   const dirty = candidate !== null && candidate.source !== source;
   const number = (value: number) => value.toFixed(1);
@@ -151,7 +161,10 @@ export function YokePlanner({
       </p>
       <div className="yoke-planner-measurements">
         <form onSubmit={calculate}>
-          <div className="yoke-measurement-control">
+          <div
+            className="yoke-measurement-control"
+            data-tour="yoke-measurements"
+          >
             <span>Measurement input</span>
             <label className="knit-wake-toggle yoke-measurement-toggle">
               <span>Body + ease</span>
@@ -326,7 +339,7 @@ export function YokePlanner({
               }}
             />
           ) : null}
-          <h3>Increase schedule</h3>
+          <h3 data-tour="yoke-increase-schedule">Increase schedule</h3>
           <p>
             {schedule.length} increase rounds calculated.
             {candidate.targets.shoulder

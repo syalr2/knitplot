@@ -225,6 +225,7 @@ export function YokeEditor({
           />
           <div
             className="yoke-view-tabs"
+            data-tour="yoke-views"
             role="group"
             aria-label="Yoke drawing view"
           >

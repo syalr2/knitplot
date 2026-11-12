@@ -165,6 +165,7 @@ export function ChartMaker({
     useState<SelectionClipboard | null>(null);
   const [knitModeOpen, setKnitModeOpen] = useState(false);
   const [newYokeOpen, setNewYokeOpen] = useState(false);
+  const [tourFileOpen, setTourFileOpen] = useState(false);
   const [patternImporterOpen, setPatternImporterOpen] = useState(false);
   const [dimensionDraft, setDimensionDraft] = useSyncedDraft(
     `${activeTabId}:${document.width}:${document.height}`,
@@ -1178,10 +1179,12 @@ export function ChartMaker({
             onImportPattern={() => setPatternImporterOpen(true)}
             onNewBlank={addTab}
             onNewYoke={() => setNewYokeOpen(true)}
+            tourOpen={tourFileOpen}
             tabsFull={tabs.length >= MAX_CHART_TABS}
             onNavigateAway={confirmLeavingEditor}
           />
           <OnboardingTour
+            onTourFileOpen={setTourFileOpen}
             tabsFull={tabs.length >= MAX_CHART_TABS}
             onOpenExample={openTutorialExample}
           />

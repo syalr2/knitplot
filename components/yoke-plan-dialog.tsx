@@ -87,12 +87,14 @@ export function YokePlanDialog({
   tabsFull,
   onCommit,
   onClose,
+  tourStage,
 }: {
   document?: ChartDocument;
   initialMeasurements?: YokeMeasurements;
   tabsFull: boolean;
   onCommit: (document: ChartDocument, newTab: boolean) => boolean;
   onClose: () => void;
+  tourStage?: "measurements" | "schedule" | "preview";
 }) {
   const [base] = useState(() => document);
   const measurements =
@@ -103,10 +105,11 @@ export function YokePlanDialog({
       calculateYokeTargets(measurements),
       measurements.repeats,
     );
-  const [pending, setPending] = useState<{
+  const [draft, setPending] = useState<{
     measurements: YokeMeasurements;
     events: IncreaseEvent[];
   } | null>(null);
+  const pending = tourStage === "preview" ? { measurements, events } : draft;
   const [mode, setMode] = useState<"keep" | "scale">("keep");
   const [shortRows, setShortRows] = useState<YokeShortRows>();
   const [error, setError] = useState("");
@@ -189,6 +192,7 @@ export function YokePlanDialog({
               </p>
             ) : null}
             <YokePlanner
+              tourShowSchedule={tourStage === "schedule"}
               measurements={measurements}
               events={events}
               inputId={id}
@@ -264,8 +268,8 @@ export function YokePlanDialog({
                 label={base ? "Proposed" : "Your yoke"}
               />
             </div>
-            <details>
-              <summary>Neckline short rows</summary>
+            <details open={tourStage === "preview" ? true : undefined}>
+              <summary data-tour="yoke-short-rows">Neckline short rows</summary>
               <YokeShortRowPlanner
                 key={JSON.stringify([
                   proposal.measurements,

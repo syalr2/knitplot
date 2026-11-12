@@ -30,6 +30,7 @@ type Props = {
   onNewBlank?: () => void;
   onNewYoke?: () => void;
   tabsFull?: boolean;
+  tourOpen?: boolean;
   onNavigateAway?: (event: { preventDefault(): void }) => void;
 };
 
@@ -210,6 +211,7 @@ export function ExportTools({
   onNewBlank,
   onNewYoke,
   tabsFull,
+  tourOpen = false,
   onNavigateAway,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -354,7 +356,7 @@ export function ExportTools({
         />
         <button
           className="secondary-button"
-          aria-expanded={open}
+          aria-expanded={open || tourOpen}
           onClick={() => {
             setOpen((value) => !value);
             setChoosingChartImage(false);
@@ -365,7 +367,7 @@ export function ExportTools({
         >
           File
         </button>
-        {open ? (
+        {open || tourOpen ? (
           <div
             className="file-menu-popover"
             role="menu"
@@ -384,6 +386,7 @@ export function ExportTools({
             </button>
             <button
               role="menuitem"
+              data-tour="new-circular-yoke"
               disabled={tabsFull || !onNewYoke}
               onClick={() => {
                 setOpen(false);
