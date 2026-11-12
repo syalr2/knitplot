@@ -17,9 +17,9 @@ test("AI generation uses the user's dimensions, including large charts", () => {
     readAiRequest(generateRequestSchema, {
       ...settings,
       width: 200,
-      height: 150,
-    }).width,
-    200,
+      height: 300,
+    }).height,
+    300,
   );
 });
 test("both AI routes reject null and invalid colour ranges", () => {

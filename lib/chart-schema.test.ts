@@ -2,10 +2,59 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cloneDocument, defaultDocument } from "./chart";
 import { readProject } from "./project-file";
-import { readCloudChartPayload } from "./cloud-charts";
+import { readCloudChartPayload, readCloudChartRequest } from "./cloud-charts";
 import { readChartDocument } from "./chart-schema";
+import { newChartTab, readWorkspace, workspaceSave } from "./workspace";
 
 const document = () => cloneDocument(defaultDocument);
+test("a tall imported chart with long palette IDs fits the cloud request budget", async () => {
+  const longId = "a".repeat(50);
+  const otherId = "yarn-0";
+  const grid = <T>(value: T) =>
+    Array.from({ length: 300 }, () => Array<T>(200).fill(value));
+  const chart = cloneDocument({
+    ...defaultDocument,
+    width: 200,
+    height: 300,
+    palette: [
+      { id: longId, hex: "#aabbcc" },
+      { id: otherId, hex: "#ffffff" },
+    ],
+    cells: grid(longId),
+    stitchActions: grid("purl"),
+    stitchCellColors: grid("#aabbcc"),
+  });
+  chart.cells[299][199] = otherId;
+  const request = (doc: typeof chart) =>
+    new Request("http://localhost/api/charts", {
+      method: "POST",
+      body: JSON.stringify({ document: doc }),
+    });
+  await assert.rejects(readCloudChartRequest(request(chart)), {
+    status: 413,
+  });
+  const opened = readProject({
+    format: "colorwork-chart",
+    version: 2,
+    document: chart,
+  });
+  const saved = readCloudChartPayload(
+    await readCloudChartRequest(request(opened)),
+  ).document;
+  assert.deepEqual(
+    saved.palette.map(({ hex }) => hex),
+    ["#aabbcc", "#ffffff"],
+  );
+  assert.deepEqual(
+    saved.cells,
+    chart.cells.map((row) =>
+      row.map((id) => saved.palette[id === longId ? 0 : 1].id),
+    ),
+  );
+  assert.deepEqual(saved.stitchActions, chart.stitchActions);
+  assert.deepEqual(saved.stitchCellColors, chart.stitchCellColors);
+});
+
 test("project and cloud round trips preserve a chart", () => {
   const chart = document();
   assert.deepEqual(
@@ -13,6 +62,39 @@ test("project and cloud round trips preserve a chart", () => {
     chart,
   );
   assert.deepEqual(readCloudChartPayload({ document: chart }).document, chart);
+});
+test("a 200 by 300 regular chart and last-row progress survive storage round trips", () => {
+  const chart = cloneDocument({
+    ...defaultDocument,
+    width: 200,
+    height: 300,
+    cells: Array.from({ length: 300 }, () =>
+      Array<string>(200).fill("background"),
+    ),
+  });
+  const tab = newChartTab(chart, "tall-chart");
+  tab.knitProgress.row = 300;
+  assert.deepEqual(
+    readProject({ format: "colorwork-chart", version: 2, document: chart }),
+    chart,
+  );
+  assert.deepEqual(readCloudChartPayload(tab).document, chart);
+  assert.equal(readCloudChartPayload(tab).knitProgress.row, 300);
+  const reopened = readWorkspace(
+    JSON.parse(JSON.stringify(workspaceSave([tab], tab.id))),
+  ).workspace.tabs[0];
+  assert.deepEqual(reopened.document, chart);
+  assert.equal(reopened.knitProgress.row, 300);
+  assert.throws(() =>
+    readChartDocument(
+      cloneDocument({
+        ...defaultDocument,
+        width: chart.width,
+        height: 301,
+        cells: [...chart.cells, chart.cells[0]],
+      }),
+    ),
+  );
 });
 for (const [name, mutate] of Object.entries({
   "unknown action": (c: Record<string, unknown>) => {
