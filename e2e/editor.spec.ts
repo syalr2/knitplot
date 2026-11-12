@@ -100,6 +100,65 @@ test("first visit and Help offer the yoke tour and an editable example", async (
   ).toHaveCount(0);
 });
 
+test("placing a yoke increase previews placeholders and can be undone", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Help and examples" }).click();
+  await page
+    .getByRole("article")
+    .filter({ hasText: "Tidal Fish Yoke" })
+    .getByRole("button", { name: "Open example" })
+    .click();
+  await page
+    .getByRole("button", { name: "Move increase", exact: true })
+    .click();
+  await page.getByLabel("Edit scope").selectOption("one");
+  const chart = page.locator(".yoke-standard-chart .chart-svg");
+  const from = chart
+    .locator("g")
+    .first()
+    .locator("rect")
+    .nth(16 * 41 + 5);
+  const to = chart
+    .locator("g")
+    .first()
+    .locator("rect")
+    .nth(15 * 41 + 5);
+  await from.click();
+  await to.hover();
+  await expect(chart.locator(".chart-increase-target")).toBeVisible();
+  await expect(from).toHaveClass("chart-no-stitch");
+  await to.click();
+  await expect(chart.locator(".chart-increase-target")).toHaveCount(0);
+  await expect(from).toHaveClass("chart-no-stitch");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(from).not.toHaveClass("chart-no-stitch");
+});
+
+test("yoke and regular charts offer different stitch choices", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const add = page.getByRole("button", { name: "+ Add stitch", exact: true });
+  await add.click();
+  await expect(
+    page.getByRole("button", { name: "SSK", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Help and examples" }).click();
+  await page
+    .getByRole("article")
+    .filter({ hasText: "Tidal Fish Yoke" })
+    .getByRole("button", { name: "Open example" })
+    .click();
+  await add.click();
+  const choices = page.locator(".stitch-picker button");
+  expect(await choices.allTextContents()).toEqual(["Purl", "M1R"]);
+  await expect(
+    page.getByRole("button", { name: "Draw Make 1 left", exact: true }),
+  ).toBeVisible();
+});
+
 test("anonymous editor supports draw, undo, redo, and immediate save/reload", async ({
   page,
 }) => {

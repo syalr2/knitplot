@@ -25,7 +25,7 @@ import { mirrorYokeRepeat } from "@/lib/yoke-repeat-mirror";
 import type { YokeRepeatScope } from "@/lib/yoke-repeat-scope";
 import { yokeRepeatNumber } from "@/lib/yoke-repeat-labels";
 
-export type YokeTool = Tool | "row-fill";
+export type YokeTool = Tool | "row-fill" | "move-increase";
 export function useYokeTools(
   project: YokeProject,
   view: YokeView,

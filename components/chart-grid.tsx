@@ -1,6 +1,7 @@
 "use client";
 
 import { PointerEvent, useRef } from "react";
+import type { ChartPoint } from "@/lib/yoke-move-increase";
 import {
   cellAspectRatio,
   CellSelection,
@@ -26,6 +27,9 @@ type Props = {
   onPaint: (row: number, column: number, flood: boolean) => void;
   yarnOnly?: boolean;
   onStrokeEnd?: () => void;
+  onCellPick?: (point: ChartPoint) => void;
+  onCellPoint?: (point: ChartPoint | null) => void;
+  moveTarget?: ChartPoint;
 };
 
 export function ChartGrid({
@@ -39,6 +43,9 @@ export function ChartGrid({
   onPaint,
   yarnOnly = false,
   onStrokeEnd,
+  onCellPick,
+  onCellPoint,
+  moveTarget,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const drawing = useRef(false);
@@ -79,6 +86,10 @@ export function ChartGrid({
     const cell = cellFromPointer(event);
     if (!cell) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (onCellPick) {
+      onCellPick(cell);
+      return;
+    }
     if (tool === "select") {
       selecting.current = true;
       drawing.current = false;
@@ -99,6 +110,10 @@ export function ChartGrid({
   }
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    if (onCellPick) {
+      if (event.pointerType !== "touch") onCellPoint?.(cellFromPointer(event));
+      return;
+    }
     if (drawing.current || selecting.current) event.preventDefault();
     if (selecting.current && selectionStart.current) {
       const cell = cellFromPointer(event);
@@ -170,7 +185,7 @@ export function ChartGrid({
           </div>
           <svg
             ref={svgRef}
-            className="chart-svg"
+            className={onCellPick ? "chart-svg chart-svg-move" : "chart-svg"}
             viewBox={`0 0 ${document.width * aspect} ${document.height}`}
             style={{
               aspectRatio: `${document.width * aspect} / ${document.height}`,
@@ -308,26 +323,39 @@ export function ChartGrid({
                 pointerEvents="none"
               />
             ) : null}
+            {moveTarget ? (
+              <rect
+                className="chart-increase-target"
+                x={moveTarget.column * aspect}
+                y={moveTarget.row}
+                width={aspect}
+                height={1}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+            ) : null}
           </svg>
         </div>
-        <p className="chart-hint">
-          {structureAction === "knit"
-            ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."
-            : structureAction
-              ? tool === "fill"
-                ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
-                : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
-              : tool === "fill"
-                ? "Click an area to fill its yarn colour. Stitch symbols stay in place."
-                : tool === "select"
-                  ? yarnOnly
-                    ? "Drag a rectangle to fill, copy, cut, paste or move yarn colours."
-                    : "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action."
-                  : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}
-          {document.stitchActions && !structureAction && !yarnOnly
-            ? " Use Remove stitch to erase symbols without changing yarn colours."
-            : ""}
-        </p>
+        {!onCellPick ? (
+          <p className="chart-hint">
+            {structureAction === "knit"
+              ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."
+              : structureAction
+                ? tool === "fill"
+                  ? `Click an area to fill it with ${stitchActionLabel(structureAction)}.`
+                  : `Click and drag to mark cells as ${stitchActionLabel(structureAction)}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`
+                : tool === "fill"
+                  ? "Click an area to fill its yarn colour. Stitch symbols stay in place."
+                  : tool === "select"
+                    ? yarnOnly
+                      ? "Drag a rectangle to fill, copy, cut, paste or move yarn colours."
+                      : "Drag a rectangle to fill, copy, cut, paste, move, or apply a stitch action."
+                    : `Click and drag to ${tool === "eraser" ? "erase the yarn colour" : "paint"}${document.guides.symmetry !== "none" ? " with live symmetry" : ""}.`}
+            {document.stitchActions && !structureAction && !yarnOnly
+              ? " Use Remove stitch to erase symbols without changing yarn colours."
+              : ""}
+          </p>
+        ) : null}
       </div>
     </div>
   );

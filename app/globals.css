@@ -747,6 +747,21 @@ button:disabled {
 .tour-layer-guided {
   pointer-events: auto;
 }
+.chart-svg.chart-svg-move {
+  cursor: crosshair;
+}
+.chart-increase-target {
+  fill: none;
+  stroke: #44936b;
+  stroke-width: 3px;
+}
+.increase-move-hint {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 16px 10px;
+}
 .yoke-tour-editor {
   background: var(--panel);
   inset: 0;
