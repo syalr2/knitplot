@@ -3,6 +3,7 @@ import { yokeChart } from "./yoke-chart";
 import { rowSequence } from "./knit-sequence";
 import { yokeProgramFromProject } from "./yoke-program-from-project";
 import type { YokeProject } from "./yoke-project";
+import { knitColumnSections } from "./knit-chart-pages";
 
 export function yokeKnitModel(project: YokeProject) {
   const program = project.program ?? yokeProgramFromProject(project);
@@ -87,7 +88,7 @@ export function yokeKnitSection(
 }
 
 export function moveYokeKnitStep(
-  rounds: ReturnType<typeof yokeKnitModel>["rounds"],
+  rounds: { lengths: number[] }[],
   sectionCount: number,
   position: { row: number; section: number; stitch: number },
   direction: -1 | 1,
@@ -122,7 +123,6 @@ export function yokeKnitPages(
   model: ReturnType<typeof yokeKnitModel>,
   columns = 100,
 ) {
-  const limit = Math.max(25, Math.min(200, Math.round(columns)));
   const sources = Array.from({ length: model.sectionCount }, (_, section) =>
     yokeKnitSection(project, model, section),
   );
@@ -160,12 +160,7 @@ export function yokeKnitPages(
       })),
     ),
   );
-  const count = Math.ceil(width / limit);
-  const size = Math.floor(width / count);
-  const remainder = width % count;
-  return Array.from({ length: count }, (_, page) => {
-    const start = page * size + Math.min(page, remainder);
-    const end = start + size + (page < remainder ? 1 : 0);
+  return knitColumnSections(width, columns).map(({ start, end }) => {
     return {
       start,
       end,

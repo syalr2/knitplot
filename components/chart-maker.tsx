@@ -621,7 +621,9 @@ export function ChartMaker({
     if (document.palette.length >= 8) return;
     const id = `color-${Date.now()}`;
     const hex =
-      colorDefaults[(document.palette.length - 3) % colorDefaults.length];
+      colorDefaults[
+        Math.max(0, document.palette.length - 3) % colorDefaults.length
+      ];
     commit((current) => ({
       ...current,
       palette: [...current.palette, { id, hex }],

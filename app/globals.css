@@ -3856,10 +3856,28 @@ select:focus {
   min-height: 0;
   padding: 20px;
 }
-.knit-mode-chart-frame {
-  align-items: center;
+.knit-mode-chart-area {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.knit-mode-zoom {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+.knit-mode-zoom button {
+  min-width: 38px;
+  min-height: 36px;
+  padding: 4px 9px;
+  font-size: 13px;
+}
+.knit-mode-chart-frame {
+  container-type: size;
+  display: flex;
+  flex: 1;
   min-height: 0;
   overflow: auto;
 }
@@ -3867,9 +3885,27 @@ select:focus {
   background: transparent;
   cursor: pointer;
   display: block;
-  max-height: 100%;
-  max-width: 100%;
+  flex: none;
+  margin: auto;
   overflow: visible;
+}
+.knit-mode-chart-frame.can-pan {
+  touch-action: none;
+  user-select: none;
+}
+.knit-mode-chart-frame.can-pan .knit-mode-chart {
+  cursor: grab;
+}
+.knit-mode-chart-frame[data-dragging] .knit-mode-chart {
+  cursor: grabbing;
+}
+.knit-mode-row-start {
+  fill: none;
+  stroke: #a64c40;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1px white);
 }
 .knit-mode-row-dimmer {
   fill: rgba(244, 241, 233, 0.79);
@@ -5032,7 +5068,7 @@ select:focus {
     flex-direction: column;
     overflow: auto;
   }
-  .knit-mode-chart-frame {
+  .knit-mode-chart-area {
     flex: 1 0 48vh;
   }
   .knit-mode-controls {

@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -23,6 +24,8 @@ import {
 } from "@/lib/chart";
 import type { KnitProgress } from "@/lib/chart-schema";
 import { rowSequence, workedStepLabel } from "@/lib/knit-sequence";
+import { knitChartPages, knitRightToLeft } from "@/lib/knit-chart-pages";
+import { useKnitChartPan } from "./use-knit-chart-pan";
 import {
   moveYokeKnitStep,
   moveYokeKnitPage,
@@ -48,6 +51,7 @@ const MARKERS: Array<{ id: MarkerStyle; label: string; symbol: string }> = [
   { id: "star", label: "Star", symbol: "★" },
   { id: "yarn", label: "Yarn ball", symbol: "◎" },
 ];
+const KNIT_ZOOM_LEVELS = [100, 150, 200, 300, 400, 600] as const;
 
 type Props = {
   document: ChartDocument;
@@ -68,11 +72,6 @@ function majorColumnBoundary(column: number, width: number, offset = 0) {
 function majorRowBoundary(chartRow: number, height: number) {
   const completedRows = height - chartRow;
   return chartRow > 0 && chartRow < height && completedRows % 10 === 0;
-}
-
-function isRightToLeft(document: ChartDocument, row: number) {
-  if (document.instructions.technique === "duplicate") return false;
-  return document.instructions.construction === "round" || row % 2 === 1;
 }
 
 function knitRegion(document: ChartDocument, shouldTrim: boolean) {
@@ -133,6 +132,11 @@ export function KnitMode({
   onClose,
 }: Props) {
   const [keepScreenAwake, setKeepScreenAwake] = useState(false);
+  const [zoomIndex, setZoomIndex] = useState(0);
+  const chartFrame = useRef<HTMLDivElement>(null);
+  const rowStart = useRef<SVGGElement>(null);
+  const zoom = KNIT_ZOOM_LEVELS[zoomIndex];
+  const pan = useKnitChartPan(zoom > 100);
   const wakeLockSupported = useSyncExternalStore(
     subscribeToStaticCapability,
     wakeLockAvailable,
@@ -141,23 +145,37 @@ export function KnitMode({
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const yoke = document.yoke;
   const model = useMemo(() => (yoke ? yokeKnitModel(yoke) : null), [yoke]);
+  const region = useMemo(
+    () => knitRegion(document, !yoke && progress.trimBorder),
+    [document, yoke, progress.trimBorder],
+  );
   const sectionColumns = progress.sectionColumns ?? 100;
   const pages = useMemo(
-    () => (yoke && model ? yokeKnitPages(yoke, model, sectionColumns) : null),
-    [yoke, model, sectionColumns],
+    () =>
+      yoke && model
+        ? yokeKnitPages(yoke, model, sectionColumns)
+        : knitChartPages(region.document, sectionColumns),
+    [yoke, model, region, sectionColumns],
   );
+  const pageCount = pages?.length ?? 1;
+  // Regular flat rows alternate which physical panel is worked first.
+  function workIndex(row: number, index: number) {
+    return !yoke && knitRightToLeft(region.document, row)
+      ? pageCount - 1 - index
+      : index;
+  }
   const pageRounds = useMemo(
     () =>
-      model && pages
-        ? model.rounds.map((round, r) => ({
-            ...round,
-            lengths: pages.map((page) => page.rows[r].steps.length),
-          }))
-        : null,
-    [model, pages],
+      pages?.[0].rows.map((_, r) => {
+        const lengths = pages.map((page) => page.rows[r].steps.length);
+        if (!yoke && knitRightToLeft(region.document, r + 1)) lengths.reverse();
+        return { lengths };
+      }) ?? null,
+    [region, yoke, pages],
   );
-  const roundNumber = clamp(progress.row, 1, document.height);
-  const markerSourceSection = model?.identical ? 0 : (progress.section ?? 0);
+  const roundNumber = clamp(progress.row, 1, region.document.height);
+  const markerSourceSection =
+    !model || model.identical ? 0 : (progress.section ?? 0);
   const markerPage =
     pages?.findIndex((page) =>
       page.rows[roundNumber - 1].steps.some(
@@ -167,24 +185,19 @@ export function KnitMode({
       ),
     ) ?? -1;
   const requestedPage = clamp(
-    progress.viewSection ?? Math.max(0, markerPage),
+    progress.viewSection ??
+      (markerPage >= 0 ? markerPage : workIndex(roundNumber, 0)),
     0,
     (pages?.length ?? 1) - 1,
   );
+  const lengths = pageRounds?.[roundNumber - 1].lengths;
+  const requestedWork = workIndex(roundNumber, requestedPage);
+  const firstWork = lengths?.findIndex((length) => length > 0) ?? -1;
+  const followingWork =
+    lengths?.findIndex((length, i) => i > requestedWork && length > 0) ?? -1;
   const section =
-    pages && !pages[requestedPage].rows[roundNumber - 1].steps.length
-      ? pages.findIndex(
-          (page, index) =>
-            index > requestedPage && page.rows[roundNumber - 1].steps.length,
-        ) >= 0
-        ? pages.findIndex(
-            (page, index) =>
-              index > requestedPage && page.rows[roundNumber - 1].steps.length,
-          )
-        : Math.max(
-            0,
-            pages.findIndex((page) => page.rows[roundNumber - 1].steps.length),
-          )
+    lengths?.[requestedWork] === 0 && firstWork >= 0
+      ? workIndex(roundNumber, followingWork >= 0 ? followingWork : firstWork)
       : requestedPage;
   const sectionChart = pages?.[section] ?? null;
   const shortRows = useMemo(() => {
@@ -198,20 +211,31 @@ export function KnitMode({
       ];
     }
   }, [yoke]);
-  const region = useMemo(
-    () => knitRegion(document, !document.yoke && progress.trimBorder),
-    [document, progress.trimBorder],
-  );
-  const activeDocument = sectionChart?.document ?? region.document;
+  const activeDocument = useMemo(() => {
+    if (!sectionChart) return region.document;
+    const chart = sectionChart.document;
+    if (!yoke) return chart;
+    // Yoke program columns run in work order. Reflect only the chart display,
+    // not the stitch operations or the saved marker.
+    return {
+      ...chart,
+      cells: chart.cells.map((row) => [...row].reverse()),
+      stitchActions: chart.stitchActions?.map((row) => [...row].reverse()),
+      stitchCellColors: chart.stitchCellColors?.map((row) =>
+        [...row].reverse(),
+      ),
+    };
+  }, [region, sectionChart, yoke]);
   const aspect = cellAspectRatio(activeDocument);
   const palette = new Map(
     activeDocument.palette.map((color) => [color.id, color.hex]),
   );
   const row = clamp(progress.row, 1, activeDocument.height);
-  const structural = Boolean(yoke) || hasStructuralStitches(activeDocument);
-  const rowSteps = rowStitchSteps(activeDocument, row);
-  const rowMath = model?.rounds[row - 1] ?? rowStitchMath(activeDocument, row);
-  const rightToLeft = !yoke && isRightToLeft(activeDocument, row);
+  const structural = Boolean(yoke) || hasStructuralStitches(region.document);
+  const rowSteps =
+    sectionChart?.rows[row - 1].steps ?? rowStitchSteps(activeDocument, row);
+  const rowMath = model?.rounds[row - 1] ?? rowStitchMath(region.document, row);
+  const rightToLeft = Boolean(yoke) || knitRightToLeft(activeDocument, row);
   const orderedRowSteps =
     sectionChart?.rows[row - 1].steps ??
     (rightToLeft ? [...rowSteps].reverse() : rowSteps);
@@ -232,26 +256,37 @@ export function KnitMode({
   const rowIndex = activeDocument.height - row;
   const markerColumn =
     stitch > 0 ? (orderedRowSteps[stitch - 1]?.column ?? -1) : -1;
-  const markerX = (markerColumn + 0.5) * aspect;
+  const markerX =
+    (yoke ? activeDocument.width - markerColumn - 0.5 : markerColumn + 0.5) *
+    aspect;
   const marker =
     MARKERS.find((choice) => choice.id === progress.markerStyle) ?? MARKERS[1];
   const sequence = rowSequence(activeDocument, orderedRowSteps, Boolean(yoke));
-  const position = { row, section, stitch };
+  const workSection = workIndex(row, section);
+  const position = { row, section: workSection, stitch };
   const nextYokeStep =
     pageRounds && pages
-      ? moveYokeKnitStep(pageRounds, pages.length, position, 1)
+      ? moveYokeKnitStep(pageRounds, pageCount, position, 1)
       : null;
   const previousYokeStep =
     pageRounds && pages
-      ? moveYokeKnitStep(pageRounds, pages.length, position, -1)
+      ? moveYokeKnitStep(pageRounds, pageCount, position, -1)
       : null;
   const pageLengths = pageRounds?.map((round) => round.lengths);
-  const nextPage = pageLengths
-    ? moveYokeKnitPage(pageLengths, row, section, 1)
+  const nextPageInOrder = pageLengths
+    ? moveYokeKnitPage(pageLengths, row, workSection, 1)
     : null;
-  const previousPage = pageLengths
-    ? moveYokeKnitPage(pageLengths, row, section, -1)
+  const previousPageInOrder = pageLengths
+    ? moveYokeKnitPage(pageLengths, row, workSection, -1)
     : null;
+  const nextPage = nextPageInOrder && {
+    ...nextPageInOrder,
+    section: workIndex(nextPageInOrder.row, nextPageInOrder.section),
+  };
+  const previousPage = previousPageInOrder && {
+    ...previousPageInOrder,
+    section: workIndex(previousPageInOrder.row, previousPageInOrder.section),
+  };
   const isDuplicate = activeDocument.instructions.technique === "duplicate";
   const unitName = isDuplicate
     ? "Row"
@@ -260,11 +295,35 @@ export function KnitMode({
       : "Row";
   const chartWidth = activeDocument.width * aspect;
   const labelSize = Math.max(0.5, Math.min(0.9, activeDocument.height / 35));
-  const leftMargin = labelSize * 2.5;
+  const arrowDirection = rightToLeft ? -1 : 1;
+  const startX = orderedRowSteps.length
+    ? rightToLeft
+      ? chartWidth
+      : 0
+    : undefined;
+  const leftMargin = 4.3;
+  const rightMargin = 2.35;
   const topMargin = labelSize * 1.8;
+  const chartRatio =
+    (chartWidth + leftMargin + rightMargin) /
+    (activeDocument.height + topMargin);
   const columnStep =
     activeDocument.width <= 24 ? 1 : activeDocument.width <= 50 ? 5 : 10;
   const rowStep = activeDocument.height <= 24 ? 1 : 5;
+
+  useLayoutEffect(() => {
+    const frame = chartFrame.current;
+    const arrow = rowStart.current;
+    if (!frame || !arrow) return;
+    const target = arrow.getBoundingClientRect();
+    const bounds = frame.getBoundingClientRect();
+    const x = (target.left + target.right) / 2;
+    const y = (target.top + target.bottom) / 2;
+    if (x < bounds.left + 12 || x > bounds.right - 12)
+      frame.scrollLeft += x - (bounds.left + bounds.width / 2);
+    if (y < bounds.top + 12 || y > bounds.bottom - 12)
+      frame.scrollTop += y - (bounds.top + bounds.height / 2);
+  }, [rowIndex, startX, section, zoom, chartRatio]);
 
   useEffect(() => {
     if (!keepScreenAwake || !wakeLockSupported) return;
@@ -318,7 +377,7 @@ export function KnitMode({
   function update(nextRow: number, nextStitch: number, nextSection = section) {
     const clampedRow = clamp(nextRow, 1, activeDocument.height);
     const maximumStep =
-      pageRounds?.[clampedRow - 1].lengths[nextSection] ??
+      pages?.[nextSection].rows[clampedRow - 1].steps.length ??
       rowStitchSteps(activeDocument, clampedRow).length;
     if (pages) {
       const page = pages[nextSection];
@@ -328,7 +387,7 @@ export function KnitMode({
         : undefined;
       onProgressChange({
         ...progress,
-        shortRowNoteSeen: true,
+        ...(yoke ? { shortRowNoteSeen: true } : {}),
         row: clampedRow,
         viewSection: nextSection,
         section: step?.sourceSection ?? 0,
@@ -366,7 +425,11 @@ export function KnitMode({
   function changeStitch(amount: number) {
     const yokeStep = amount > 0 ? nextYokeStep : previousYokeStep;
     if (yokeStep) {
-      update(yokeStep.row, yokeStep.stitch, yokeStep.section);
+      update(
+        yokeStep.row,
+        yokeStep.stitch,
+        workIndex(yokeStep.row, yokeStep.section),
+      );
       return;
     }
     const next = stitch + amount;
@@ -434,52 +497,58 @@ export function KnitMode({
       </button>
     </div>
   );
-  const sectionSizeControl =
-    model && pages ? (
-      <label className="knit-section-size">
-        Max columns per section
-        <select
-          value={sectionColumns}
-          onChange={(event) => {
-            const columns = Number(event.target.value);
-            const next = yokeKnitPages(yoke!, model, columns);
-            const anchor = pages[section];
-            const viewSection = next.findIndex(
-              (page) => page.start <= anchor.start && page.end > anchor.start,
-            );
-            onProgressChange({
-              ...progress,
-              sectionColumns: columns,
-              viewSection: Math.max(0, viewSection),
-            });
-          }}
-        >
-          {[50, 75, 100, 150, 200].map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-    ) : null;
+  const sectionSizeControl = (
+    <label className="knit-section-size">
+      Max columns per section
+      <select
+        value={sectionColumns}
+        onChange={(event) => {
+          const columns = Number(event.target.value);
+          const next =
+            yoke && model
+              ? yokeKnitPages(yoke, model, columns)
+              : knitChartPages(region.document, columns);
+          const anchor = pages?.[section]?.start;
+          const viewSection =
+            anchor === undefined
+              ? undefined
+              : next?.findIndex(
+                  (page) => page.start <= anchor && page.end > anchor,
+                );
+          onProgressChange({
+            ...progress,
+            sectionColumns: columns,
+            viewSection:
+              viewSection === undefined ? undefined : Math.max(0, viewSection),
+          });
+        }}
+      >
+        {[50, 75, 100, 150, 200].map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const jumpControl =
-    model && pages ? (
+    pages && pages.length > 1 ? (
       <details className="knit-jump-control">
         <summary>Jump to…</summary>
         <div className="knit-jump-fields">
           <label>
-            Round
+            {unitName}
             <select
               value={row}
               onChange={(event) => {
                 const target = Number(event.target.value);
-                const first = pages.findIndex(
-                  (page) => page.rows[target - 1].steps.length,
-                );
-                navigate(target, Math.max(0, first));
+                const first =
+                  pageLengths?.[target - 1].findIndex((length) => length > 0) ??
+                  0;
+                navigate(target, workIndex(target, Math.max(0, first)));
               }}
             >
-              {Array.from({ length: document.height }, (_, i) => (
+              {Array.from({ length: activeDocument.height }, (_, i) => (
                 <option key={i} value={i + 1}>
                   {i + 1}
                 </option>
@@ -498,7 +567,7 @@ export function KnitMode({
                   value={i}
                   disabled={!page.rows[row - 1].steps.length}
                 >
-                  {i + 1} / {pages.length}
+                  {workIndex(row, i) + 1} / {pages.length}
                 </option>
               ))}
             </select>
@@ -525,11 +594,13 @@ export function KnitMode({
           </strong>
           {pages && pages.length > 1 ? (
             <span>
-              Section {section + 1} of {pages.length}
+              Section {workSection + 1} of {pages.length}
             </span>
           ) : null}
           {markerPage >= 0 && markerPage !== section ? (
-            <span>Marker saved in section {markerPage + 1}</span>
+            <span>
+              Marker saved in section {workIndex(row, markerPage) + 1}
+            </span>
           ) : null}
           <span>
             {stitch > 0
@@ -547,222 +618,286 @@ export function KnitMode({
       </header>
 
       <div className="knit-mode-body">
-        <div className="knit-mode-chart-frame">
-          <svg
-            className="knit-mode-chart"
-            viewBox={`${-leftMargin} ${-topMargin} ${chartWidth + leftMargin} ${activeDocument.height + topMargin}`}
-            style={{
-              aspectRatio: `${chartWidth + leftMargin} / ${activeDocument.height + topMargin}`,
-            }}
-            role="img"
-            aria-label={`Chart with row ${row} highlighted${stitch > 0 && progress.markerStyle !== "none" ? ` and a marker on stitch ${stitch}` : ""}`}
-          >
-            <g shapeRendering="crispEdges">
-              {activeDocument.cells.flatMap((chartRow, chartRowIndex) =>
-                chartRow.map((colorId, columnIndex) => {
-                  const action = stitchActionAt(
-                    activeDocument,
-                    chartRowIndex,
-                    columnIndex,
-                  );
-                  return (
-                    <rect
-                      key={`${chartRowIndex}-${columnIndex}`}
-                      className={
-                        action === "no-stitch"
-                          ? "knit-mode-no-stitch"
-                          : undefined
-                      }
-                      x={columnIndex * aspect}
-                      y={chartRowIndex}
-                      width={aspect}
-                      height="1"
-                      fill={chartCellDisplayColor(
-                        activeDocument,
-                        chartRowIndex,
-                        columnIndex,
-                        palette.get(colorId),
-                      )}
-                      onClick={() => {
-                        if (action === "no-stitch") return;
-                        const nextRow = activeDocument.height - chartRowIndex;
-                        if (sectionChart) {
-                          const step =
-                            sectionChart.rows[nextRow - 1].atColumn.get(
-                              columnIndex,
-                            );
-                          if (step !== undefined) update(nextRow, step);
-                          return;
-                        }
-                        const steps = rowStitchSteps(activeDocument, nextRow);
-                        const orderedSteps = isRightToLeft(
-                          activeDocument,
-                          nextRow,
-                        )
-                          ? [...steps].reverse()
-                          : steps;
-                        const selectedStitch =
-                          orderedSteps.findIndex(
-                            (step) => step.column === columnIndex,
-                          ) + 1;
-                        if (selectedStitch > 0) update(nextRow, selectedStitch);
-                      }}
-                    />
-                  );
-                }),
-              )}
-            </g>
-            <g className="knit-mode-action-symbols" pointerEvents="none">
-              {activeDocument.cells.flatMap((chartRow, chartRowIndex) =>
-                chartRow.map((_, columnIndex) => {
-                  const action = stitchActionAt(
-                    activeDocument,
-                    chartRowIndex,
-                    columnIndex,
-                  );
-                  if (action === "knit") return null;
-                  const background = chartCellDisplayColor(
-                    activeDocument,
-                    chartRowIndex,
-                    columnIndex,
-                    palette.get(
-                      activeDocument.cells[chartRowIndex][columnIndex],
-                    ),
-                  );
-                  return (
-                    <text
-                      key={`${chartRowIndex}-${columnIndex}`}
-                      style={{ fill: contrastTextColor(background) }}
-                      x={(columnIndex + 0.5) * aspect}
-                      y={chartRowIndex + 0.7}
-                      textAnchor="middle"
-                      fontSize={Math.min(0.48, aspect * 0.38)}
-                    >
-                      {stitchActionSymbol(action)}
-                    </text>
-                  );
-                }),
-              )}
-            </g>
-            <rect
-              className="knit-mode-row-dimmer top"
-              x="0"
-              y="0"
-              width={activeDocument.width * aspect}
-              height={rowIndex}
-            />
-            <rect
-              className="knit-mode-row-dimmer bottom"
-              x="0"
-              y={rowIndex + 1}
-              width={activeDocument.width * aspect}
-              height={activeDocument.height - rowIndex - 1}
-            />
-            <rect
-              className="knit-mode-current-row"
-              x="0"
-              y={rowIndex}
-              width={activeDocument.width * aspect}
-              height="1"
-            />
-            <g
-              className="knit-mode-grid"
-              shapeRendering="crispEdges"
-              pointerEvents="none"
+        <div className="knit-mode-chart-area">
+          <div className="knit-mode-zoom" role="group" aria-label="Chart zoom">
+            <button
+              type="button"
+              aria-label="Zoom out"
+              disabled={zoomIndex === 0}
+              onClick={() => setZoomIndex(zoomIndex - 1)}
             >
-              {Array.from({ length: activeDocument.width + 1 }, (_, column) => (
-                <line
-                  key={`column-${column}`}
-                  className={
-                    majorColumnBoundary(
-                      column,
-                      activeDocument.width,
-                      sectionChart?.start,
-                    )
-                      ? "major"
-                      : undefined
-                  }
-                  x1={column * aspect}
-                  x2={column * aspect}
-                  y1="0"
-                  y2={activeDocument.height}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-              {Array.from(
-                { length: activeDocument.height + 1 },
-                (_, chartRow) => (
-                  <line
-                    key={`row-${chartRow}`}
-                    className={
-                      majorRowBoundary(chartRow, activeDocument.height)
-                        ? "major"
-                        : undefined
-                    }
-                    x1="0"
-                    x2={activeDocument.width * aspect}
-                    y1={chartRow}
-                    y2={chartRow}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ),
-              )}
-            </g>
-            {stitch > 0 && progress.markerStyle !== "none" ? (
+              −
+            </button>
+            <button
+              type="button"
+              aria-label="Fit chart"
+              title="Fit chart"
+              onClick={() => setZoomIndex(0)}
+            >
+              {zoom}%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              disabled={zoomIndex === KNIT_ZOOM_LEVELS.length - 1}
+              onClick={() => setZoomIndex(zoomIndex + 1)}
+            >
+              +
+            </button>
+          </div>
+          <div
+            className={`knit-mode-chart-frame${zoom > 100 ? " can-pan" : ""}`}
+            ref={chartFrame}
+            {...pan}
+          >
+            <svg
+              className="knit-mode-chart"
+              viewBox={`${-leftMargin} ${-topMargin} ${chartWidth + leftMargin + rightMargin} ${activeDocument.height + topMargin}`}
+              style={{
+                aspectRatio: chartRatio,
+                width: `calc(min(100cqw, 100cqh * ${chartRatio}) * ${zoom / 100})`,
+              }}
+              role="img"
+              aria-label={`Chart with row ${row} highlighted${stitch > 0 && progress.markerStyle !== "none" ? ` and a marker on stitch ${stitch}` : ""}`}
+            >
+              <g shapeRendering="crispEdges">
+                {activeDocument.cells.flatMap((chartRow, chartRowIndex) =>
+                  chartRow.map((colorId, columnIndex) => {
+                    const action = stitchActionAt(
+                      activeDocument,
+                      chartRowIndex,
+                      yoke
+                        ? activeDocument.width - 1 - columnIndex
+                        : columnIndex,
+                    );
+                    return (
+                      <rect
+                        key={`${chartRowIndex}-${columnIndex}`}
+                        className={
+                          action === "no-stitch"
+                            ? "knit-mode-no-stitch"
+                            : undefined
+                        }
+                        x={columnIndex * aspect}
+                        y={chartRowIndex}
+                        width={aspect}
+                        height="1"
+                        fill={chartCellDisplayColor(
+                          activeDocument,
+                          chartRowIndex,
+                          columnIndex,
+                          palette.get(colorId),
+                        )}
+                        onClick={() => {
+                          if (action === "no-stitch") return;
+                          const nextRow = activeDocument.height - chartRowIndex;
+                          if (sectionChart) {
+                            const step =
+                              sectionChart.rows[nextRow - 1].atColumn.get(
+                                columnIndex,
+                              );
+                            if (step !== undefined) update(nextRow, step);
+                            return;
+                          }
+                          const steps = rowStitchSteps(activeDocument, nextRow);
+                          const orderedSteps = knitRightToLeft(
+                            activeDocument,
+                            nextRow,
+                          )
+                            ? [...steps].reverse()
+                            : steps;
+                          const selectedStitch =
+                            orderedSteps.findIndex(
+                              (step) => step.column === columnIndex,
+                            ) + 1;
+                          if (selectedStitch > 0)
+                            update(nextRow, selectedStitch);
+                        }}
+                      />
+                    );
+                  }),
+                )}
+              </g>
+              <g className="knit-mode-action-symbols" pointerEvents="none">
+                {activeDocument.cells.flatMap((chartRow, chartRowIndex) =>
+                  chartRow.map((_, columnIndex) => {
+                    const action = stitchActionAt(
+                      activeDocument,
+                      chartRowIndex,
+                      columnIndex,
+                    );
+                    if (action === "knit") return null;
+                    const background = chartCellDisplayColor(
+                      activeDocument,
+                      chartRowIndex,
+                      columnIndex,
+                      palette.get(
+                        activeDocument.cells[chartRowIndex][columnIndex],
+                      ),
+                    );
+                    return (
+                      <text
+                        key={`${chartRowIndex}-${columnIndex}`}
+                        style={{ fill: contrastTextColor(background) }}
+                        x={(columnIndex + 0.5) * aspect}
+                        y={chartRowIndex + 0.7}
+                        textAnchor="middle"
+                        fontSize={Math.min(0.48, aspect * 0.38)}
+                      >
+                        {stitchActionSymbol(action)}
+                      </text>
+                    );
+                  }),
+                )}
+              </g>
+              <rect
+                className="knit-mode-row-dimmer top"
+                x="0"
+                y="0"
+                width={activeDocument.width * aspect}
+                height={rowIndex}
+              />
+              <rect
+                className="knit-mode-row-dimmer bottom"
+                x="0"
+                y={rowIndex + 1}
+                width={activeDocument.width * aspect}
+                height={activeDocument.height - rowIndex - 1}
+              />
+              <rect
+                className="knit-mode-current-row"
+                x="0"
+                y={rowIndex}
+                width={activeDocument.width * aspect}
+                height="1"
+              />
               <g
-                className={`knit-mode-stitch-marker ${progress.markerStyle}`}
+                className="knit-mode-grid"
+                shapeRendering="crispEdges"
                 pointerEvents="none"
               >
-                <circle
-                  cx={markerX}
-                  cy={rowIndex + 0.5}
-                  r={Math.min(0.43, aspect * 0.35)}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <text
-                  x={markerX}
-                  y={rowIndex + 0.72}
-                  textAnchor="middle"
-                  fontSize={Math.min(0.68, aspect * 0.54)}
-                >
-                  {marker.symbol}
-                </text>
+                {Array.from(
+                  { length: activeDocument.width + 1 },
+                  (_, column) => (
+                    <line
+                      key={`column-${column}`}
+                      className={
+                        majorColumnBoundary(
+                          column,
+                          activeDocument.width,
+                          yoke
+                            ? -(sectionChart?.end ?? 0)
+                            : sectionChart?.start,
+                        )
+                          ? "major"
+                          : undefined
+                      }
+                      x1={column * aspect}
+                      x2={column * aspect}
+                      y1="0"
+                      y2={activeDocument.height}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ),
+                )}
+                {Array.from(
+                  { length: activeDocument.height + 1 },
+                  (_, chartRow) => (
+                    <line
+                      key={`row-${chartRow}`}
+                      className={
+                        majorRowBoundary(chartRow, activeDocument.height)
+                          ? "major"
+                          : undefined
+                      }
+                      x1="0"
+                      x2={activeDocument.width * aspect}
+                      y1={chartRow}
+                      y2={chartRow}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ),
+                )}
               </g>
-            ) : null}
-            <g className="knit-mode-chart-labels" pointerEvents="none">
-              {Array.from({ length: activeDocument.width }, (_, columnIndex) =>
-                (columnIndex + 1 + (sectionChart?.start ?? 0)) % columnStep ===
-                0 ? (
+              {stitch > 0 && progress.markerStyle !== "none" ? (
+                <g
+                  className={`knit-mode-stitch-marker ${progress.markerStyle}`}
+                  pointerEvents="none"
+                >
+                  <circle
+                    cx={markerX}
+                    cy={rowIndex + 0.5}
+                    r={Math.min(0.43, aspect * 0.35)}
+                    vectorEffect="non-scaling-stroke"
+                  />
                   <text
-                    key={`column-label-${columnIndex}`}
-                    x={(columnIndex + 0.5) * aspect}
-                    y={-labelSize * 0.45}
+                    x={markerX}
+                    y={rowIndex + 0.72}
                     textAnchor="middle"
-                    fontSize={labelSize}
+                    fontSize={Math.min(0.68, aspect * 0.54)}
                   >
-                    {columnIndex + 1 + (sectionChart?.start ?? 0)}
+                    {marker.symbol}
                   </text>
-                ) : null,
-              )}
-              {Array.from(
-                { length: activeDocument.height },
-                (_, chartRowIndex) => {
-                  const rowNumber = activeDocument.height - chartRowIndex;
-                  return rowNumber % rowStep === 0 ? (
-                    <text
-                      key={`row-label-${chartRowIndex}`}
-                      x={-labelSize * 0.5}
-                      y={chartRowIndex + 0.7}
-                      textAnchor="end"
-                      fontSize={labelSize}
-                    >
-                      {rowNumber}
-                    </text>
-                  ) : null;
-                },
-              )}
-            </g>
-          </svg>
+                </g>
+              ) : null}
+              <g className="knit-mode-chart-labels" pointerEvents="none">
+                {Array.from(
+                  { length: activeDocument.width },
+                  (_, columnIndex) =>
+                    ((yoke
+                      ? activeDocument.width - columnIndex
+                      : columnIndex + 1) +
+                      (sectionChart?.start ?? 0)) %
+                      columnStep ===
+                    0 ? (
+                      <text
+                        key={`column-label-${columnIndex}`}
+                        x={(columnIndex + 0.5) * aspect}
+                        y={-labelSize * 0.45}
+                        textAnchor="middle"
+                        fontSize={labelSize}
+                      >
+                        {(yoke
+                          ? activeDocument.width - columnIndex
+                          : columnIndex + 1) + (sectionChart?.start ?? 0)}
+                      </text>
+                    ) : null,
+                )}
+                {Array.from(
+                  { length: activeDocument.height },
+                  (_, chartRowIndex) => {
+                    const rowNumber = activeDocument.height - chartRowIndex;
+                    return rowNumber % rowStep === 0 ? (
+                      <text
+                        key={`row-label-${chartRowIndex}`}
+                        x={-2.4}
+                        y={chartRowIndex + 0.7}
+                        textAnchor="end"
+                        fontSize={labelSize}
+                      >
+                        {rowNumber}
+                      </text>
+                    ) : null;
+                  },
+                )}
+              </g>
+              {startX !== undefined ? (
+                <g
+                  ref={rowStart}
+                  className="knit-mode-row-start"
+                  transform={`translate(${startX} ${rowIndex + 0.5}) scale(${arrowDirection} 1)`}
+                  role="img"
+                  aria-label={`Start here, work ${rightToLeft ? "right to left" : "left to right"}`}
+                  pointerEvents="none"
+                >
+                  <path
+                    d="M-2.05 0H-.2m-.55-.4.55.4-.55.4"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              ) : null}
+            </svg>
+          </div>
         </div>
 
         <aside className="knit-mode-controls">
@@ -781,7 +916,7 @@ export function KnitMode({
             </div>
           ) : null}
           {sectionSizeControl}
-          {sectionChart ? (
+          {sectionChart && pageCount > 1 ? (
             <div className="knit-section-location">
               <span>
                 Columns {sectionChart.start + 1}–{sectionChart.end}
@@ -799,15 +934,12 @@ export function KnitMode({
                 {model.program.startingCounts.length} times per round.
               </p>
             ) : null}
-            {model && pages ? (
-              <>
-                {markerPage >= 0 && markerPage !== section ? (
-                  <button onClick={() => navigate(row, markerPage)}>
-                    Go to marker
-                  </button>
-                ) : null}
-              </>
-            ) : (
+            {markerPage >= 0 && markerPage !== section ? (
+              <button onClick={() => navigate(row, markerPage)}>
+                Go to marker
+              </button>
+            ) : null}
+            {!yoke ? (
               <>
                 <div
                   className={`knit-mode-settings-grid ${isDuplicate ? "single" : ""}`}
@@ -864,7 +996,7 @@ export function KnitMode({
                   Trim empty border
                 </label>
               </>
-            )}
+            ) : null}
             <div className="marker-picker" aria-label="Stitch marker style">
               <span>Marker</span>
               {MARKERS.map((choice) => (
@@ -889,7 +1021,7 @@ export function KnitMode({
           </div>
           <p className="knit-direction">
             {yoke
-              ? "Start at centre back and follow the chart left to right, in section order."
+              ? "Start at centre back and work right to left, in section order."
               : isDuplicate
                 ? "Follow each chart row from left to right, or work the duplicate stitches in any order that feels comfortable."
                 : `Work this ${activeDocument.instructions.construction === "round" ? "round" : "row"} ${rightToLeft ? "right to left" : "left to right"}.`}{" "}
@@ -988,7 +1120,7 @@ export function KnitMode({
             <button
               onClick={() => changeStitch(-1)}
               disabled={
-                model
+                pages
                   ? previousYokeStep === position
                   : row === 1 && stitch === 0
               }
@@ -998,7 +1130,7 @@ export function KnitMode({
             <button
               onClick={() => changeStitch(1)}
               disabled={
-                model
+                pages
                   ? nextYokeStep === position
                   : row === activeDocument.height &&
                     stitch === orderedRowSteps.length

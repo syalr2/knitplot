@@ -13,6 +13,123 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("a two-colour chart can add a valid colour and paint with it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Remove colour 3" }).click();
+  await page.getByRole("button", { name: "Add colour" }).click();
+  await expect(page.getByLabel("Change colour 3")).toHaveValue("#d6a84b");
+  const cell = page.locator(".chart-svg g").first().locator("rect").first();
+  await cell.click();
+  await expect(cell).toHaveAttribute("fill", "#d6a84b");
+});
+
+test("Knit Mode zooms and follows the start of a flat row on a tablet", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const doc = cloneDocument(defaultDocument);
+  doc.instructions = {
+    ...doc.instructions,
+    technique: "intarsia",
+    construction: "flat",
+  };
+  doc.stitchActions = createStitchActions(doc.width, doc.height);
+  doc.stitchActions[doc.height - 1][doc.width - 1] = "no-stitch";
+  await page.addInitScript(
+    (workspace) => {
+      localStorage.setItem("colorwork-chart-v1", JSON.stringify(workspace));
+    },
+    workspaceSave([newChartTab(doc, "knitting")], "knitting"),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Knit mode", exact: true }).click();
+  const knitMode = page.getByRole("dialog", { name: "Knit mode" });
+  const frame = knitMode.locator(".knit-mode-chart-frame");
+  const chart = frame.locator("svg");
+  const arrow = chart.locator(".knit-mode-row-start");
+  await expect(arrow).toHaveAttribute(
+    "aria-label",
+    "Start here, work right to left",
+  );
+  const fitWidth = (await chart.boundingBox())!.width;
+  await knitMode.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByRole("button", { name: "Fit chart" })).toHaveText(
+    "150%",
+  );
+  expect((await chart.boundingBox())!.width).toBeGreaterThan(fitWidth);
+  const frameBox = (await frame.boundingBox())!;
+  const beforeDrag = await frame.evaluate((el) => el.scrollLeft);
+  await page.mouse.move(
+    frameBox.x + frameBox.width / 2,
+    frameBox.y + frameBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    frameBox.x + frameBox.width / 2 + 100,
+    frameBox.y + frameBox.height / 2,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  expect(await frame.evaluate((el) => el.scrollLeft)).toBeLessThan(beforeDrag);
+  await expect(knitMode.getByText(/Marker on/)).toHaveCount(0);
+  await page.getByRole("button", { name: "Next row", exact: true }).click();
+  await expect(arrow).toHaveAttribute(
+    "aria-label",
+    "Start here, work left to right",
+  );
+  await expect
+    .poll(async () => {
+      const bounds = (await frame.boundingBox())!;
+      const marker = (await arrow.boundingBox())!;
+      return (
+        marker.x >= bounds.x &&
+        marker.x + marker.width <= bounds.x + bounds.width
+      );
+    })
+    .toBe(true);
+  await page.getByRole("button", { name: "Fit chart" }).click();
+  await expect(page.getByRole("button", { name: "Fit chart" })).toHaveText(
+    "100%",
+  );
+});
+
+test("wide flat charts work balanced sections in row direction", async ({
+  page,
+}) => {
+  const doc = cloneDocument(defaultDocument);
+  doc.width = 110;
+  doc.cells = doc.cells.map(() => Array(110).fill(doc.palette[0].id));
+  doc.instructions = {
+    ...doc.instructions,
+    technique: "intarsia",
+    construction: "flat",
+  };
+  await page.addInitScript(
+    (workspace) => {
+      localStorage.setItem("colorwork-chart-v1", JSON.stringify(workspace));
+    },
+    workspaceSave([newChartTab(doc, "wide-knitting")], "wide-knitting"),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Knit mode", exact: true }).click();
+  const knitMode = page.getByRole("dialog", { name: "Knit mode" });
+  await expect(knitMode.getByText("Columns 56–110")).toBeVisible();
+  await knitMode.getByRole("button", { name: "Next section" }).click();
+  await expect(knitMode.getByText("Columns 1–55")).toBeVisible();
+  await knitMode.getByRole("button", { name: "Next row" }).click();
+  await expect(knitMode.getByText("Columns 1–55")).toBeVisible();
+  await expect(knitMode.locator(".knit-mode-row-start")).toHaveAttribute(
+    "aria-label",
+    "Start here, work left to right",
+  );
+  await knitMode
+    .getByRole("combobox", { name: "Max columns per section" })
+    .selectOption("150");
+  await expect(knitMode.getByText("Columns 1–55")).toHaveCount(0);
+});
+
 test("first visit and Help offer the yoke tour and an editable example", async ({
   context,
 }) => {
