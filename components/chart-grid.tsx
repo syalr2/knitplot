@@ -17,14 +17,14 @@ import {
 
 type Props = {
   document: ChartDocument;
-  tool: Tool;
-  structureAction: StitchAction | null;
-  selectedColor: string;
+  tool?: Tool;
+  structureAction?: StitchAction | null;
+  selectedColor?: string;
   zoom: number;
-  selection: CellSelection | null;
-  onSelectionChange: (selection: CellSelection | null) => void;
-  onStrokeStart: () => void;
-  onPaint: (row: number, column: number, flood: boolean) => void;
+  selection?: CellSelection | null;
+  onSelectionChange?: (selection: CellSelection | null) => void;
+  onStrokeStart?: () => void;
+  onPaint?: (row: number, column: number, flood: boolean) => void;
   yarnOnly?: boolean;
   onStrokeEnd?: () => void;
   onCellPick?: (point: ChartPoint) => void;
@@ -34,7 +34,7 @@ type Props = {
 
 export function ChartGrid({
   document,
-  tool,
+  tool = "pencil",
   structureAction,
   zoom,
   selection,
@@ -47,6 +47,7 @@ export function ChartGrid({
   onCellPoint,
   moveTarget,
 }: Props) {
+  const readOnly = !onPaint && !onCellPick;
   const svgRef = useRef<SVGSVGElement>(null);
   const drawing = useRef(false);
   const strokeActive = useRef(false);
@@ -94,7 +95,7 @@ export function ChartGrid({
       selecting.current = true;
       drawing.current = false;
       selectionStart.current = cell;
-      onSelectionChange({
+      onSelectionChange?.({
         startRow: cell.row,
         startColumn: cell.column,
         endRow: cell.row,
@@ -102,11 +103,11 @@ export function ChartGrid({
       });
       return;
     }
-    onStrokeStart();
+    onStrokeStart?.();
     strokeActive.current = true;
     drawing.current = tool !== "fill";
     previousCell.current = `${cell.row}:${cell.column}`;
-    onPaint(cell.row, cell.column, tool === "fill");
+    onPaint?.(cell.row, cell.column, tool === "fill");
   }
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
@@ -118,7 +119,7 @@ export function ChartGrid({
     if (selecting.current && selectionStart.current) {
       const cell = cellFromPointer(event);
       if (!cell) return;
-      onSelectionChange({
+      onSelectionChange?.({
         startRow: selectionStart.current.row,
         startColumn: selectionStart.current.column,
         endRow: cell.row,
@@ -132,7 +133,7 @@ export function ChartGrid({
     const key = `${cell.row}:${cell.column}`;
     if (key === previousCell.current) return;
     previousCell.current = key;
-    onPaint(cell.row, cell.column, false);
+    onPaint?.(cell.row, cell.column, false);
   }
 
   function endPointerAction() {
@@ -154,8 +155,18 @@ export function ChartGrid({
     : null;
 
   return (
-    <div className="chart-frame" data-tour="chart-canvas">
-      <div className="chart-content" style={{ width: `${zoom}%` }}>
+    <div
+      className={`chart-frame${readOnly ? " chart-frame-readonly" : ""}`}
+      data-tour={readOnly ? undefined : "chart-canvas"}
+    >
+      <div
+        className="chart-content"
+        style={{
+          width: readOnly
+            ? `min(${zoom}%, calc(29px + var(--readonly-chart-fit-height, 500px) * ${(document.width * aspect * zoom) / (document.height * 100)}))`
+            : `${zoom}%`,
+        }}
+      >
         <div
           className="chart-column-numbers"
           aria-hidden="true"
@@ -192,10 +203,10 @@ export function ChartGrid({
             }}
             role="img"
             aria-label={`${document.width} stitch by ${document.height} row colorwork chart`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={endPointerAction}
-            onPointerCancel={endPointerAction}
+            onPointerDown={readOnly ? undefined : handlePointerDown}
+            onPointerMove={readOnly ? undefined : handlePointerMove}
+            onPointerUp={readOnly ? undefined : endPointerAction}
+            onPointerCancel={readOnly ? undefined : endPointerAction}
           >
             <g shapeRendering="crispEdges">
               {document.cells.flatMap((row, rowIndex) =>
@@ -288,7 +299,7 @@ export function ChartGrid({
                 />
               ))}
             </g>
-            {document.guides.symmetry !== "none" ? (
+            {!readOnly && document.guides.symmetry !== "none" ? (
               <g className="symmetry-guide-lines" pointerEvents="none">
                 {document.guides.symmetry === "horizontal" ||
                 document.guides.symmetry === "both" ? (
@@ -336,7 +347,7 @@ export function ChartGrid({
             ) : null}
           </svg>
         </div>
-        {!onCellPick ? (
+        {!readOnly && !onCellPick ? (
           <p className="chart-hint">
             {structureAction === "knit"
               ? "Click and drag to remove stitch symbols, keeping yarn colours. With Fill, click a connected group of symbols to remove them."

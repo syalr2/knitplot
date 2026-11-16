@@ -1219,10 +1219,8 @@ test("several shaping strokes wait for one review and remain pending across char
   const leaveAttempts: string[] = [];
   for (const link of [
     () => page.locator('a[href="/account"]'),
-    () => page.getByRole("menuitem", { name: "View My Charts", exact: true }),
+    () => page.getByRole("link", { name: "Chart Club", exact: true }),
   ]) {
-    if (!(await link().isVisible()))
-      await page.getByRole("button", { name: "File", exact: true }).click();
     page.once("dialog", async (prompt) => {
       leaveAttempts.push(prompt.message());
       await prompt.dismiss();

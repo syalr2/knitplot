@@ -2,7 +2,7 @@ import "server-only";
 
 import { neon } from "@neondatabase/serverless";
 
-let database: ReturnType<typeof neon> | null = null;
+let database: ReturnType<typeof neon<false, false>> | null = null;
 
 export function getDatabase() {
   if (database) return database;

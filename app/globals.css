@@ -13,9 +13,9 @@
   --accent-deep: #4d5a4b;
   --accent-soft: #eceee8;
   --radius: 12px;
-  --font-ui: var(--font-plex-sans), "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: var(--font-plex-mono), "SFMono-Regular", Consolas, monospace;
-  --font-display: var(--font-newsreader), Georgia, serif;
+  --font-ui: var(--font-plex-sans, "Avenir Next"), "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono, "SFMono-Regular"), Consolas, monospace;
+  --font-display: var(--font-newsreader, Georgia), serif;
 }
 
 * {
@@ -370,7 +370,8 @@ button {
   width: 6px;
 }
 
-button {
+button,
+.chart-club-link {
   background: var(--field);
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -385,7 +386,8 @@ button {
     transform 0.16s ease;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.chart-club-link:hover {
   border-color: var(--accent);
   box-shadow: 0 4px 10px rgba(60, 50, 35, 0.09);
   color: var(--accent-deep);
@@ -423,6 +425,14 @@ button:disabled {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
   color: #fff;
+}
+.chart-club-link {
+  font: inherit;
+  line-height: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 .danger-button {
   background: #a64c40;
@@ -2002,15 +2012,18 @@ button:disabled {
   margin: 0;
   text-transform: uppercase;
 }
-.account-profile-card,
-.account-ai-card {
-  grid-row: span 2;
+.account-hub-column {
+  align-content: start;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
 }
-.account-ai-card {
-  grid-column: 1;
+.account-ai-disclosure > summary {
+  cursor: pointer;
+  font-weight: 600;
 }
-.account-signout-card {
-  grid-column: 2;
+.account-ai-disclosure[open] > summary {
+  margin-bottom: 12px;
 }
 .account-card-icon {
   align-items: center;
@@ -2234,12 +2247,6 @@ button:disabled {
   .account-hub-grid {
     grid-template-columns: 1fr;
   }
-  .account-profile-card,
-  .account-ai-card,
-  .account-signout-card {
-    grid-column: 1;
-    grid-row: auto;
-  }
   .account-avatar-editor {
     grid-template-columns: 1fr;
   }
@@ -2382,15 +2389,29 @@ button:disabled {
   min-width: 240px;
   position: relative;
 }
-.library-search > span {
-  color: var(--quiet);
-  font-family: var(--font-display);
-  font-size: 22px;
-  left: 13px;
-  line-height: 1;
-  pointer-events: none;
+.library-search > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+  color: var(--accent);
+  display: grid;
+  height: 32px;
+  justify-items: center;
+  min-height: 0;
+  padding: 0;
   position: absolute;
-  top: 8px;
+  right: 4px;
+  top: 4px;
+  width: 32px;
+}
+.library-search > button:hover {
+  background: rgba(110, 122, 107, 0.12);
+}
+.library-search > button svg {
+  width: 18px;
+  height: 18px;
 }
 .library-search input {
   background: var(--panel);
@@ -2398,7 +2419,7 @@ button:disabled {
   border-radius: 10px;
   color: var(--ink);
   height: 40px;
-  padding: 9px 14px 9px 38px;
+  padding: 9px 42px 9px 13px;
   width: 100%;
 }
 .library-search input:focus {
@@ -2619,7 +2640,7 @@ button:disabled {
   align-items: center;
   display: grid;
   gap: 16px;
-  grid-template-columns: 76px minmax(130px, 1fr) 105px 125px 118px 170px;
+  grid-template-columns: 76px minmax(130px, 1fr) 105px 125px 118px 250px;
 }
 .library-list-header {
   background: #f4f1e9;
@@ -2673,10 +2694,19 @@ button:disabled {
 .library-list-row .cloud-chart-actions {
   flex-wrap: nowrap;
 }
-.library-list-row .cloud-chart-actions button {
+.library-list-row .cloud-chart-actions :is(button, .library-share-link) {
   font-size: 9px;
   min-height: 29px;
   padding: 5px 8px;
+}
+.library-list-row .library-share-link {
+  white-space: nowrap;
+}
+.club-profile-disclosure > summary {
+  color: var(--accent-deep);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
 }
 .library-message {
   background: var(--panel);
@@ -2728,6 +2758,109 @@ button:disabled {
   font-weight: 600;
   min-height: 38px;
   padding: 8px 14px;
+}
+.library-empty > .library-auth-actions {
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+.library-auth-link {
+  text-decoration: none;
+}
+.library-auth-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.library-card-copy .library-share-link,
+.library-list-row .library-share-link {
+  align-items: center;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(60, 50, 35, 0.04);
+  display: inline-flex;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: normal;
+  min-height: 26px;
+  padding: 4px 9px;
+  text-decoration: none;
+}
+.library-card-copy .library-share-link {
+  margin-top: 8px;
+}
+.account-username-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.account-username-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.account-username-form input {
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  padding: 7px 10px;
+  max-width: 100%;
+}
+.account-username-form > .primary-button {
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 30px;
+  padding: 5px 10px;
+}
+.account-username-form .account-username-error {
+  flex-basis: 100%;
+  font-size: 13px;
+  margin: 0;
+}
+.account-username-dialog {
+  color: var(--ink);
+  gap: 12px;
+  width: calc(100% - 32px);
+}
+.account-username-dialog:not([open]) {
+  display: none;
+}
+.account-username-dialog::backdrop {
+  background: rgba(51, 48, 42, 0.34);
+}
+.account-username-dialog h2,
+.account-username-dialog p {
+  margin: 0;
+}
+.account-username-dialog h2 {
+  font-size: 18px;
+}
+.account-username-dialog p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.account-username-dialog ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.account-username-dialog .secondary-button {
+  color: var(--accent-deep);
+  font-size: 13px;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+.library-card-copy .library-share-link:hover,
+.library-list-row .library-share-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .library-local-panel {
   align-items: center;
@@ -2787,7 +2920,7 @@ button:disabled {
   }
   .library-list-header,
   .library-list-row {
-    grid-template-columns: 68px minmax(130px, 1fr) 95px 105px 170px;
+    grid-template-columns: 68px minmax(130px, 1fr) 95px 105px 250px;
   }
   .library-list-header > span:nth-child(4),
   .library-list-row > .library-palette {
@@ -2827,7 +2960,9 @@ button:disabled {
     align-items: stretch;
   }
   .library-search {
+    flex-basis: 100%;
     max-width: none;
+    min-width: 0;
     width: 100%;
   }
   .library-sort {
@@ -2849,6 +2984,7 @@ button:disabled {
     display: none;
   }
   .library-list-row .cloud-chart-actions {
+    flex-wrap: wrap;
     grid-column: 2 / 4;
     justify-content: flex-start;
   }
@@ -4971,12 +5107,16 @@ select:focus {
   .file-actions {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-left: 0;
     width: 100%;
   }
   .file-actions .file-menu > button {
     width: 100%;
+  }
+  .file-actions .file-menu:first-child .file-menu-popover {
+    left: 0;
+    right: auto;
   }
   .workspace {
     display: flex;
@@ -5295,4 +5435,17 @@ select:focus {
   .tour-highlight {
     transition: none;
   }
+}
+.club-hearts-label {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.club-hearts-label svg {
+  width: 1em;
+  height: 1em;
+  margin-left: 0.25em;
+}
+.account-hub-card .club-share-form {
+  margin: 10px 0 0;
 }

@@ -15,16 +15,18 @@ export function YokeKnittedPreview({
   canvasRef,
   stale,
   onRefresh,
+  initialView = "whole",
 }: {
   document: ChartDocument;
-  canvasRef: RefObject<HTMLCanvasElement | null>;
-  stale: boolean;
-  onRefresh: () => void;
+  canvasRef?: RefObject<HTMLCanvasElement | null>;
+  stale?: boolean;
+  onRefresh?: () => void;
+  initialView?: "whole" | "front" | "back";
 }) {
   const [open, setOpen] = useState(true);
   const [view, setView] = useState<
     Exclude<YokePreviewView, YokeSweaterView> | "sweater"
-  >("whole");
+  >(initialView);
   const [repeat, setRepeat] = useState(0);
   const repeatCount = document.yoke?.measurements.repeats ?? 1;
   const selectedRepeat = Math.min(repeat, repeatCount - 1);
@@ -32,6 +34,7 @@ export function YokeKnittedPreview({
   return (
     <details
       className="preview panel"
+      data-yoke-preview-view={view}
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
@@ -79,12 +82,14 @@ export function YokeKnittedPreview({
                 </select>
               </label>
             ) : null}
-            <button
-              className="primary-button refresh-preview-button"
-              onClick={onRefresh}
-            >
-              Refresh preview
-            </button>
+            {onRefresh && (
+              <button
+                className="primary-button refresh-preview-button"
+                onClick={onRefresh}
+              >
+                Refresh preview
+              </button>
+            )}
           </div>
           {stale ? (
             <p className="preview-stale-note" role="status">

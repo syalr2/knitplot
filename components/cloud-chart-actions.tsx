@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
 import {
   STORAGE_KEY,
@@ -24,7 +24,15 @@ type CloudChartResponse = {
   preview: Record<string, unknown>;
 };
 
-export function CloudChartActions({ id, name }: { id: string; name: string }) {
+export function CloudChartActions({
+  id,
+  name,
+  children,
+}: {
+  id: string;
+  name: string;
+  children?: ReactNode;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<"open" | "rename" | "delete" | null>(null);
   const [error, setError] = useState("");
@@ -63,7 +71,7 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
   async function deleteChart() {
     if (
       !window.confirm(
-        `Delete “${name}” from My Charts? Your browser copy is not affected.`,
+        `Delete “${name}” from My Charts? Published posts and your browser copy are not affected.`,
       )
     )
       return;
@@ -184,6 +192,7 @@ export function CloudChartActions({ id, name }: { id: string; name: string }) {
           <button onClick={deleteChart} disabled={busy !== null}>
             {busy === "delete" ? "Deleting…" : "Delete"}
           </button>
+          {children}
         </>
       )}
       {error ? <p role="alert">{error}</p> : null}

@@ -1,10 +1,19 @@
 "use client";
 
+import { ClubNavigation } from "@/components/club-navigation";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AccountAvatar } from "@/components/account-avatar";
 import { CloudChartActions } from "@/components/cloud-chart-actions";
+import { LibrarySearch } from "@/components/library-search";
 import {
   STORAGE_KEY,
   MAX_CHART_TABS,
@@ -37,6 +46,7 @@ type Props = {
   avatar: Avatar;
   initialPinnedIds: string[];
   loadError: boolean;
+  publishedContent?: ReactNode;
 };
 
 function ChartThumbnail({ chart }: { chart: ChartSummary }) {
@@ -90,6 +100,7 @@ export function MyChartsLibrary({
   pageSize,
   initialQuery,
   initialSort,
+  publishedContent,
 }: Props) {
   const router = useRouter();
   const pageUrl = (nextPage: number, q = initialQuery, order = initialSort) =>
@@ -237,9 +248,22 @@ export function MyChartsLibrary({
           </div>
           <Palette colors={chart.palette} />
           <p>Edited {formattedDate(chart.updatedAt)}</p>
-          <CloudChartActions id={chart.id} name={chart.name} />
+          <CloudChartActions id={chart.id} name={chart.name}>
+            {shareAction(chart)}
+          </CloudChartActions>
         </div>
       </article>
+    );
+  }
+
+  function shareAction(chart: ChartSummary) {
+    return chart.publicPostId ? null : (
+      <Link
+        className="library-share-link"
+        href={`/chart-club/share/${chart.id}`}
+      >
+        Share to Chart Club
+      </Link>
     );
   }
 
@@ -250,12 +274,7 @@ export function MyChartsLibrary({
           <span aria-hidden="true" />
           KnitPlot
         </Link>
-        <div className="library-main-nav">
-          <Link href="/">Chart maker</Link>
-          <Link className="active" href="/my-charts">
-            My charts
-          </Link>
-        </div>
+        <ClubNavigation active="mine" />
         <Link className="library-account-link" href="/account">
           <AccountAvatar avatar={avatar} />
           <span>{email ?? "Account"}</span>
@@ -273,205 +292,235 @@ export function MyChartsLibrary({
         <header className="library-heading">
           <div>
             <h1>My charts</h1>
-            <p>
-              {total} {total === 1 ? "chart" : "charts"} saved to your account
-            </p>
+            {!publishedContent && (
+              <p>
+                {total} {total === 1 ? "chart" : "charts"} saved to your account
+              </p>
+            )}
           </div>
-          <button
-            className="primary-button library-new-chart"
-            type="button"
-            onClick={createNewChart}
-          >
-            <span aria-hidden="true">＋</span>New chart
-          </button>
+          {!publishedContent && (
+            <button
+              className="primary-button library-new-chart"
+              type="button"
+              onClick={createNewChart}
+            >
+              <span aria-hidden="true">＋</span>New chart
+            </button>
+          )}
         </header>
-
-        <div className="library-toolbar">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              router.push(pageUrl(1, query, sort));
-            }}
+        <nav
+          className="library-main-nav library-subnav"
+          aria-label="My Charts views"
+        >
+          <Link
+            href="/my-charts"
+            aria-current={!publishedContent ? "page" : undefined}
+            className={!publishedContent ? "active" : undefined}
           >
-            <label className="library-search">
-              <span aria-hidden="true">⌕</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search all your charts"
-              />
-            </label>
-            <button type="submit">Search</button>
-          </form>
-          <label className="library-sort">
-            <span>Sort</span>
-            <select
-              value={sort}
-              onChange={(event) => {
-                const order = event.target.value as SortMode;
-                setSort(order);
-                router.push(pageUrl(1, query, order));
-              }}
-            >
-              <option value="updated-desc">Last edited</option>
-              <option value="updated-asc">Oldest edited</option>
-              <option value="name">Name</option>
-            </select>
-          </label>
-          <div className="library-view-toggle" aria-label="Chart view">
-            <button
-              type="button"
-              className={view === "grid" ? "active" : ""}
-              aria-label="Grid view"
-              aria-pressed={view === "grid"}
-              onClick={() => setView("grid")}
-            >
-              ▦
-            </button>
-            <button
-              type="button"
-              className={view === "list" ? "active" : ""}
-              aria-label="List view"
-              aria-pressed={view === "list"}
-              onClick={() => setView("list")}
-            >
-              ☰
-            </button>
-          </div>
-        </div>
+            All charts
+          </Link>
+          <Link
+            href="/my-charts?tab=published"
+            aria-current={publishedContent ? "page" : undefined}
+            className={publishedContent ? "active" : undefined}
+          >
+            Published charts
+          </Link>
+        </nav>
 
-        {message ? (
-          <p className="library-message error" role="status">
-            {message}
-          </p>
-        ) : null}
-        {loadError ? (
-          <p className="library-message error">
-            KnitPlot could not load your saved charts. Please refresh and try
-            again.
-          </p>
-        ) : null}
-        {!loadError && !total ? (
-          <div className="library-empty">
-            <span aria-hidden="true">◇</span>
-            <h2>No saved charts yet</h2>
-            <p>
-              Start with a blank chart, or bring in a KnitPlot file already
-              saved on this computer.
-            </p>
-            <div>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={createNewChart}
-              >
-                Create a chart
-              </button>
-              <button type="button" onClick={() => importRef.current?.click()}>
-                Import a local chart
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {!loadError && total > 0 && !visibleCharts.length ? (
-          <p className="library-message">No charts match “{query}”.</p>
-        ) : null}
-
-        {!loadError && visibleCharts.length > 0 ? (
+        {publishedContent ?? (
           <>
-            {view === "grid" ? (
+            <div className="library-toolbar">
+              <LibrarySearch
+                label="Search all your charts"
+                placeholder="Search all your charts"
+                query={query}
+                onQueryChange={setQuery}
+                maxLength={200}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  router.push(pageUrl(1, query, sort));
+                }}
+              />
+              <label className="library-sort">
+                <span>Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => {
+                    const order = event.target.value as SortMode;
+                    setSort(order);
+                    router.push(pageUrl(1, query, order));
+                  }}
+                >
+                  <option value="updated-desc">Last edited</option>
+                  <option value="updated-asc">Oldest edited</option>
+                  <option value="name">Name</option>
+                </select>
+              </label>
+              <div className="library-view-toggle" aria-label="Chart view">
+                <button
+                  type="button"
+                  className={view === "grid" ? "active" : ""}
+                  aria-label="Grid view"
+                  aria-pressed={view === "grid"}
+                  onClick={() => setView("grid")}
+                >
+                  ▦
+                </button>
+                <button
+                  type="button"
+                  className={view === "list" ? "active" : ""}
+                  aria-label="List view"
+                  aria-pressed={view === "list"}
+                  onClick={() => setView("list")}
+                >
+                  ☰
+                </button>
+              </div>
+            </div>
+
+            {message ? (
+              <p className="library-message error" role="status">
+                {message}
+              </p>
+            ) : null}
+            {loadError ? (
+              <p className="library-message error">
+                KnitPlot could not load your saved charts. Please refresh and
+                try again.
+              </p>
+            ) : null}
+            {!loadError && !total ? (
+              <div className="library-empty">
+                <span aria-hidden="true">◇</span>
+                <h2>No saved charts yet</h2>
+                <p>
+                  Start with a blank chart, or bring in a KnitPlot file already
+                  saved on this computer.
+                </p>
+                <div>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={createNewChart}
+                  >
+                    Create a chart
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => importRef.current?.click()}
+                  >
+                    Import a local chart
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {!loadError && total > 0 && !visibleCharts.length ? (
+              <p className="library-message">No charts match “{query}”.</p>
+            ) : null}
+
+            {!loadError && visibleCharts.length > 0 ? (
               <>
-                {pinnedCharts.length ? (
-                  <section className="library-chart-section">
-                    <div className="library-section-heading pinned">
-                      <span>★ Pinned</span>
-                      <i />
-                    </div>
-                    <div className="library-grid">
-                      {pinnedCharts.map(gridCard)}
-                    </div>
-                  </section>
-                ) : null}
-                {unpinnedCharts.length ? (
+                {view === "grid" ? (
+                  <>
+                    {pinnedCharts.length ? (
+                      <section className="library-chart-section">
+                        <div className="library-section-heading pinned">
+                          <span>★ Pinned</span>
+                          <i />
+                        </div>
+                        <div className="library-grid">
+                          {pinnedCharts.map(gridCard)}
+                        </div>
+                      </section>
+                    ) : null}
+                    {unpinnedCharts.length ? (
+                      <section className="library-chart-section">
+                        <div className="library-section-heading">
+                          <span>All charts</span>
+                          <i />
+                        </div>
+                        <div className="library-grid">
+                          {unpinnedCharts.map(gridCard)}
+                        </div>
+                      </section>
+                    ) : null}
+                  </>
+                ) : (
                   <section className="library-chart-section">
                     <div className="library-section-heading">
                       <span>All charts</span>
                       <i />
                     </div>
-                    <div className="library-grid">
-                      {unpinnedCharts.map(gridCard)}
+                    <div className="library-list">
+                      <div className="library-list-header">
+                        <span>Chart</span>
+                        <span>Name</span>
+                        <span>Size</span>
+                        <span>Colours</span>
+                        <span>Last edited</span>
+                        <span />
+                      </div>
+                      {[...pinnedCharts, ...unpinnedCharts].map((chart) => (
+                        <article className="library-list-row" key={chart.id}>
+                          <div className="library-list-preview">
+                            <ChartThumbnail chart={chart} />
+                            <PinButton chart={chart} />
+                          </div>
+                          <h2>{chart.name}</h2>
+                          <span className="library-size">
+                            {chart.kind === "yoke" ? "Yoke · " : ""}
+                            {chart.width} × {chart.height} st
+                          </span>
+                          <Palette colors={chart.palette} />
+                          <span className="library-date">
+                            {formattedDate(chart.updatedAt)}
+                          </span>
+                          <CloudChartActions id={chart.id} name={chart.name}>
+                            {shareAction(chart)}
+                          </CloudChartActions>
+                        </article>
+                      ))}
                     </div>
                   </section>
-                ) : null}
-              </>
-            ) : (
-              <section className="library-chart-section">
-                <div className="library-section-heading">
-                  <span>All charts</span>
-                  <i />
-                </div>
-                <div className="library-list">
-                  <div className="library-list-header">
-                    <span>Chart</span>
-                    <span>Name</span>
-                    <span>Size</span>
-                    <span>Colours</span>
-                    <span>Last edited</span>
-                    <span />
+                )}
+                <aside className="library-local-panel">
+                  <div>
+                    <span aria-hidden="true">◎</span>
+                    <div>
+                      <h2>Your charts travel with you.</h2>
+                      <p>
+                        Account charts are available across your devices. Local
+                        KnitPlot files always remain another option.
+                      </p>
+                    </div>
                   </div>
-                  {[...pinnedCharts, ...unpinnedCharts].map((chart) => (
-                    <article className="library-list-row" key={chart.id}>
-                      <div className="library-list-preview">
-                        <ChartThumbnail chart={chart} />
-                        <PinButton chart={chart} />
-                      </div>
-                      <h2>{chart.name}</h2>
-                      <span className="library-size">
-                        {chart.kind === "yoke" ? "Yoke · " : ""}
-                        {chart.width} × {chart.height} st
-                      </span>
-                      <Palette colors={chart.palette} />
-                      <span className="library-date">
-                        {formattedDate(chart.updatedAt)}
-                      </span>
-                      <CloudChartActions id={chart.id} name={chart.name} />
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
-            <aside className="library-local-panel">
-              <div>
-                <span aria-hidden="true">◎</span>
-                <div>
-                  <h2>Your charts travel with you.</h2>
-                  <p>
-                    Account charts are available across your devices. Local
-                    KnitPlot files always remain another option.
-                  </p>
-                </div>
-              </div>
-              <button type="button" onClick={() => importRef.current?.click()}>
-                Import a local chart
-              </button>
-            </aside>
+                  <button
+                    type="button"
+                    onClick={() => importRef.current?.click()}
+                  >
+                    Import a local chart
+                  </button>
+                </aside>
+              </>
+            ) : null}
+            {matching > pageSize || page > 1 ? (
+              <nav aria-label="Chart pages">
+                {page > 1 ? (
+                  <Link href={pageUrl(page - 1)}>Previous page</Link>
+                ) : null}
+                <span>
+                  {" "}
+                  Page {page} of{" "}
+                  {Math.max(1, Math.ceil(matching / pageSize))}{" "}
+                </span>
+                {page * pageSize < matching ? (
+                  <Link href={pageUrl(page + 1)}>Next page</Link>
+                ) : null}
+              </nav>
+            ) : null}
           </>
-        ) : null}
-        {matching > pageSize || page > 1 ? (
-          <nav aria-label="Chart pages">
-            {page > 1 ? (
-              <Link href={pageUrl(page - 1)}>Previous page</Link>
-            ) : null}
-            <span>
-              {" "}
-              Page {page} of {Math.max(1, Math.ceil(matching / pageSize))}{" "}
-            </span>
-            {page * pageSize < matching ? (
-              <Link href={pageUrl(page + 1)}>Next page</Link>
-            ) : null}
-          </nav>
-        ) : null}
+        )}
       </section>
     </main>
   );

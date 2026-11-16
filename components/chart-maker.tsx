@@ -1102,6 +1102,15 @@ export function ChartMaker({
           <span className="brand-divider" aria-hidden="true" />
           <div className="project-identity">
             <label htmlFor="project-name">Working file</label>
+            {document.chartClubSource && (
+              <Link
+                className="text-button"
+                href={`/chart-club/creators/${document.chartClubSource.handle}`}
+                onNavigate={confirmLeavingEditor}
+              >
+                From @{document.chartClubSource.handle}
+              </Link>
+            )}
             <input
               id="project-name"
               className="project-name"

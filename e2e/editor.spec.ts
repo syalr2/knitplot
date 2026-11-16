@@ -13,6 +13,20 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("Chart Club is browsable without exposing moderation to guests", async ({
+  page,
+}) => {
+  await page.goto("/chart-club");
+  await expect(page.getByRole("heading", { name: "Chart Club" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review reports" })).toHaveCount(
+    0,
+  );
+  await page.goto("/chart-club/moderation");
+  await expect(
+    page.getByRole("heading", { name: "Chart Club reports" }),
+  ).toHaveCount(0);
+});
+
 test("a two-colour chart can add a valid colour and paint with it", async ({
   page,
 }) => {

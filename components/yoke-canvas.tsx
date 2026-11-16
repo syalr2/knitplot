@@ -27,8 +27,8 @@ type Props = {
   project: YokeProject;
   view: YokeView;
   zoom: number;
-  onPaint: (row: number, column: number) => void;
-  onStrokeStart: () => void;
+  onPaint?: (row: number, column: number) => void;
+  onStrokeStart?: () => void;
   repeat?: number;
   select?: boolean;
   selection?: CellSelection | null;
@@ -241,7 +241,7 @@ export function YokeCanvas({
         endRow: next.row,
         endColumn: next.column,
       });
-    } else onPaint(found.row, found.column);
+    } else onPaint?.(found.row, found.column);
   }
   function stop() {
     if (navigation.stop()) return;
@@ -271,13 +271,14 @@ export function YokeCanvas({
           height: displayHeight * displayScale,
           cursor: navigation.cursor,
         }}
-        aria-label={`${view === "whole" ? "Whole yoke" : view === "front" ? "Front half" : view === "back" ? "Back half" : view === "repeat" ? "One repeat" : "Standard chart"} drawing canvas`}
+        aria-label={`${view === "whole" ? "Whole yoke" : view === "front" ? "Front half" : view === "back" ? "Back half" : view === "repeat" ? "One repeat" : "Standard chart"} ${onPaint ? "drawing canvas" : "chart"}`}
         onPointerDown={(event) => {
           if (navigation.start(event)) return;
-          if (event.button !== 0 || !cell(event)) return;
+          if ((!onPaint && !select) || event.button !== 0 || !cell(event))
+            return;
           event.preventDefault();
           if (onZoomChange) event.currentTarget.focus({ preventScroll: true });
-          if (!select) onStrokeStart();
+          if (!select) onStrokeStart?.();
           pointer.current = { start: null, last: "", active: true };
           event.currentTarget.setPointerCapture(event.pointerId);
           paint(event);

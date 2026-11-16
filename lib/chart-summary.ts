@@ -1,4 +1,5 @@
 export type ChartSummary = {
+  publicPostId?: string;
   kind?: "yoke";
   id: string;
   name: string;

@@ -1,8 +1,15 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ClubNavigation } from "@/components/club-navigation";
+import { accountsConfigured } from "@/lib/auth-config";
 import { MyChartsLibrary } from "@/components/my-charts-library";
 import { getViewerWithEmail } from "@/lib/auth";
 import { chartSummaryFromRow } from "@/lib/chart-summary";
 import { getDatabase } from "@/lib/db";
+import {
+  MyPublishedCharts,
+  type PublishedChart,
+} from "@/components/my-published-charts";
+import "@/app/chart-club/chart-club.css";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +30,82 @@ export default async function MyChartsPage({
   );
   const pageSize = 24;
   const viewer = await getViewerWithEmail();
-  if (!viewer) redirect("/sign-in");
+  if (!viewer)
+    return (
+      <main className="library-page">
+        <nav className="library-nav">
+          <Link className="library-brand" href="/">
+            <span aria-hidden="true" />
+            KnitPlot
+          </Link>
+          <ClubNavigation active="mine" />
+        </nav>
+        <section className="library-shell">
+          <header className="library-heading">
+            <h1>My Charts</h1>
+          </header>
+          <div className="library-empty">
+            <h2>Keep your charts together</h2>
+            <p>
+              Sign in or create an account to save charts across devices. You
+              can still make charts and explore Chart Club without an account.
+            </p>
+            {accountsConfigured() ? (
+              <div className="library-auth-actions">
+                <Link
+                  className="chart-club-link primary-button"
+                  href="/sign-in"
+                >
+                  Sign in
+                </Link>
+                <Link className="text-button library-auth-link" href="/sign-up">
+                  Create an account
+                </Link>
+              </div>
+            ) : (
+              <p>Accounts aren’t configured on this instance.</p>
+            )}
+          </div>
+        </section>
+      </main>
+    );
   const sql = getDatabase();
+  if (params.tab === "published") {
+    let posts: PublishedChart[] | null = null;
+    if (sql) {
+      try {
+        posts = (await sql`
+          select id, title, summary->'preview' as preview,
+            summary->'cover' as cover, summary->>'coverView' as cover_view
+          from knitplot_club_public_posts
+          where creator_id = ${viewer.id}
+          order by published_at desc, id desc
+          limit ${pageSize + 1} offset ${(page - 1) * pageSize}
+        `) as PublishedChart[];
+      } catch {
+        // Keep My Charts usable if the community tables are unavailable.
+      }
+    }
+    return (
+      <MyChartsLibrary
+        key="published"
+        charts={[]}
+        email={viewer.email}
+        avatar={viewer.avatar}
+        initialPinnedIds={[]}
+        loadError={false}
+        total={0}
+        matching={0}
+        page={page}
+        pageSize={pageSize}
+        initialQuery=""
+        initialSort="updated-desc"
+        publishedContent={
+          <MyPublishedCharts posts={posts} page={page} pageSize={pageSize} />
+        }
+      />
+    );
+  }
   let charts: Array<Record<string, unknown>> = [];
   let error = false;
   let total = 0;
@@ -60,10 +141,23 @@ export default async function MyChartsPage({
     }
   }
 
+  const publicPosts =
+    sql && charts.length
+      ? await sql`select id, source_id from knitplot_club_public_posts
+        where creator_id = ${viewer.id} and source_id::text = any(${charts.map(({ id }) => String(id))}::text[])`.catch(
+          () => [],
+        )
+      : [];
+  const publicBySource = new Map(
+    publicPosts.map((post) => [post.source_id, post.id]),
+  );
   return (
     <MyChartsLibrary
       key={`${query}-${sort}-${page}`}
-      charts={charts.map(chartSummaryFromRow)}
+      charts={charts.map((row) => {
+        const chart = chartSummaryFromRow(row);
+        return { ...chart, publicPostId: publicBySource.get(chart.id) };
+      })}
       email={viewer.email}
       avatar={viewer.avatar}
       initialPinnedIds={pinnedIds}

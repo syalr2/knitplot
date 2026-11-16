@@ -17,6 +17,7 @@ import { yokeProgramFromProject } from "../../lib/yoke-program-from-project.ts";
 import { withYokeProgram } from "../../lib/yoke-program-state.ts";
 import { reviseYokeStitches } from "../../lib/yoke-stitch-revision.ts";
 import { readCloudChartPayload } from "../../lib/cloud-charts.ts";
+import { recordClubReport } from "../../lib/club-reports.ts";
 
 // Never silently use DATABASE_URL: it may point at a real user's database.
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -35,6 +36,271 @@ if (connectionString) {
     "CI must provide TEST_DATABASE_URL for database integration tests.",
   );
 }
+
+test(
+  "Chart Club limits new reservations without invalidating existing aliases",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const author = randomUUID();
+      const prefix = `limit_${author.slice(0, 8)}`;
+      await client.query(
+        "insert into knitplot_club_creators (user_id, handle) values ($1, $2)",
+        [author, `${prefix}_0`],
+      );
+      const rename = (n) =>
+        client.query(
+          "update knitplot_club_creators set handle = $2 where user_id = $1",
+          [author, `${prefix}_${n}`],
+        );
+      for (let i = 1; i < 5; i++) await rename(i);
+      await client.query("savepoint username_limit");
+      await assert.rejects(rename(5), { code: "KP001" });
+      await client.query("rollback to username_limit");
+      await rename(0);
+      const { rows } = await client.query(
+        "select handle from knitplot_club_handles where creator_id = $1 order by handle",
+        [author],
+      );
+      assert.deepEqual(
+        rows.map(({ handle }) => handle),
+        Array.from({ length: 5 }, (_, n) => `${prefix}_${n}`),
+      );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "Chart Club reserves renamed handles, records private reports, and hides moderated posts",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const author = randomUUID(),
+        reader = randomUUID();
+      const old = `old_${author.slice(0, 8)}`,
+        current = `new_${author.slice(0, 8)}`;
+      await client.query(
+        "insert into knitplot_club_creators (user_id, handle) values ($1, $2)",
+        [author, old],
+      );
+      await client.query(
+        "update knitplot_club_creators set handle = $2 where user_id = $1",
+        [author, current],
+      );
+      assert.deepEqual(
+        (
+          await client.query(
+            "select c.handle from knitplot_club_handles h join knitplot_club_creators c on c.user_id = h.creator_id where h.handle = $1",
+            [old],
+          )
+        ).rows,
+        [{ handle: current }],
+      );
+      await client.query("savepoint before_duplicate");
+      await assert.rejects(
+        client.query(
+          "insert into knitplot_club_creators (user_id, handle) values ($1, $2)",
+          [reader, old],
+        ),
+        { code: "23505" },
+      );
+      await client.query("rollback to before_duplicate");
+      const {
+        rows: [source],
+      } = await client.query(
+        "insert into knitplot_charts (user_id, document) values ($1, '{}') returning id",
+        [author],
+      );
+      const {
+        rows: [post],
+      } = await client.query(
+        "insert into knitplot_club_posts (creator_id, source_id, title, description, summary, editable_document) values ($1, $2, 'Public', '', '{}', '{}') returning id",
+        [author, source.id],
+      );
+      await client.query(
+        "insert into knitplot_club_hearts (user_id, post_id) values ($1, $2)",
+        [reader, post.id],
+      );
+      const feed =
+        "select p.id from knitplot_club_public_posts p join knitplot_club_hearts h on p.id = h.post_id where h.user_id = $1";
+      assert.deepEqual((await client.query(feed, [reader])).rows, [
+        { id: post.id },
+      ]);
+      assert.deepEqual((await client.query(feed, [author])).rows, []);
+      const sql = async (strings, ...values) =>
+        (
+          await client.query(
+            strings.reduce(
+              (query, part, i) => query + (i ? `$${i}` : "") + part,
+              "",
+            ),
+            values,
+          )
+        ).rows;
+      assert.equal(await recordClubReport(sql, author, post.id, "spam"), false);
+      assert.equal(
+        await recordClubReport(sql, reader, randomUUID(), "spam"),
+        false,
+      );
+      assert.equal(await recordClubReport(sql, reader, post.id, "spam"), true);
+      assert.equal(await recordClubReport(sql, reader, post.id, "other"), true);
+      assert.deepEqual(
+        (
+          await client.query(
+            "select reason from knitplot_club_reports where post_id = $1",
+            [post.id],
+          )
+        ).rows,
+        [{ reason: "spam" }],
+      );
+      await client.query(
+        "update knitplot_club_posts set removed_at = now() where id = $1",
+        [post.id],
+      );
+      assert.deepEqual((await client.query(feed, [reader])).rows, []);
+      assert.equal(
+        await recordClubReport(sql, randomUUID(), post.id, "spam"),
+        false,
+      );
+      assert.equal(
+        (
+          await client.query("select 1 from knitplot_charts where id = $1", [
+            source.id,
+          ])
+        ).rowCount,
+        1,
+      );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "Chart Club follows need no follower profile and are isolated by account",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const creator = randomUUID();
+      const follower = randomUUID();
+      await client.query(
+        "insert into knitplot_club_creators (user_id, handle) values ($1, $2)",
+        [creator, `club_${creator.slice(0, 8)}`],
+      );
+      const {
+        rows: [chart],
+      } = await client.query(
+        "insert into knitplot_charts (user_id, document) values ($1, '{}') returning id",
+        [creator],
+      );
+      await client.query(
+        "insert into knitplot_club_posts (creator_id, source_id, title, description, summary) values ($1, $2, 'Public', '', '{}')",
+        [creator, chart.id],
+      );
+      const follow =
+        "insert into knitplot_club_follows values ($1, $2) on conflict do nothing";
+      await client.query(follow, [follower, creator]);
+      assert.equal(
+        (await client.query(follow, [follower, creator])).rowCount,
+        0,
+      );
+      const feed =
+        "select p.title from knitplot_club_follows f join knitplot_club_posts p on p.creator_id = f.creator_id where f.follower_id = $1";
+      assert.deepEqual((await client.query(feed, [follower])).rows, [
+        { title: "Public" },
+      ]);
+      assert.deepEqual((await client.query(feed, [randomUUID()])).rows, []);
+      await client.query(
+        "delete from knitplot_club_follows where follower_id = $1 and creator_id = $2",
+        [follower, creator],
+      );
+      assert.deepEqual((await client.query(feed, [follower])).rows, []);
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "Chart Club snapshots survive private edits and private chart deletion",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const user = `club-test-${randomUUID()}`;
+      const handle = `club_${randomUUID().slice(0, 8)}`;
+      const {
+        rows: [source],
+      } = await client.query(
+        "insert into knitplot_charts (user_id, name, document) values ($1, 'Private', '{}') returning id",
+        [user],
+      );
+      assert.equal(
+        (
+          await client.query(
+            "select 1 from knitplot_club_creators where user_id = $1",
+            [user],
+          )
+        ).rowCount,
+        0,
+      );
+      await client.query(
+        "insert into knitplot_club_creators (user_id, handle) values ($1, $2)",
+        [user, handle],
+      );
+      const {
+        rows: [post],
+      } = await client.query(
+        "insert into knitplot_club_posts (creator_id, source_id, title, description, summary, editable_document) values ($1, $2, 'Public', '', '{}', '{\"snapshot\":true}') returning id",
+        [user, source.id],
+      );
+      await client.query(
+        "update knitplot_charts set name = 'New private name' where id = $1",
+        [source.id],
+      );
+      assert.deepEqual(
+        (
+          await client.query(
+            "select title, editable_document from knitplot_club_posts where id = $1",
+            [post.id],
+          )
+        ).rows,
+        [{ title: "Public", editable_document: { snapshot: true } }],
+      );
+      await client.query("delete from knitplot_charts where id = $1", [
+        source.id,
+      ]);
+      assert.deepEqual(
+        (
+          await client.query(
+            "select source_id, editable_document from knitplot_club_public_posts where id = $1",
+            [post.id],
+          )
+        ).rows,
+        [{ source_id: null, editable_document: { snapshot: true } }],
+      );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
 
 test(
   "revision migration preserves existing chart contents, pins and timestamps",

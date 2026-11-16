@@ -217,6 +217,7 @@ export function ExportTools({
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const closeMenu = () => setOpen(false);
   const [choosingChartImage, setChoosingChartImage] = useState(false);
   const [confirmingBitmap, setConfirmingBitmap] = useState(false);
   const [noStitchColorId, setNoStitchColorId] = useState("");
@@ -231,7 +232,8 @@ export function ExportTools({
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
     };
     window.addEventListener("pointerdown", dismiss);
     window.addEventListener("keydown", dismissOnEscape);
@@ -334,7 +336,7 @@ export function ExportTools({
       const nextDocument = readProject(JSON.parse(await file.text()));
       onOpenProject(nextDocument);
       setMessage("Project opened.");
-      setOpen(false);
+      closeMenu();
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -358,7 +360,7 @@ export function ExportTools({
           className="secondary-button"
           aria-expanded={open || tourOpen}
           onClick={() => {
-            setOpen((value) => !value);
+            setOpen(!open);
             setChoosingChartImage(false);
             setConfirmingBitmap(false);
             setNoStitchColorId("");
@@ -378,7 +380,7 @@ export function ExportTools({
               role="menuitem"
               disabled={tabsFull || !onNewBlank}
               onClick={() => {
-                setOpen(false);
+                closeMenu();
                 onNewBlank?.();
               }}
             >
@@ -389,7 +391,7 @@ export function ExportTools({
               data-tour="new-circular-yoke"
               disabled={tabsFull || !onNewYoke}
               onClick={() => {
-                setOpen(false);
+                closeMenu();
                 onNewYoke?.();
               }}
             >
@@ -401,7 +403,7 @@ export function ExportTools({
               role="menuitem"
               disabled={!!document.yoke}
               onClick={() => {
-                setOpen(false);
+                closeMenu();
                 onImportPattern();
               }}
             >
@@ -444,13 +446,30 @@ export function ExportTools({
                             : "Save to My Charts"}
                       </button>
                     )}
-                    <Link
-                      role="menuitem"
-                      href="/my-charts"
-                      onNavigate={onNavigateAway}
-                    >
-                      View My Charts
-                    </Link>
+                    {cloudId &&
+                    cloudSaveState !== "saving" &&
+                    cloudSaveState !== "error" ? (
+                      <Link
+                        role="menuitem"
+                        href={`/chart-club/share/${cloudId}`}
+                        onNavigate={onNavigateAway}
+                      >
+                        Share to Chart Club
+                      </Link>
+                    ) : (
+                      <button
+                        role="menuitem"
+                        onClick={() =>
+                          setMessage(
+                            cloudId
+                              ? "Let your changes save before sharing this chart."
+                              : "Save this chart to My Charts first, then share it here.",
+                          )
+                        }
+                      >
+                        Share to Chart Club
+                      </button>
+                    )}
                   </>
                 ) : (
                   <Link
@@ -567,6 +586,13 @@ export function ExportTools({
           </div>
         ) : null}
       </div>
+      <Link
+        className="primary-button knit-mode-button chart-club-link"
+        href="/chart-club"
+        onNavigate={onNavigateAway}
+      >
+        Chart Club
+      </Link>
     </div>
   );
 }

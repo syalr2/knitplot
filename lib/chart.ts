@@ -190,6 +190,7 @@ export const defaultInstructionSettings: InstructionSettings = {
 };
 
 export type ChartDocument = {
+  chartClubSource?: { id: string; handle: string };
   yoke?: import("./yoke-project").YokeProject;
   name: string;
   width: number;

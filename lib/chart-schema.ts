@@ -17,6 +17,9 @@ const dimension = (max: number) => z.number().int().min(1).max(max);
 export const chartDocumentSchema = z
   .object({
     name: z.string().max(200),
+    chartClubSource: z
+      .object({ id: z.uuid(), handle: z.string().regex(/^[a-z0-9_]{3,24}$/) })
+      .optional(),
     yoke: yokeProjectSchema.optional(),
     width: dimension(MAX_CHART_STITCHES),
     height: dimension(MAX_CHART_ROWS),

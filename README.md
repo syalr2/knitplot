@@ -50,7 +50,7 @@ npm run dev
 
 Open the local address shown in the terminal, usually [http://localhost:3000](http://localhost:3000).
 
-Without any environment variables, the full non-AI chart maker works locally. AI buttons are hidden by default and appear only after signing in and connecting an OpenAI API key in Account settings. To enable that flow locally, configure the optional accounts below.
+Without any environment variables, the full non-AI chart maker works locally. AI buttons are hidden by default and appear only after signing in and connecting an OpenAI API key under Account settings → Manage sign-in & security → OpenAI connection. To enable that flow locally, configure the optional accounts below.
 
 Never commit or share `.env.local`. It is ignored by Git.
 

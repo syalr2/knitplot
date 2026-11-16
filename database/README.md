@@ -58,3 +58,40 @@ database named `knitplot_test` on localhost, migrate it, and provide its connect
 string as `TEST_DATABASE_URL` to `npm run test:db`. The test deliberately refuses
 non-local hosts and any other database name. Without that variable it is skipped
 locally; CI requires it and runs the test after applying migrations twice.
+
+## Chart Club (004)
+
+Apply 004 before exposing Chart Club. It adds two tables and does not backfill
+profiles or copy private charts. A creator row is created when a user chooses
+a Chart Club username. For application rollback, keep both tables rather than
+dropping posts.
+
+Migration 005 adds optional public profile fields to the Chart Club creator
+table. It does not create profiles for existing KnitPlot accounts. Apply it
+before deploying the creator pages, and keep it in place on application rollback.
+
+Migration 006 adds private follows. Followers use their existing account ID;
+they do not need a Chart Club profile. Apply it before deploying Following.
+Leave the tables in place if rolling the app back.
+
+Migration 007 adds optional Instagram and TikTok profile URLs. It does not
+populate them for existing creators. Apply it before deploying the updated
+creator pages; keep the columns if rolling back the application.
+
+Migration 008 reserves old handles as profile aliases and adds private hearts
+and reports. The public-post view excludes taken-down posts and old view-only
+posts. No data from a private draft is automatically made public. Set
+`CHART_CLUB_MODERATOR_ID` to the authorized Clerk user ID to enable report
+review. Keep the migration applied on application rollback.
+
+Migration 009 makes public snapshots independent of private chart deletion.
+Private edits never update a public snapshot; creators can only change the public
+title and description or remove the post. Apply 009 before deploying the new
+management flow. Keep it applied on application rollback: the down migration
+intentionally refuses to run once a post has lost its private source.
+
+Migration 010 limits new username reservations to five per account, keeping
+all existing aliases, and indexes the report queue. Apply it before deploying
+the updated username API and moderation page. The moderator can open
+**Account settings → Chart Club reports** or visit `/chart-club/moderation`
+while signed in. The queue does not send notifications.
