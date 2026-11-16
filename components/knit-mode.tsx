@@ -531,30 +531,30 @@ export function KnitMode({
       </select>
     </label>
   );
-  const jumpControl =
-    pages && pages.length > 1 ? (
-      <details className="knit-jump-control">
-        <summary>Jump to…</summary>
-        <div className="knit-jump-fields">
-          <label>
-            {unitName}
-            <select
-              value={row}
-              onChange={(event) => {
-                const target = Number(event.target.value);
-                const first =
-                  pageLengths?.[target - 1].findIndex((length) => length > 0) ??
-                  0;
-                navigate(target, workIndex(target, Math.max(0, first)));
-              }}
-            >
-              {Array.from({ length: activeDocument.height }, (_, i) => (
-                <option key={i} value={i + 1}>
-                  {i + 1}
-                </option>
-              ))}
-            </select>
-          </label>
+  const jumpControl = pages ? (
+    <details className="knit-jump-control">
+      <summary>Jump to…</summary>
+      <div className="knit-jump-fields">
+        <label>
+          {unitName}
+          <select
+            value={row}
+            onChange={(event) => {
+              const target = Number(event.target.value);
+              const first =
+                pageLengths?.[target - 1].findIndex((length) => length > 0) ??
+                0;
+              navigate(target, workIndex(target, Math.max(0, first)));
+            }}
+          >
+            {Array.from({ length: activeDocument.height }, (_, i) => (
+              <option key={i} value={i + 1}>
+                {i + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+        {pageCount > 1 && (
           <label>
             Section
             <select
@@ -572,9 +572,10 @@ export function KnitMode({
               ))}
             </select>
           </label>
-        </div>
-      </details>
-    ) : null;
+        )}
+      </div>
+    </details>
+  ) : null;
 
   return (
     <section
@@ -916,11 +917,13 @@ export function KnitMode({
             </div>
           ) : null}
           {sectionSizeControl}
-          {sectionChart && pageCount > 1 ? (
+          {sectionChart ? (
             <div className="knit-section-location">
-              <span>
-                Columns {sectionChart.start + 1}–{sectionChart.end}
-              </span>
+              {pageCount > 1 && (
+                <span>
+                  Columns {sectionChart.start + 1}–{sectionChart.end}
+                </span>
+              )}
               {jumpControl}
             </div>
           ) : null}
