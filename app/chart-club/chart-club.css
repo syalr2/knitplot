@@ -399,3 +399,17 @@
     grid-column: 1 / -1;
   }
 }
+
+@media (max-width: 760px) {
+  .club-viewer-toolbar .zoom-controls button,
+  .club-post-actions button[aria-pressed],
+  .club-post-actions a[aria-label] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .club-chart-viewer .repeat-controls select,
+  .club-viewer-options :is(select, button),
+  .club-creator-actions :is(.primary-button, .secondary-button) {
+    min-height: 44px;
+  }
+}

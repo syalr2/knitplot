@@ -13,6 +13,29 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("Chart Club navigation fits narrow phones with usable touch targets", async ({
+  page,
+}) => {
+  for (const width of [320, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/chart-club");
+    const navigation = page.locator(".library-main-nav");
+    await expect(
+      navigation.getByRole("link", { name: "My Charts", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    for (const link of await navigation.getByRole("link").all()) {
+      const bounds = await link.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    }
+  }
+});
+
 test("Chart Club is browsable without exposing moderation to guests", async ({
   page,
 }) => {

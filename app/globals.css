@@ -2940,7 +2940,16 @@ button:disabled {
   }
   .library-main-nav {
     order: 3;
+    flex-wrap: wrap;
+    min-width: 0;
     width: 100%;
+  }
+  .library-main-nav a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    white-space: nowrap;
   }
   .library-account-link > span:last-child {
     display: none;
@@ -2999,6 +3008,14 @@ button:disabled {
 }
 
 @media (max-width: 480px) {
+  .library-main-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .library-main-nav a {
+    padding: 9px 6px;
+  }
   .library-grid {
     grid-template-columns: 1fr;
   }
