@@ -2,6 +2,7 @@
 import "@/app/yoke-designer/yoke.css";
 
 import Link from "next/link";
+import { useChartActivity } from "./use-chart-activity";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { useSyncedDraft } from "@/components/use-synced-draft";
 import { ColourPalettePanel } from "@/components/colour-palette-panel";
@@ -186,6 +187,7 @@ export function ChartMaker({
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [closingBusy, setClosingBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  useChartActivity(document, activeTabId, loaded, Boolean(viewer));
   const [cloudSaveState, setCloudSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");

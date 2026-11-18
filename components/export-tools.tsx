@@ -15,6 +15,7 @@ import {
 } from "@/lib/chart";
 import { readProject } from "@/lib/project-file";
 import { stitchBitmap } from "@/lib/stitch-bitmap";
+import { recordUsage, type DownloadFormat } from "@/lib/usage-analytics";
 
 type Props = {
   document: ChartDocument;
@@ -255,7 +256,18 @@ export function ExportTools({
       }),
       fileName(document.name, "knitplot"),
     );
+    recordDownload("knitplot");
     setMessage("Editable KnitPlot file downloaded.");
+  }
+
+  function recordDownload(format: DownloadFormat) {
+    recordUsage(
+      {
+        account: signedIn ? "signed_in" : "guest",
+        chart_type: document.yoke ? "yoke" : "regular",
+      },
+      format,
+    );
   }
 
   async function downloadChart(showGrid: boolean) {
@@ -265,6 +277,7 @@ export function ExportTools({
         fileName(document.name, showGrid ? "chart.png" : "chart-no-grid.png"),
       );
       setMessage("Chart downloaded.");
+      recordDownload(showGrid ? "chart_grid" : "chart_no_grid");
     } catch {
       setMessage("The chart image could not be created.");
     }
@@ -286,6 +299,7 @@ export function ExportTools({
         fileName(document.name, "stitch-bitmap.png"),
       );
       setConfirmingBitmap(false);
+      recordDownload("stitch_bitmap");
       setMessage(
         `Stitch bitmap downloaded: ${bitmap.width} × ${bitmap.height} pixels.`,
       );
@@ -319,6 +333,7 @@ export function ExportTools({
         fileName(document.name, "knitted.png"),
       );
       setMessage("Knitted preview downloaded.");
+      recordDownload("knitted_preview");
     } catch {
       setMessage("The knitted preview could not be downloaded.");
     }

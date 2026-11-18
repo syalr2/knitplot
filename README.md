@@ -2,7 +2,7 @@
 
 KnitPlot is a local-first, open-source colourwork chart maker for knitters. Draw charts stitch by stitch, turn an image into a limited-colour chart, preview the result as knitted fabric, and follow it row by row in Knit Mode.
 
-The core app is free to use and does not need an account or API key. Optional accounts add private cross-device chart saves. Image generation and prompt-based editing use each user's own OpenAI API key.
+The core app is free to use and does not need an account or API key. Optional accounts add private cross-device chart saves and Chart Club, where knitters can share charts and follow creators. Optional AI tools use each user's own OpenAI API key.
 
 ## Use KnitPlot online
 
@@ -13,6 +13,7 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-A
 ### No API key needed
 
 - Draw, erase, flood-fill, and fill rectangular selections
+- Move, copy, cut, paste, mirror, and rotate selections
 - Choose up to eight custom colours
 - Work with regular charts up to 200 stitches by 300 rows
 - Set stitch gauge, row gauge, and centimetres or inches
@@ -20,12 +21,39 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-A
 - Flip, rotate, undo, and redo chart changes
 - Work on up to eight charts in browser tabs
 - Import PNG, JPEG, or WebP images, then crop, position, resize, and reduce them to a stitch palette
+- Import charts from PDFs or images: crop and rotate the page, snap a grid to the chart, provide symbol examples, map colours and stitches, and review the result before editing
+- Draw yarn colours and stitch symbols as separate layers, including purl, increases, decreases, cast-on, bind-off, and no-stitch cells
 - Preview normal or mirrored repeats as textured knitted fabric
 - Create printable charts and written row-by-row colour sequences
 - Choose stranded, intarsia, or duplicate stitch instructions
 - Use Knit Mode with row and stitch progress, optional design-only cropping, and stitch markers
+- Zoom and pan in Knit Mode, follow the row-direction arrow, split wide charts into manageable sections, and optionally keep the screen awake
 - Download chart and preview PNGs or save an editable `.knitplot` project file
 - Export an exact-size stitch bitmap PNG (one pixel per stitch, yarn colours only) for colourwork image import into other tools. Stitch actions and shaping are not encoded; no-stitch cells require an explicit fill-colour choice.
+
+### Circular yoke studio
+
+- Plan a top-down circular yoke from body measurements plus ease, or finished garment measurements, using your gauge
+- Adjust the repeat count, increase schedule, and optional back-neck short rows
+- Design in standard chart, one-repeat, half-yoke, and whole-yoke views
+- Edit one repeat, a selected group, or all repeats; copy colours between repeats
+- Move M1L and M1R increases and review shaping revisions before applying them
+- Preview the knitted yoke in different views or as an approximate front sweater mockup
+- Follow repeated or non-repeating yokes in Knit Mode and print written rounds; work short rows from the written setup
+
+The suggested plan and sweater mockup are design aids, not a guarantee of garment fit. Check your swatch and measurements before knitting.
+
+### Chart Club (optional account)
+
+Anyone can browse public charts. With your existing KnitPlot account, choose a unique username, optionally add a bio and Ravelry, Instagram, or TikTok usernames, then:
+
+- Share a snapshot of a saved chart with a knitted gallery cover
+- Follow creators, heart charts, and browse Following and My hearts
+- Open or download editable copies of public charts
+- Manage your posts in **My Charts → Published charts**
+- Report a public chart privately to the moderator
+
+Private edits never change a published snapshot. Authors can edit its title and description or remove the post; removing it cannot recall copies others already downloaded.
 
 ### OpenAI API key needed
 
@@ -38,7 +66,7 @@ AI requests consume credits on the OpenAI account connected to your key. The app
 
 ## Run KnitPlot on your computer
 
-You need [Node.js](https://nodejs.org/) 20 or newer.
+You need [Node.js](https://nodejs.org/) 24 or 25 (Node 24 LTS recommended).
 
 Download or clone this repository, open a terminal in the KnitPlot project folder, and run:
 
@@ -76,6 +104,9 @@ Public deployments require a signed-in user and their own connected OpenAI key. 
 - Connected OpenAI keys are encrypted with AES-256-GCM before Neon storage and are never returned to the browser. Only the final four characters are shown for identification.
 - KnitPlot stores no AI prompts or generated images in the account database. It stores request timestamps only for the 30-per-hour safety limit.
 - The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, prompts, uploaded images, email addresses, and API keys are not sent as analytics events. No AI feature-usage counters are added.
+- On the official hosted site, **Chart edited** counts the first drawing change per chart type and guest/signed-in category per page load. **File downloaded** counts initiated chart-maker downloads, with the file format. No chart names, cells, measurements, account IDs, or file contents are included. These events respect Do Not Track and do not run on localhost or other self-hosted domains.
+- These are activity counts, not a census of distinct knitters. Opening or restoring a chart does not count as editing; browser-local autosaves are not reported. A download event cannot confirm that the user ultimately kept the file. Blockers and offline use can cause undercounting. Custom events require a Vercel plan that supports them.
+- Chart Club is explicitly opt-in. Sharing publishes a separate chart snapshot, your chosen cover and post details, and your public creator profile. Your private library stays private. Review the sharing form before publishing, including whether to include yoke measurements.
 
 Browser storage is convenient, but it is not a backup. Download important charts as `.knitplot` files.
 
