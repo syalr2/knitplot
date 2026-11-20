@@ -62,6 +62,25 @@ test("a two-colour chart can add a valid colour and paint with it", async ({
   await expect(cell).toHaveAttribute("fill", "#d6a84b");
 });
 
+test("a 20-colour chart can use its last colour and preserves it after reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const add = page.getByRole("button", { name: "Add colour" });
+  for (let count = 3; count < 20; count++) await add.click();
+  await expect(add).toBeDisabled();
+
+  const picker = page.getByLabel("Change colour 20");
+  await expect(picker).toHaveAttribute("type", "color");
+  await picker.fill("#a1b2c3");
+  const cell = page.locator(".chart-svg g").first().locator("rect").first();
+  await cell.click();
+  await expect(cell).toHaveAttribute("fill", "#a1b2c3");
+  await page.reload();
+  await expect(picker).toHaveValue("#a1b2c3");
+  await expect(cell).toHaveAttribute("fill", "#a1b2c3");
+});
+
 test("Knit Mode zooms and follows the start of a flat row on a tablet", async ({
   page,
 }) => {

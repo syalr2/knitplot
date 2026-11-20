@@ -1,6 +1,7 @@
 "use client";
 import type { Dispatch, SetStateAction } from "react";
 import type { ChartDocument, StitchAction } from "@/lib/chart";
+import { MAX_PALETTE_COLOURS } from "@/lib/palette-colours";
 type Props = {
   document: ChartDocument;
   selectedColor: string;
@@ -33,7 +34,7 @@ export function ColourPalettePanel({
           <button
             className="text-button"
             onClick={addColor}
-            disabled={document.palette.length >= 8}
+            disabled={document.palette.length >= MAX_PALETTE_COLOURS}
           >
             + Add colour
           </button>

@@ -18,6 +18,7 @@ import { useYokeStitches, type YokeStitchDraft } from "./use-yoke-stitches";
 import { YokeStitchRevisionDialog } from "./yoke-stitch-revision-dialog";
 import { withYokeProgram } from "@/lib/yoke-program-state";
 import { useYokeIncreaseMove } from "./use-yoke-increase-move";
+import { MAX_PALETTE_COLOURS, nextPaletteColour } from "@/lib/palette-colours";
 
 export function YokeEditor({
   document,
@@ -122,9 +123,13 @@ export function YokeEditor({
           setSelectedColor={setSelected}
           setStructureAction={stitches.setAction}
           setStitchPickerOpen={stitches.setPicker}
-          addColor={() =>
-            change({ ...project, palette: [...project.palette, "#c86f52"] })
-          }
+          addColor={() => {
+            if (project.palette.length >= MAX_PALETTE_COLOURS) return;
+            change({
+              ...project,
+              palette: [...project.palette, nextPaletteColour(project.palette)],
+            });
+          }}
           changePaletteColor={(id, hex) =>
             change({
               ...project,

@@ -2,6 +2,7 @@
 import "@/app/yoke-designer/yoke.css";
 
 import Link from "next/link";
+import { MAX_PALETTE_COLOURS, nextPaletteColour } from "@/lib/palette-colours";
 import { useChartActivity } from "./use-chart-activity";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { useSyncedDraft } from "@/components/use-synced-draft";
@@ -88,7 +89,6 @@ import { tabSnapshot, workspaceSave } from "@/lib/workspace";
 import { samePreviewFabric } from "@/lib/preview-freshness";
 import { useLocalWorkspace } from "@/components/use-local-workspace";
 import { useCloudRecovery } from "@/components/use-cloud-recovery";
-const colorDefaults = ["#d6a84b", "#6b7da8", "#884d67", "#5f795e", "#29282d"];
 
 type RepeatStyle = "normal" | "mirrored";
 type SelectionClipboard = SelectionBlock & { tabId: string };
@@ -620,12 +620,9 @@ export function ChartMaker({
   }
 
   function addColor() {
-    if (document.palette.length >= 8) return;
+    if (document.palette.length >= MAX_PALETTE_COLOURS) return;
     const id = `color-${Date.now()}`;
-    const hex =
-      colorDefaults[
-        Math.max(0, document.palette.length - 3) % colorDefaults.length
-      ];
+    const hex = nextPaletteColour(document.palette.map((color) => color.hex));
     commit((current) => ({
       ...current,
       palette: [...current.palette, { id, hex }],

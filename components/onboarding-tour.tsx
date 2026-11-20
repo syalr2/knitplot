@@ -23,7 +23,7 @@ const regularSteps: TourStep[] = [
     target: "colours",
     eyebrow: "Choose your yarn colours",
     title: "Start with the palette",
-    body: "Click a colour to draw with it, change any swatch, or add up to eight colours. The first colour is always the chart background.",
+    body: "Click a colour to draw with it, change any swatch, or add up to 20 colours. The first colour is always the chart background.",
   },
   {
     target: "stitches",

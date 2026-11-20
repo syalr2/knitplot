@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PALETTE_COLOURS } from "./palette-colours";
 import { repeatTargets, type YokeRepeatScope } from "./yoke-repeat-scope";
 import { planYokeShortRows, yokeShortRowsSchema } from "./yoke-short-rows";
 import { yokeStitchProgramSchema } from "./yoke-stitch-program-schema";
@@ -24,7 +25,7 @@ import {
 const paletteSchema = z
   .array(z.string().regex(/^#[0-9a-f]{6}$/i))
   .min(2)
-  .max(8);
+  .max(MAX_PALETTE_COLOURS);
 export const yokeProjectSchema = z
   .object({
     format: z.literal("knitplot-yoke"),
@@ -45,7 +46,19 @@ export const yokeProjectSchema = z
     events: z.array(increaseEventSchema).max(149),
     shortRows: yokeShortRowsSchema.optional(),
     palette: paletteSchema,
-    cells: z.array(z.array(z.number().int().min(0).max(7)).max(1200)).max(150),
+    cells: z
+      .array(
+        z
+          .array(
+            z
+              .number()
+              .int()
+              .min(0)
+              .max(MAX_PALETTE_COLOURS - 1),
+          )
+          .max(1200),
+      )
+      .max(150),
   })
   .superRefine((project, ctx) => {
     try {

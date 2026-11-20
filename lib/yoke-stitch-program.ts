@@ -4,6 +4,7 @@ import {
   type StitchAction,
 } from "./chart";
 import { yokeRepeatNumber } from "./yoke-repeat-labels";
+import { MAX_PALETTE_COLOURS } from "./palette-colours";
 
 /** Instructions, not pixels: a kfb has one input and two output loops. */
 export type YokeOperation = {
@@ -208,7 +209,7 @@ export function resolveYokeProgram(program: YokeStitchProgram) {
           ids.has(op.id) ||
           !Number.isInteger(op.color) ||
           op.color < 0 ||
-          op.color > 7 ||
+          op.color >= MAX_PALETTE_COLOURS ||
           !stitchActionOptions.some((option) => option.value === op.action)
         )
           throw new Error("Invalid or repeated stitch instruction.");

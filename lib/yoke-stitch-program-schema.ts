@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PALETTE_COLOURS } from "./palette-colours";
 import { stitchActionSchema } from "./stitch-schema";
 import { resolvedYokeProgram } from "./yoke-program-state";
 import { decodeYokeProgram } from "./yoke-program-wire";
@@ -20,7 +21,11 @@ const programSchema = z
                 z.object({
                   id: z.string().min(1).max(100),
                   action: stitchActionSchema,
-                  color: z.number().int().min(0).max(7),
+                  color: z
+                    .number()
+                    .int()
+                    .min(0)
+                    .max(MAX_PALETTE_COLOURS - 1),
                   displayColor: z
                     .union([
                       z.literal("yarn"),
