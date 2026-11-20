@@ -165,6 +165,9 @@ export function ChartMaker({
   const [selectionClipboard, setSelectionClipboard] =
     useState<SelectionClipboard | null>(null);
   const [knitModeOpen, setKnitModeOpen] = useState(false);
+  const [newChartOpen, setNewChartOpen] = useState(false);
+  const newChartMenuRef = useRef<HTMLDivElement>(null);
+  const newChartButtonRef = useRef<HTMLButtonElement>(null);
   const [newYokeOpen, setNewYokeOpen] = useState(false);
   const [tourFileOpen, setTourFileOpen] = useState(false);
   const [patternImporterOpen, setPatternImporterOpen] = useState(false);
@@ -228,6 +231,20 @@ export function ChartMaker({
     },
   });
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!newChartOpen) return;
+    function dismissOutside(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !newChartMenuRef.current?.contains(event.target)
+      ) {
+        setNewChartOpen(false);
+      }
+    }
+    window.addEventListener("pointerdown", dismissOutside);
+    return () => window.removeEventListener("pointerdown", dismissOutside);
+  }, [newChartOpen]);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
   const past = history.past;
@@ -1260,13 +1277,61 @@ export function ChartMaker({
           >
             Duplicate
           </button>
-          <button
-            className="new-chart-tab"
-            onClick={addTab}
-            disabled={tabs.length >= MAX_CHART_TABS}
+          <div
+            className="file-menu"
+            ref={newChartMenuRef}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                setNewChartOpen(false);
+            }}
+            onKeyDown={(event) => {
+              if (!newChartOpen || event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              setNewChartOpen(false);
+              newChartButtonRef.current?.focus();
+            }}
           >
-            + New chart
-          </button>
+            <button
+              ref={newChartButtonRef}
+              type="button"
+              className="new-chart-tab"
+              aria-expanded={newChartOpen}
+              aria-controls={newChartOpen ? "new-chart-options" : undefined}
+              onClick={() => setNewChartOpen((open) => !open)}
+              disabled={tabs.length >= MAX_CHART_TABS}
+            >
+              + New chart
+            </button>
+            {newChartOpen ? (
+              <div
+                id="new-chart-options"
+                className="file-menu-popover new-chart-dropdown"
+                role="group"
+                aria-label="New chart options"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewChartOpen(false);
+                    newChartButtonRef.current?.focus();
+                    addTab();
+                  }}
+                >
+                  Blank chart
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewChartOpen(false);
+                    setNewYokeOpen(true);
+                  }}
+                >
+                  Circular yoke
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -81,6 +81,68 @@ test("a 20-colour chart can use its last colour and preserves it after reload", 
   await expect(cell).toHaveAttribute("fill", "#a1b2c3");
 });
 
+test("chart cell boundaries stay visible at fractional sizes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1103, height: 900 });
+  await page.goto("/");
+  const chart = page.locator(".chart-svg");
+  await expect(chart.locator(".grid-line").first()).toHaveCSS(
+    "shape-rendering",
+    "geometricprecision",
+  );
+
+  // Sample the rendered pixels rather than just checking that SVG lines exist.
+  const png = await chart.screenshot({ scale: "css" });
+  const missing = await page.evaluate(
+    async ({ png, columns, rows }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, image.width, image.height);
+      const red = (x: number, y: number) => data[4 * (y * image.width + x)];
+      const sampleX = Math.round(image.width / columns / 2);
+      const sampleY = Math.round(image.height / rows / 2);
+      const threshold = red(sampleX, sampleY) - 12;
+      const misses: string[] = [];
+      for (let column = 1; column < columns; column++) {
+        const x = Math.round((column * image.width) / columns);
+        if (
+          Math.min(red(x - 1, sampleY), red(x, sampleY), red(x + 1, sampleY)) >
+          threshold
+        )
+          misses.push(`column ${column}`);
+      }
+      for (let row = 1; row < rows; row++) {
+        const y = Math.round((row * image.height) / rows);
+        if (
+          Math.min(red(sampleX, y - 1), red(sampleX, y), red(sampleX, y + 1)) >
+          threshold
+        )
+          misses.push(`row ${row}`);
+      }
+      return misses;
+    },
+    {
+      png: png.toString("base64"),
+      columns: defaultDocument.width,
+      rows: defaultDocument.height,
+    },
+  );
+  expect(missing).toEqual([]);
+
+  await page.getByRole("button", { name: "Knit mode", exact: true }).click();
+  await expect(page.locator(".knit-mode-grid line").first()).toHaveCSS(
+    "shape-rendering",
+    "geometricprecision",
+  );
+});
+
 test("Knit Mode zooms and follows the start of a flat row on a tablet", async ({
   page,
 }) => {
@@ -455,7 +517,55 @@ test("chart dimensions allow typing intermediate values and reset on tab changes
   await rows.pressSequentially("18");
   await expect(rows).toHaveValue("118");
   await page.getByRole("button", { name: "+ New chart", exact: true }).click();
+  await page
+    .getByRole("group", { name: "New chart options" })
+    .getByRole("button", { name: "Blank chart", exact: true })
+    .click();
   await expect(rows).toHaveValue("14");
+});
+
+test("New chart can open the circular yoke planner without creating a tab", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const chartTabs = page
+    .getByRole("tablist", { name: "Open charts" })
+    .getByRole("tab");
+  const add = page.getByRole("button", { name: "+ New chart", exact: true });
+  const chooser = page.getByRole("group", { name: "New chart options" });
+  await add.click();
+  await expect(chooser).toBeVisible();
+  await expect(add).toHaveAttribute("aria-expanded", "true");
+  const triggerBounds = (await add.boundingBox())!;
+  const dropdownBounds = (await chooser.boundingBox())!;
+  expect(dropdownBounds.y).toBeGreaterThanOrEqual(
+    triggerBounds.y + triggerBounds.height,
+  );
+  expect(dropdownBounds.x).toBeGreaterThanOrEqual(0);
+  expect(dropdownBounds.x + dropdownBounds.width).toBeLessThanOrEqual(390);
+  await page.keyboard.press("Tab");
+  await expect(
+    chooser.getByRole("button", { name: "Blank chart" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(chooser).toHaveCount(0);
+  await expect(add).toBeFocused();
+
+  await add.click();
+  await page.mouse.click(1, 1);
+  await expect(chooser).toHaveCount(0);
+
+  await add.click();
+  await chooser
+    .getByRole("button", { name: "Circular yoke", exact: true })
+    .click();
+  const planner = page.getByRole("dialog", { name: "Create circular yoke" });
+  await expect(planner).toBeVisible();
+  await expect(chooser).toHaveCount(0);
+  await expect(chartTabs).toHaveCount(1);
+  await planner.getByRole("button", { name: "Close yoke planning" }).click();
+  await expect(chartTabs).toHaveCount(1);
 });
 
 for (const structural of [false, true]) {
