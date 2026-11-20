@@ -1,7 +1,7 @@
 {
   "name": "knitplot",
   "version": "0.1.0",
-  "description": "A local-first colourwork chart maker with image conversion, knitted previews, instructions, Knit Mode, and optional OpenAI features.",
+  "description": "A local-first colourwork chart maker with image conversion, knitted previews, instructions, Knit Mode, and Chart Club.",
   "private": true,
   "license": "MIT",
   "engines": {

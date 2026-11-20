@@ -6,6 +6,18 @@ import {
 } from "../lib/chart";
 import { newChartTab, workspaceSave } from "../lib/workspace";
 
+test("retired service routes are absent in the public build", async ({
+  request,
+}) => {
+  for (const path of [
+    "/api/generate-chart",
+    "/api/edit-chart",
+    "/api/account/openai-key",
+  ]) {
+    expect((await request.post(path, { data: {} })).status()).toBe(404);
+  }
+});
+
 test.beforeEach(async ({ page }) => {
   // Each test runs in an isolated browser context, with no user's stored charts.
   await page.addInitScript(() =>

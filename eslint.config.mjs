@@ -14,8 +14,7 @@ export default defineConfig([
   {
     files: ["app/account/page.tsx"],
     rules: {
-      // A full navigation refreshes server-side OpenAI connection state after
-      // connecting/disconnecting a key; a cached client route can be stale.
+      // A full navigation reloads the editor with current account information.
       "@next/next/no-html-link-for-pages": "off",
     },
   },

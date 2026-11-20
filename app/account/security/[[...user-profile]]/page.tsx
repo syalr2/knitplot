@@ -2,15 +2,12 @@ import { UserProfile } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getViewer } from "@/lib/auth";
-import { AccountKeyForm } from "@/components/account-key-form";
-import { getOpenAIConnectionStatus } from "@/lib/openai/credentials";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountSecurityPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/sign-in");
-  const connection = await getOpenAIConnectionStatus(viewer.id);
 
   return (
     <main className="account-hub-page">
@@ -54,22 +51,6 @@ export default async function AccountSecurityPage() {
             }}
           />
         </div>
-        <details className="account-hub-card account-ai-disclosure">
-          <summary>OpenAI connection</summary>
-          <p>
-            Connect your own API key to use Generate with AI and prompt-based
-            chart editing. KnitPlot encrypts it before storage and never sends
-            it back to your browser.
-          </p>
-          <AccountKeyForm
-            connected={connection.connected}
-            lastFour={connection.connected ? connection.lastFour : undefined}
-          />
-          <p className="account-footnote">
-            OpenAI bills requests to your API account. You can disconnect here
-            or revoke the key from OpenAI at any time.
-          </p>
-        </details>
       </section>
     </main>
   );

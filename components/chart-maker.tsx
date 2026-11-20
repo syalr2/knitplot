@@ -11,7 +11,6 @@ import { StitchPalettePanel } from "@/components/stitch-palette-panel";
 import { ChartMeasurementsPanel } from "@/components/chart-measurements-panel";
 import { AccountAvatar } from "@/components/account-avatar";
 import { SetStateAction, useEffect, useMemo, useRef, useState } from "react";
-import { AiChartGenerator } from "@/components/ai-chart-generator";
 import { ChartGrid } from "@/components/chart-grid";
 import { YokeEditor } from "@/components/yoke-editor";
 import { YokeKnittedPreview } from "@/components/yoke-knitted-preview";
@@ -99,14 +98,12 @@ function clamp(value: number, min: number, max: number) {
 type ChartMakerProps = {
   viewer: Viewer | null;
   accountsEnabled: boolean;
-  aiConnected: boolean;
   localTestChart?: ChartDocument;
 };
 
 export function ChartMaker({
   viewer,
   accountsEnabled,
-  aiConnected,
   localTestChart,
 }: ChartMakerProps) {
   const [tabs, setTabs] = useState<ChartTab[]>([
@@ -736,35 +733,6 @@ export function ChartMaker({
     setSelection(null);
   }
 
-  function importAiChart(palette: ChartDocument["palette"], cells: string[][]) {
-    const width = cells[0]?.length ?? document.width;
-    const height = cells.length;
-    const preservedActions =
-      width === document.width && height === document.height
-        ? document.stitchActions
-        : undefined;
-    const preservedCellColors = copyStitchCellColors(document);
-    const preservedStitchPalette =
-      width === document.width && height === document.height
-        ? document.stitchPalette
-        : undefined;
-    const preservedStitchColors =
-      width === document.width && height === document.height
-        ? document.stitchColors
-        : undefined;
-    importImage(palette, cells);
-    if (preservedActions)
-      setDocument((current) => ({
-        ...current,
-        stitchActions: preservedActions.map((row) => [...row]),
-        stitchCellColors: preservedCellColors,
-        stitchPalette: preservedStitchPalette
-          ? [...preservedStitchPalette]
-          : stitchPaletteFromActions(preservedActions),
-        stitchColors: { ...preservedStitchColors },
-      }));
-  }
-
   function importPatternChart(
     palette: ChartDocument["palette"],
     cells: string[][],
@@ -1172,17 +1140,7 @@ export function ChartMaker({
               Knit mode
             </button>
             {!document.yoke ? (
-              <>
-                {viewer && aiConnected ? (
-                  <AiChartGenerator
-                    document={document}
-                    onImport={importAiChart}
-                    signedIn={true}
-                    aiConnected={true}
-                  />
-                ) : null}
-                <ImageImporter document={document} onImport={importImage} />
-              </>
+              <ImageImporter document={document} onImport={importImage} />
             ) : null}
             <InstructionsView
               document={document}

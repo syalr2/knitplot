@@ -6,7 +6,7 @@ Thank you for helping make KnitPlot better for knitters.
 
 - Search existing issues before opening a new one.
 - Keep changes focused on one problem or feature.
-- Never include an OpenAI API key, `.env.local`, private chart, or private reference image in an issue or commit.
+- Never include credentials, `.env.local`, private chart, or private reference image in an issue or commit.
 - For larger changes, open an issue first so the design can be discussed before substantial work begins.
 
 ## Local setup
@@ -38,7 +38,7 @@ For browser tests, build without account credentials, install Chromium with
 smoke tests run against the production build on port 3108. Saving-failure tests
 render the real editor in a separate localhost-only Next.js app on port 3109,
 with a fake viewer and in-memory API responses. Both test servers have blank
-account, database and OpenAI credentials. No production authentication bypass or
+account and database credentials. No production authentication bypass or
 test route is added to KnitPlot. Contexts use isolated browser storage; the tests
 never use real accounts or charts. Run just the saving tests with
 `npm run test:e2e -- --project saving`.

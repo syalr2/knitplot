@@ -2,19 +2,19 @@
 
 KnitPlot is a local-first, open-source colourwork chart maker for knitters. Draw charts stitch by stitch, turn an image into a limited-colour chart, preview the result as knitted fabric, and follow it row by row in Knit Mode.
 
-The core app is free to use and does not need an account or API key. Optional accounts add private cross-device chart saves and Chart Club, where knitters can share charts and follow creators. Optional AI tools use each user's own OpenAI API key.
+The core app is free to use and does not need an account. Optional accounts add private cross-device chart saves and Chart Club, where knitters can share charts and follow creators.
 
 ## Use KnitPlot online
 
-Open the hosted chart maker at [knitplot.art](https://knitplot.art). Every non-AI tool works without an account and saves the current workspace in that browser. An optional account adds a private My Charts library, cross-device saves, and a secure connection for a personal OpenAI API key.
+Open the hosted chart maker at [knitplot.art](https://knitplot.art). The chart editor works without an account and saves the current workspace in that browser. An optional account adds a private My Charts library and cross-device saves.
 
 ## What it can do
 
-### No API key needed
+### Chart editor
 
 - Draw, erase, flood-fill, and fill rectangular selections
 - Move, copy, cut, paste, mirror, and rotate selections
-- Choose up to eight custom colours
+- Choose up to 20 custom colours
 - Work with regular charts up to 200 stitches by 300 rows
 - Set stitch gauge, row gauge, and centimetres or inches
 - Zoom the editable chart and use optional live-symmetry guides
@@ -55,15 +55,6 @@ Anyone can browse public charts. With your existing KnitPlot account, choose a u
 
 Private edits never change a published snapshot. Authors can edit its title and description or remove the post; removing it cannot recall copies others already downloaded.
 
-### OpenAI API key needed
-
-- Generate a new chart from a text prompt
-- Include a reference image while generating
-- Revise the generated draft with another prompt before importing it
-- Edit the currently open chart with a prompt
-
-AI requests consume credits on the OpenAI account connected to your key. The app always labels those actions before it sends a request.
-
 ## Run KnitPlot on your computer
 
 You need [Node.js](https://nodejs.org/) 24 or 25 (Node 24 LTS recommended).
@@ -78,7 +69,7 @@ npm run dev
 
 Open the local address shown in the terminal, usually [http://localhost:3000](http://localhost:3000).
 
-Without any environment variables, the full non-AI chart maker works locally. AI buttons are hidden by default and appear only after signing in and connecting an OpenAI API key under Account settings → Manage sign-in & security → OpenAI connection. To enable that flow locally, configure the optional accounts below.
+Without any environment variables, the chart maker works locally. Set up the optional accounts below for cloud saves and Chart Club.
 
 Never commit or share `.env.local`. It is ignored by Git.
 
@@ -88,11 +79,9 @@ KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart st
 
 1. Create or connect Clerk and Neon resources. Vercel Marketplace can inject their environment variables automatically.
 2. Set `DATABASE_URL` for your Neon database and run `npm run db:migrate`. See [the migration guide](database/README.md) for existing installations and rollout precautions.
-3. Set the Clerk and Neon values from `.env.example` in `.env.local` and in Vercel. Generate `OPENAI_KEY_ENCRYPTION_SECRET` with `openssl rand -base64 32` and never change or expose it while saved API keys exist.
+3. Set the Clerk and Neon values from `.env.example` in `.env.local` and in Vercel.
 
-`CLERK_SECRET_KEY`, `DATABASE_URL`, and `OPENAI_KEY_ENCRYPTION_SECRET` are server-only secrets. Never prefix them with `NEXT_PUBLIC_` or commit them.
-
-Public deployments require a signed-in user and their own connected OpenAI key. A server-wide `OPENAI_API_KEY` is accepted only in development, never in production.
+`CLERK_SECRET_KEY` and `DATABASE_URL` are server-only secrets. Never prefix them with `NEXT_PUBLIC_` or commit them.
 
 ## Saving and privacy
 
@@ -100,10 +89,7 @@ Public deployments require a signed-in user and their own connected OpenAI key. 
 - Signed-in users can choose **Save to My Charts**. After the first cloud save, that chart is kept in sync while it remains open.
 - **File → Download editable chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
 - Ordinary image importing and colour reduction happen in your browser.
-- When you use an AI feature, its prompt and any attached or current-chart image are sent through KnitPlot's server to OpenAI using your connected key.
-- Connected OpenAI keys are encrypted with AES-256-GCM before Neon storage and are never returned to the browser. Only the final four characters are shown for identification.
-- KnitPlot stores no AI prompts or generated images in the account database. It stores request timestamps only for the 30-per-hour safety limit.
-- The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, prompts, uploaded images, email addresses, and API keys are not sent as analytics events. No AI feature-usage counters are added.
+- The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, uploaded images, and email addresses are not sent as analytics events.
 - On the official hosted site, **Chart edited** counts the first drawing change per chart type and guest/signed-in category per page load. **File downloaded** counts initiated chart-maker downloads, with the file format. No chart names, cells, measurements, account IDs, or file contents are included. These events respect Do Not Track and do not run on localhost or other self-hosted domains.
 - These are activity counts, not a census of distinct knitters. Opening or restoring a chart does not count as editing; browser-local autosaves are not reported. A download event cannot confirm that the user ultimately kept the file. Blockers and offline use can cause undercounting. Custom events require a Vercel plan that supports them.
 - Chart Club is explicitly opt-in. Sharing publishes a separate chart snapshot, your chosen cover and post details, and your public creator profile. Your private library stays private. Review the sharing form before publishing, including whether to include yoke measurements.

@@ -4,8 +4,6 @@ const isolatedEnvironment = {
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "",
   CLERK_SECRET_KEY: "",
   DATABASE_URL: "",
-  OPENAI_API_KEY: "",
-  OPENAI_KEY_ENCRYPTION_SECRET: "",
 };
 
 export default defineConfig({
