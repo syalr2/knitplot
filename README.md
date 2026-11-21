@@ -1,12 +1,12 @@
 # KnitPlot
 
-KnitPlot is a local-first, open-source colourwork chart maker for knitters. Draw charts stitch by stitch, turn an image into a limited-colour chart, preview the result as knitted fabric, and follow it row by row in Knit Mode.
+KnitPlot is a free, open-source chart maker for knitters. Draw colourwork stitch by stitch, import an image or an existing chart, or design a circular yoke from your measurements. Preview how it might knit up, then follow the chart row by row in Knit Mode.
 
 The core app is free to use and does not need an account. Optional accounts add private cross-device chart saves and Chart Club, where knitters can share charts and follow creators.
 
 ## Use KnitPlot online
 
-Open the hosted chart maker at [knitplot.art](https://knitplot.art). The chart editor works without an account and saves the current workspace in that browser. An optional account adds a private My Charts library and cross-device saves.
+Open the chart maker at [knitplot.art](https://knitplot.art), then choose **+ New chart → Blank chart** or **Circular yoke**. Your workspace saves in that browser. To back it up or move it to another device, download an editable `.knitplot` file from **File** or sign in to save it to **My Charts**.
 
 ## What it can do
 
@@ -21,7 +21,7 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). The chart e
 - Flip, rotate, undo, and redo chart changes
 - Work on up to eight charts in browser tabs
 - Import PNG, JPEG, or WebP images, then crop, position, resize, and reduce them to a stitch palette
-- Import charts from PDFs or images: crop and rotate the page, snap a grid to the chart, provide symbol examples, map colours and stitches, and review the result before editing
+- Import an existing chart from a PDF or image: crop and rotate it, align the grid, teach KnitPlot what its symbols mean using examples, and check the result before importing
 - Draw yarn colours and stitch symbols as separate layers, including purl, increases, decreases, cast-on, bind-off, and no-stitch cells
 - Preview normal or mirrored repeats as textured knitted fabric
 - Create printable charts and written row-by-row colour sequences
@@ -31,7 +31,7 @@ Open the hosted chart maker at [knitplot.art](https://knitplot.art). The chart e
 - Download chart and preview PNGs or save an editable `.knitplot` project file
 - Export an exact-size stitch bitmap PNG (one pixel per stitch, yarn colours only) for colourwork image import into other tools. Stitch actions and shaping are not encoded; no-stitch cells require an explicit fill-colour choice.
 
-### Circular yoke studio
+### Circular yoke designer
 
 - Plan a top-down circular yoke from body measurements plus ease, or finished garment measurements, using your gauge
 - Adjust the repeat count, increase schedule, and optional back-neck short rows
@@ -88,7 +88,7 @@ KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart st
 - Your open chart workspace and Knit Mode position are saved automatically in that browser's local storage.
 - Signed-in users can choose **Save to My Charts**. After the first cloud save, that chart is kept in sync while it remains open.
 - **File → Download editable chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
-- Ordinary image importing and colour reduction happen in your browser.
+- Image and PDF chart imports, including colour reduction and symbol matching, are processed in your browser.
 - The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, uploaded images, and email addresses are not sent as analytics events.
 - On the official hosted site, **Chart edited** counts the first drawing change per chart type and guest/signed-in category per page load. **File downloaded** counts initiated chart-maker downloads, with the file format. No chart names, cells, measurements, account IDs, or file contents are included. These events respect Do Not Track and do not run on localhost or other self-hosted domains.
 - These are activity counts, not a census of distinct knitters. Opening or restoring a chart does not count as editing; browser-local autosaves are not reported. A download event cannot confirm that the user ultimately kept the file. Blockers and offline use can cause undercounting. Custom events require a Vercel plan that supports them.
