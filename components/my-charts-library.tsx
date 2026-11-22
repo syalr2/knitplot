@@ -257,13 +257,20 @@ export function MyChartsLibrary({
   }
 
   function shareAction(chart: ChartSummary) {
-    return chart.publicPostId ? null : (
-      <Link
-        className="library-share-link"
-        href={`/chart-club/share/${chart.id}`}
-      >
-        Share to Chart Club
-      </Link>
+    return (
+      <>
+        <Link className="library-share-link" href={`/chart-links/${chart.id}`}>
+          Share a link
+        </Link>
+        {!chart.publicPostId && (
+          <Link
+            className="library-share-link"
+            href={`/chart-club/share/${chart.id}`}
+          >
+            Share to Chart Club
+          </Link>
+        )}
+      </>
     );
   }
 

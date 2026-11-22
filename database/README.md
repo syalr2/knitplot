@@ -95,3 +95,19 @@ all existing aliases, and indexes the report queue. Apply it before deploying
 the updated username API and moderation page. The moderator can open
 **Account settings → Chart Club reports** or visit `/chart-club/moderation`
 while signed in. The queue does not send notifications.
+
+## Unlisted chart links (011)
+
+Apply 011 before enabling **Share a link** on saved charts. It adds a separate
+table for opt-in snapshots, with one active link per saved chart and no backfill.
+Chart Club does not read this table. Turning off a link or deleting its source
+chart removes the snapshot. Keep the table on application rollback; dropping it
+would invalidate existing links.
+
+Migration 012 adds non-expiring snapshots for **File → Share a link** without an
+account or cloud save. Apply it before deploying the editor dialog. Revoke keys
+are hashed separately from the share token; there is no account or source-chart
+association. Admission has a hard ceiling of 10,000 live links and 256 MiB of
+chart payloads; it rejects new requests at capacity instead of deleting
+existing links. Monitor storage before raising the cap. Leave the table and
+function in place if rolling back the app.

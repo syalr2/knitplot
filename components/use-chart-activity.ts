@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { ChartDocument } from "@/lib/chart";
-import { recordUsage } from "@/lib/usage-analytics";
+import { recordClubCopyEdited, recordUsage } from "@/lib/usage-analytics";
 
 export function useChartActivity(
   document: ChartDocument,
@@ -28,6 +28,7 @@ export function useChartActivity(
     const before = previous.current;
     previous.current = { tabId, drawing };
     if (!before || before.tabId !== tabId || before.drawing === drawing) return;
+    recordClubCopyEdited(tabId);
     recordUsage({
       account: signedIn ? "signed_in" : "guest",
       chart_type: document.yoke ? "yoke" : "regular",

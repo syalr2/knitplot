@@ -1,35 +1,77 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import "@/app/yoke-designer/yoke.css";
-import { getDatabase } from "@/lib/db";
-import { isUuid } from "@/lib/http";
 import { getViewer } from "@/lib/auth";
 import { ClubPostActions } from "@/components/club-post-actions";
 import { OpenClubCopy } from "@/components/open-club-copy";
 import { readChartDocument } from "@/lib/chart-schema";
 import { ClubChartViewer } from "@/components/club-chart-viewer";
+import { ClubCopyLink } from "@/components/club-copy-link";
+import { getClubPostActivity, getPublicClubPost } from "@/lib/public-club-post";
+import {
+  CLUB_SHARE_IMAGE_SIZE,
+  KNITPLOT_ORIGIN,
+  clubPostPath,
+  clubShareImagePath,
+} from "@/lib/club-share-link";
 
 export const dynamic = "force-dynamic";
 
+type PostPage = PageProps<"/chart-club/[id]">;
+
+export async function generateMetadata({
+  params,
+}: PostPage): Promise<Metadata> {
+  const { id } = await params;
+  const post = await getPublicClubPost(id);
+  if (!post) notFound();
+  const title = `${post.title} · Chart Club`;
+  const description =
+    `By @${post.handle}. ${post.description || "Explore the chart and open an editable copy in KnitPlot."}`.slice(
+      0,
+      165,
+    );
+  const url = new URL(clubPostPath(id), KNITPLOT_ORIGIN);
+  const image = {
+    url: new URL(clubShareImagePath(id), KNITPLOT_ORIGIN),
+    alt: `Knitted preview of ${post.title} by @${post.handle}`,
+    ...CLUB_SHARE_IMAGE_SIZE,
+  };
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "website",
+      siteName: "KnitPlot",
+      images: [image],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
+    },
+  };
+}
+
 export default async function PublicChartPage({
   params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const sql = getDatabase();
-  if (!sql || !isUuid(id)) notFound();
-  const viewer = await getViewer();
-  const [post] = await sql`
-    select p.title, p.description, p.editable_document, c.handle,
-      p.summary->>'coverView' as cover_view,
-      p.creator_id = ${viewer?.id ?? null} as own,
-      exists (select 1 from knitplot_club_hearts where post_id = p.id and user_id = ${viewer?.id ?? null}) as hearted
-    from knitplot_club_public_posts p join knitplot_club_creators c on c.user_id = p.creator_id
-    where p.id = ${id}::uuid
-  `;
+  searchParams,
+}: PostPage) {
+  const [{ id }, { via }] = await Promise.all([params, searchParams]);
+  const [post, viewer] = await Promise.all([
+    getPublicClubPost(id),
+    getViewer(),
+  ]);
   if (!post) notFound();
-  const chart = readChartDocument(post.editable_document);
+  const activity = viewer ? await getClubPostActivity(id, viewer.id) : null;
+  const chart = readChartDocument(post.document);
+  const sharedVisit = via === "share";
   return (
     <>
       <header className="library-heading">
@@ -47,23 +89,27 @@ export default async function PublicChartPage({
         <p className="club-description">{post.description}</p>
       )}
       <div className="club-creator-links">
-        <OpenClubCopy id={id} />
+        <OpenClubCopy
+          id={id}
+          entry={sharedVisit ? "shared_link" : "chart_club"}
+        />
+        <ClubCopyLink id={id} placement="post" sharedVisit={sharedVisit} />
         <a className="chart-club-link" href={`/api/chart-club/copy?id=${id}`}>
           Download editable copy
         </a>
       </div>
       <ClubChartViewer
         document={chart}
-        coverView={post.cover_view}
+        coverView={post.legacyView}
         heart={
           <ClubPostActions
             id={id}
-            initialHearted={post.hearted}
+            initialHearted={Boolean(activity?.hearted)}
             signedIn={Boolean(viewer)}
           />
         }
       />
-      {!post.own && (
+      {!activity?.own && (
         <ClubPostActions
           id={id}
           initialHearted={false}

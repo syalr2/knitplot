@@ -18,7 +18,11 @@ import { withYokeProgram } from "../lib/yoke-program-state";
 import { reviseYokeStitches } from "../lib/yoke-stitch-revision";
 import type { YokeStitchProgram } from "../lib/yoke-stitch-program";
 import { stringifyKnitplot } from "../lib/yoke-program-wire";
-import { asymmetricYoke, makeYokeFixture } from "../lib/yoke-test-fixtures";
+import {
+  asymmetricYoke,
+  makeYokeFixture,
+  wideYoke,
+} from "../lib/yoke-test-fixtures";
 
 test.setTimeout(90_000);
 const plain = () =>
@@ -136,6 +140,33 @@ async function openPreview(page: Page, document: ChartDocument) {
   ).toBeGreaterThan(500);
   return { panel, canvas };
 }
+
+test("share image uses the selected yoke view", async ({ page }) => {
+  const { canvas, panel } = await openPreview(page, wideYoke.document);
+  const share = panel.getByRole("button", { name: "Share preview" });
+  await share.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Share your knitted preview",
+  });
+  const card = dialog.getByRole("img", { name: "Share image preview" });
+  const whole = await card.evaluate((element) =>
+    (element as HTMLCanvasElement).toDataURL(),
+  );
+  await dialog.getByRole("button", { name: "Close share preview" }).click();
+  await panel
+    .getByRole("combobox", { name: "View", exact: true })
+    .selectOption("front");
+  await expect(canvas).toHaveAttribute("data-preview-state", "ready", {
+    timeout: 30_000,
+  });
+  await share.click();
+  const half = await card.evaluate((element) =>
+    (element as HTMLCanvasElement).toDataURL(),
+  );
+  expect(half).not.toBe(whole);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+});
 
 test("whole yoke preview starts open, refreshes, downloads and can collapse", async ({
   page,

@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import {
   cloneDocument,
   defaultDocument,
   createStitchActions,
 } from "../lib/chart";
-import { newChartTab, workspaceSave } from "../lib/workspace";
+import { newChartTab, STORAGE_KEY, workspaceSave } from "../lib/workspace";
 
 test("retired service routes are absent in the public build", async ({
   request,
@@ -22,6 +23,191 @@ test.beforeEach(async ({ page }) => {
   // Each test runs in an isolated browser context, with no user's stored charts.
   await page.addInitScript(() =>
     localStorage.setItem("knitplot-tutorial-v1", "seen"),
+  );
+});
+
+test("a guest can preview and download an uncredited share image without posting", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const tab = newChartTab(
+    {
+      ...defaultDocument,
+      name: "Wide swatch",
+      width: 60,
+      height: 8,
+      guides: { ...defaultDocument.guides, repeatWidth: 60, repeatHeight: 8 },
+      cells: Array.from({ length: 8 }, () =>
+        Array<string>(60).fill("background"),
+      ),
+    },
+    "wide-share-preview",
+  );
+  await page.addInitScript(
+    ({ key, workspace }) => localStorage.setItem(key, workspace),
+    {
+      key: STORAGE_KEY,
+      workspace: JSON.stringify(workspaceSave([tab], tab.id)),
+    },
+  );
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Chart name" })).toHaveValue(
+    "Wide swatch",
+  );
+  await expect(page.locator(".preview-canvas")).toHaveAttribute(
+    "data-preview-state",
+    "ready",
+  );
+  const refresh = page.getByRole("button", { name: "Refresh preview" });
+  const share = page.getByRole("button", { name: "Share preview" });
+  expect((await refresh.boundingBox())!.y).toBeCloseTo(
+    (await share.boundingBox())!.y,
+    0,
+  );
+  const repeats = page.getByRole("group", { name: "Repeats" });
+  await expect(repeats.getByRole("combobox", { name: "Style" })).toBeVisible();
+  await share.click();
+  const dialog = page.getByRole("dialog", {
+    name: "Share your knitted preview",
+  });
+  await expect(dialog).toBeVisible();
+  const card = dialog.getByRole("img", { name: "Share image preview" });
+  await expect(card).toBeVisible();
+  const size = () =>
+    card.evaluate((element) => {
+      const canvas = element as HTMLCanvasElement;
+      return { width: canvas.width, height: canvas.height };
+    });
+  const credited = await size();
+  const credit = dialog.getByRole("checkbox", { name: /Include/ });
+  await expect(credit).toBeChecked();
+  await credit.uncheck();
+  const uncredited = await size();
+  expect(uncredited.width / uncredited.height).toBeGreaterThan(4);
+  expect(uncredited.width).toBe(credited.width);
+  expect(uncredited.height).toBeLessThan(credited.height);
+  const downloaded = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Download share image" }).click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toMatch(/\.share\.png$/);
+  const png = await readFile((await file.path())!);
+  expect(png.readUInt32BE(16)).toBe(uncredited.width);
+  expect(png.readUInt32BE(20)).toBe(uncredited.height);
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Share image downloaded." }),
+  ).toBeVisible();
+});
+
+test("an unavailable Chart Club post has no public share image", async ({
+  request,
+}) => {
+  const image = await request.get(
+    "/api/chart-club/share-image/00000000-0000-4000-8000-000000000000",
+  );
+  expect(image.status()).toBe(404);
+  expect(image.headers()["cache-control"]).toBe("no-store");
+});
+
+test("the File menu lets a signed-out editor share an unsaved chart", async ({
+  page,
+}) => {
+  const token = "k8J4qX";
+  const revokeToken = "b".repeat(32);
+  let active = false;
+  await page.route("**/api/chart-links/draft", (route) => {
+    const payload = route.request().postDataJSON();
+    if (route.request().method() === "POST") {
+      expect(payload.document.name).toBe("Unsaved swatch");
+      expect(payload.confirmRights).toBe(true);
+      expect(payload.sourceId).toBeUndefined();
+      active = true;
+      return route.fulfill({
+        status: 201,
+        json: { token, revokeToken },
+      });
+    }
+    expect(payload).toEqual({ token, revokeToken });
+    active = false;
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Chart name" })
+    .fill("Unsaved swatch");
+  async function open() {
+    await page.getByRole("button", { name: "File", exact: true }).click();
+    const exportHeading = page
+      .getByRole("menu")
+      .getByText("Export", { exact: true });
+    expect(
+      await exportHeading.evaluate(
+        (element) => element.nextElementSibling?.textContent,
+      ),
+    ).toContain("Share a link");
+    await page
+      .getByRole("menuitem", { name: "Share a link", exact: true })
+      .click();
+    return page.getByRole("dialog", { name: "Share a link" });
+  }
+  const dialog = await open();
+  await expect(
+    dialog.getByRole("button", { name: "Create link" }),
+  ).toBeDisabled();
+  await dialog.getByRole("checkbox", { name: /permission/ }).check();
+  await dialog.getByRole("button", { name: "Create link" }).click();
+  const field = dialog.getByRole("textbox", { name: "Unlisted chart link" });
+  await expect(field).toHaveValue(
+    new RegExp("/shared-chart#unsaved-swatch~" + token + "$"),
+  );
+  expect(active).toBe(true);
+  await dialog.getByRole("button", { name: "Close share link" }).click();
+  await page.reload();
+  await open();
+  await expect(field).toHaveValue(
+    new RegExp("/shared-chart#unsaved-swatch~" + token + "$"),
+  );
+  await dialog.getByRole("button", { name: "Turn off link…" }).click();
+  await dialog
+    .getByRole("button", { name: "Turn off link", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toHaveText("Link turned off.");
+  expect(active).toBe(false);
+});
+
+test("a guest can open an unlisted snapshot without publishing or exposing the link in a request URL", async ({
+  page,
+}) => {
+  const token = "abcdefghijklmno_0123456789abcdef";
+  await page.route("**/api/chart-links/open", (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().url()).not.toContain(token);
+    expect(route.request().postDataJSON()).toEqual({ token });
+    return route.fulfill({
+      json: {
+        format: "colorwork-chart",
+        version: 2,
+        document: { ...defaultDocument, name: "Friend's swatch" },
+      },
+    });
+  });
+  const response = await page.goto(`/shared-chart#${token}`);
+  expect(response?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+  expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
+  await expect(
+    page.getByRole("heading", { name: "Friend's swatch" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Read-only chart" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Heart chart" })).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole("button", { name: "Open a copy in Chart Maker" })
+    .click();
+  await expect(page.getByRole("textbox", { name: "Chart name" })).toHaveValue(
+    "Friend's swatch",
   );
 });
 

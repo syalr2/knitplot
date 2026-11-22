@@ -5,6 +5,7 @@ import type { YokePreviewView, YokeSweaterView } from "@/lib/yoke-preview-view";
 import { yokeRepeatSides } from "@/lib/yoke-repeat-labels";
 import { ConnectedKnitPreview } from "./connected-knit-preview";
 import { YokePhotoSample } from "./yoke-photo-sample";
+import { SharePreview } from "./share-preview";
 import {
   fitsSweaterPhoto,
   SWEATER_PREVIEW_TOO_DEEP,
@@ -15,12 +16,14 @@ export function YokeKnittedPreview({
   canvasRef,
   stale,
   onRefresh,
+  shareName,
   initialView = "whole",
 }: {
   document: ChartDocument;
   canvasRef?: RefObject<HTMLCanvasElement | null>;
   stale?: boolean;
   onRefresh?: () => void;
+  shareName?: string;
   initialView?: "whole" | "front" | "back";
 }) {
   const [open, setOpen] = useState(true);
@@ -48,48 +51,62 @@ export function YokeKnittedPreview({
       </summary>
       {open ? (
         <div className="preview-content">
-          <div className="repeat-controls">
-            <label>
-              View
-              <select
-                className="yoke-preview-view-select"
-                value={view}
-                onChange={(event) => setView(event.target.value as typeof view)}
-              >
-                <option value="whole">Whole yoke</option>
-                <option value="front">Front half</option>
-                <option value="back">Back half</option>
-                <option value="repeat">One repeat</option>
-                <option value="sweater">Sweater</option>
-              </select>
-            </label>
-            {view === "repeat" ? (
+          <div className="repeat-controls preview-toolbar">
+            <div className="preview-repeat-options">
               <label>
-                Preview repeat
+                View
                 <select
-                  value={selectedRepeat}
-                  onChange={(event) => setRepeat(Number(event.target.value))}
+                  className="yoke-preview-view-select"
+                  value={view}
+                  onChange={(event) =>
+                    setView(event.target.value as typeof view)
+                  }
                 >
-                  {yokeRepeatSides(repeatCount).map(({ name, repeats }) => (
-                    <optgroup key={name} label={name}>
-                      {repeats.map(({ number, section }) => (
-                        <option key={section} value={section}>
-                          {number} · {name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
+                  <option value="whole">Whole yoke</option>
+                  <option value="front">Front half</option>
+                  <option value="back">Back half</option>
+                  <option value="repeat">One repeat</option>
+                  <option value="sweater">Sweater</option>
                 </select>
               </label>
-            ) : null}
-            {onRefresh && (
-              <button
-                className="primary-button refresh-preview-button"
-                onClick={onRefresh}
-              >
-                Refresh preview
-              </button>
-            )}
+              {view === "repeat" ? (
+                <label>
+                  Preview repeat
+                  <select
+                    value={selectedRepeat}
+                    onChange={(event) => setRepeat(Number(event.target.value))}
+                  >
+                    {yokeRepeatSides(repeatCount).map(({ name, repeats }) => (
+                      <optgroup key={name} label={name}>
+                        {repeats.map(({ number, section }) => (
+                          <option key={section} value={section}>
+                            {number} · {name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+            <div className="preview-toolbar-actions">
+              {onRefresh && (
+                <button
+                  className="primary-button refresh-preview-button"
+                  onClick={onRefresh}
+                >
+                  Refresh preview
+                </button>
+              )}
+              {canvasRef && shareName !== undefined && !sweaterUnavailable && (
+                <SharePreview
+                  canvasRef={canvasRef}
+                  name={shareName}
+                  view={view}
+                  stale={stale}
+                />
+              )}
+            </div>
           </div>
           {stale ? (
             <p className="preview-stale-note" role="status">

@@ -4,6 +4,7 @@ import "@/app/yoke-designer/yoke.css";
 import Link from "next/link";
 import { MAX_PALETTE_COLOURS, nextPaletteColour } from "@/lib/palette-colours";
 import { useChartActivity } from "./use-chart-activity";
+import { SharePreview } from "./share-preview";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { useSyncedDraft } from "@/components/use-synced-draft";
 import { ColourPalettePanel } from "@/components/colour-palette-panel";
@@ -1148,6 +1149,7 @@ export function ChartMaker({
             />
           </div>
           <ExportTools
+            tabId={activeTabId}
             document={document}
             previewCanvasRef={previewCanvasRef}
             onOpenProject={openProject}
@@ -1319,6 +1321,7 @@ export function ChartMaker({
                 canvasRef={previewCanvasRef}
                 stale={previewOutdated}
                 onRefresh={refreshPreview}
+                shareName={document.name}
               />
             </YokeEditor>
           </>
@@ -1614,58 +1617,73 @@ export function ChartMaker({
                   </span>
                 </summary>
                 <div className="preview-content">
-                  <div className="repeat-controls">
-                    <span>Repeats</span>
-                    <label className="repeat-style">
-                      Style
-                      <select
-                        value={preview.repeatStyle}
-                        onChange={(event) =>
-                          updatePreviewSettings({
-                            repeatStyle: event.target.value as RepeatStyle,
-                          })
-                        }
-                      >
-                        <option value="normal">Normal</option>
-                        <option value="mirrored">Mirrored</option>
-                      </select>
-                    </label>
-                    <label>
-                      Across
-                      <select
-                        value={preview.repeatX}
-                        onChange={(event) =>
-                          updatePreviewSettings({
-                            repeatX: Number(event.target.value),
-                          })
-                        }
-                      >
-                        <option>1</option>
-                        <option>2</option>
-                        <option>3</option>
-                      </select>
-                    </label>
-                    <label>
-                      Down
-                      <select
-                        value={preview.repeatY}
-                        onChange={(event) =>
-                          updatePreviewSettings({
-                            repeatY: Number(event.target.value),
-                          })
-                        }
-                      >
-                        <option>1</option>
-                        <option>2</option>
-                        <option>3</option>
-                      </select>
-                    </label>
-                    <button
-                      className="primary-button refresh-preview-button"
-                      onClick={refreshPreview}
+                  <div className="repeat-controls preview-toolbar">
+                    <div
+                      className="preview-repeat-options"
+                      role="group"
+                      aria-label="Repeats"
                     >
-                      Refresh preview
-                    </button>
+                      <span>Repeats</span>
+                      <label className="repeat-style">
+                        Style
+                        <select
+                          value={preview.repeatStyle}
+                          onChange={(event) =>
+                            updatePreviewSettings({
+                              repeatStyle: event.target.value as RepeatStyle,
+                            })
+                          }
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="mirrored">Mirrored</option>
+                        </select>
+                      </label>
+                      <label>
+                        Across
+                        <select
+                          value={preview.repeatX}
+                          onChange={(event) =>
+                            updatePreviewSettings({
+                              repeatX: Number(event.target.value),
+                            })
+                          }
+                        >
+                          <option>1</option>
+                          <option>2</option>
+                          <option>3</option>
+                        </select>
+                      </label>
+                      <label>
+                        Down
+                        <select
+                          value={preview.repeatY}
+                          onChange={(event) =>
+                            updatePreviewSettings({
+                              repeatY: Number(event.target.value),
+                            })
+                          }
+                        >
+                          <option>1</option>
+                          <option>2</option>
+                          <option>3</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="preview-toolbar-actions">
+                      <button
+                        className="primary-button refresh-preview-button"
+                        onClick={refreshPreview}
+                      >
+                        Refresh preview
+                      </button>
+                      <SharePreview
+                        key={activeTabId}
+                        canvasRef={previewCanvasRef}
+                        name={document.name}
+                        view="swatch"
+                        stale={previewOutdated}
+                      />
+                    </div>
                   </div>
                   {previewOutdated ? (
                     <p className="preview-stale-note" role="status">

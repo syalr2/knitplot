@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { createChartHandlers } from "../../lib/chart-route-handlers.ts";
+import { createChartLinkHandlers } from "../../lib/chart-link-handlers.ts";
+import { createDraftChartLinkHandlers } from "../../lib/draft-chart-link-handlers.ts";
 import { defaultDocument } from "../../lib/chart.ts";
 import { defaultAccountAvatar } from "../../lib/account-preferences.ts";
 import { createYokeProject } from "../../lib/yoke-project.ts";
@@ -295,6 +297,179 @@ test(
         ).rows,
         [{ source_id: null, editable_document: { snapshot: true } }],
       );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "unlisted snapshots stay out of Chart Club and only the owner can turn off a link",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const owner = randomUUID();
+      const {
+        rows: [source],
+      } = await client.query(
+        "insert into knitplot_charts (user_id, name, document) values ($1, 'Friend link', $2) returning id, version",
+        [owner, JSON.stringify(defaultDocument)],
+      );
+      const getDatabase =
+        () =>
+        async (strings, ...values) =>
+          (
+            await client.query(
+              strings.reduce(
+                (sql, text, i) => sql + (i ? `$${i}` : "") + text,
+                "",
+              ),
+              values,
+            )
+          ).rows;
+      const origin = "https://knitplot.test";
+      const request = (body, method = "POST") =>
+        new Request(origin + "/api/chart-links", {
+          method,
+          headers: { origin, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      const handlers = (id) =>
+        createChartLinkHandlers({
+          getViewer: async () => (id ? { id } : null),
+          getDatabase,
+        });
+      const own = handlers(owner);
+      const guest = handlers(null);
+      const other = handlers(randomUUID());
+      const create = () =>
+        request({ sourceId: source.id, version: source.version });
+      assert.equal((await other.create(create())).status, 404);
+      const created = await own.create(create());
+      assert.equal(
+        created.status,
+        201,
+        JSON.stringify(await created.clone().json()),
+      );
+      const { token } = await created.json();
+      assert.equal((await own.create(create())).status, 409);
+      const revoke = () => request({ sourceId: source.id, token }, "DELETE");
+      assert.equal((await other.revoke(revoke())).status, 404);
+      const open = () => guest.open(request({ token }));
+      await client.query(
+        "update knitplot_charts set name = 'Changed draft' where id = $1",
+        [source.id],
+      );
+      assert.equal((await (await open()).json()).document.name, "Friend link");
+      assert.equal(
+        (
+          await client.query(
+            "select 1 from knitplot_club_public_posts where source_id = $1",
+            [source.id],
+          )
+        ).rowCount,
+        0,
+      );
+      assert.equal((await own.revoke(revoke())).status, 204);
+      assert.equal((await open()).status, 404);
+      const revised = await own.create(
+        request({ sourceId: source.id, version: source.version + 1 }),
+      );
+      assert.equal(revised.status, 201);
+      const newToken = (await revised.json()).token;
+      assert.notEqual(token, newToken);
+      assert.equal((await own.revoke(revoke())).status, 404);
+      await client.query("delete from knitplot_charts where id = $1", [
+        source.id,
+      ]);
+      assert.equal(
+        (await guest.open(request({ token: newToken }))).status,
+        404,
+      );
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "draft links need the chart name and code, survive age, and have a separate revoke key",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const getDatabase =
+        () =>
+        async (strings, ...values) =>
+          (
+            await client.query(
+              strings.reduce(
+                (sql, text, i) => sql + (i ? `$${i}` : "") + text,
+                "",
+              ),
+              values,
+            )
+          ).rows;
+      const origin = "https://knitplot.test";
+      const request = (body, method = "POST") =>
+        new Request(origin + "/api/chart-links/draft", {
+          method,
+          headers: { origin, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      const draft = createDraftChartLinkHandlers(getDatabase);
+      const guest = createChartLinkHandlers({
+        getViewer: async () => null,
+        getDatabase,
+      });
+      const create = await draft.POST(
+        request({
+          document: { ...defaultDocument, name: "Friend swatch" },
+          confirmRights: true,
+        }),
+      );
+      assert.equal(
+        create.status,
+        201,
+        JSON.stringify(await create.clone().json()),
+      );
+      const { token, revokeToken } = await create.json();
+      const slug = "friend-swatch";
+      assert.match(token, /^[A-Za-z0-9]{6}$/);
+      await client.query(
+        "update knitplot_draft_chart_links set created_at = now() - interval '10 years' where token = $1",
+        [token],
+      );
+      assert.equal((await guest.open(request({ token }))).status, 404);
+      assert.equal(
+        (await guest.open(request({ token, slug: "different-name" }))).status,
+        404,
+      );
+      assert.equal(
+        (await (await guest.open(request({ token, slug }))).json()).document
+          .name,
+        "Friend swatch",
+      );
+      assert.equal(
+        (
+          await draft.DELETE(
+            request({ token, revokeToken: "a".repeat(32) }, "DELETE"),
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await draft.DELETE(request({ token, revokeToken }, "DELETE"))).status,
+        204,
+      );
+      assert.equal((await guest.open(request({ token, slug }))).status, 404);
     } finally {
       await client.query("rollback");
       await client.end();

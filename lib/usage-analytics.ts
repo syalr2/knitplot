@@ -13,14 +13,17 @@ export type DownloadFormat =
 
 const edited = new Set<string>();
 
-export function recordUsage(context: UsageContext, format?: DownloadFormat) {
-  if (
+function canTrack() {
+  return !(
     process.env.NODE_ENV !== "production" ||
     typeof window === "undefined" ||
     !["knitplot.art", "www.knitplot.art"].includes(window.location.hostname) ||
     navigator.doNotTrack === "1"
-  )
-    return;
+  );
+}
+
+export function recordUsage(context: UsageContext, format?: DownloadFormat) {
+  if (!canTrack()) return;
   const key = `${context.account}:${context.chart_type}`;
   if (!format && edited.has(key)) return;
   try {
@@ -32,5 +35,65 @@ export function recordUsage(context: UsageContext, format?: DownloadFormat) {
     if (!format) edited.add(key);
   } catch {
     // Analytics must never prevent drawing or downloading a user's work.
+  }
+}
+
+export type ChartClubEntry = "shared_link" | "chart_club";
+export type SharePreviewView =
+  "swatch" | "whole" | "front" | "back" | "repeat" | "sweater";
+
+type ShareEvent =
+  | {
+      name: "Chart link copied";
+      placement: "post" | "after_publish" | "editor";
+    }
+  | { name: "Shared chart visited" }
+  | {
+      name: "Chart Club copy opened" | "Chart Club copy edited";
+      entry: ChartClubEntry;
+    }
+  | { name: "Share image downloaded"; view: SharePreviewView; credit: boolean };
+
+export function recordShareEvent({ name, ...details }: ShareEvent) {
+  if (!canTrack()) return;
+  try {
+    track(name, details);
+  } catch {
+    // Analytics must not get in the way of copying, editing, or downloading.
+  }
+}
+
+const COPY_ACTIVITY_KEY = "knitplot-club-copy-activity-v1";
+const COPY_ACTIVITY_TTL = 30 * 60 * 1000;
+
+export function recordClubCopyOpened(tabId: string, entry: ChartClubEntry) {
+  if (!canTrack()) return;
+  recordShareEvent({ name: "Chart Club copy opened", entry });
+  try {
+    window.sessionStorage.setItem(
+      COPY_ACTIVITY_KEY,
+      JSON.stringify({ tabId, entry, until: Date.now() + COPY_ACTIVITY_TTL }),
+    );
+  } catch {
+    // The editable copy still works if session storage is unavailable.
+  }
+}
+
+export function recordClubCopyEdited(tabId: string) {
+  if (!canTrack()) return;
+  try {
+    const raw = window.sessionStorage.getItem(COPY_ACTIVITY_KEY);
+    if (!raw) return;
+    const marker = JSON.parse(raw);
+    if (Date.now() >= marker.until) {
+      window.sessionStorage.removeItem(COPY_ACTIVITY_KEY);
+      return;
+    }
+    if (marker.tabId !== tabId) return;
+    window.sessionStorage.removeItem(COPY_ACTIVITY_KEY);
+    if (marker.entry === "shared_link" || marker.entry === "chart_club")
+      recordShareEvent({ name: "Chart Club copy edited", entry: marker.entry });
+  } catch {
+    // An unreadable marker must not interfere with a chart edit.
   }
 }

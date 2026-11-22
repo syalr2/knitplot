@@ -8,6 +8,7 @@ import type { ClubCoverSettings } from "@/lib/club-cover";
 import { yokeRepeatSides } from "@/lib/yoke-repeat-labels";
 import { fitsSweaterPhoto } from "@/lib/yoke-photo-preview";
 import { ClubCoverFabric } from "./club-cover-fabric";
+import { ClubCopyLink } from "./club-copy-link";
 
 export function ClubShareForm({
   sourceId,
@@ -50,6 +51,7 @@ export function ClubShareForm({
       <div className="club-share-form">
         <p role="status">Your chart is now public.</p>
         <div className="club-share-actions">
+          <ClubCopyLink id={id} placement="after_publish" />
           <Link
             className="chart-club-link club-view-public"
             href={`/chart-club/${id}`}

@@ -16,9 +16,12 @@ import {
 import { readProject } from "@/lib/project-file";
 import { stitchBitmap } from "@/lib/stitch-bitmap";
 import { recordUsage, type DownloadFormat } from "@/lib/usage-analytics";
+import { canvasBlob, downloadBlob, fileName } from "@/lib/browser-download";
+import { DraftChartLinkDialog } from "./draft-chart-link-dialog";
 
 type Props = {
   document: ChartDocument;
+  tabId: string;
   previewCanvasRef: RefObject<HTMLCanvasElement | null>;
   onOpenProject: (document: ChartDocument) => void;
   accountsEnabled: boolean;
@@ -40,34 +43,6 @@ type ProjectFile = {
   version: 2;
   document: ChartDocument;
 };
-
-function fileName(name: string, extension: string) {
-  const safeName =
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "colorwork-chart";
-  return `${safeName}.${extension}`;
-}
-
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const link = window.document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function canvasBlob(canvas: HTMLCanvasElement) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("The image could not be created."));
-    }, "image/png");
-  });
-}
 
 function renderChart(document: ChartDocument, showGrid: boolean) {
   const aspect = cellAspectRatio(document);
@@ -200,6 +175,7 @@ function renderChart(document: ChartDocument, showGrid: boolean) {
 
 export function ExportTools({
   document,
+  tabId,
   previewCanvasRef,
   onOpenProject,
   accountsEnabled,
@@ -216,8 +192,10 @@ export function ExportTools({
   onNavigateAway,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const closeMenu = () => setOpen(false);
   const [choosingChartImage, setChoosingChartImage] = useState(false);
   const [confirmingBitmap, setConfirmingBitmap] = useState(false);
@@ -372,6 +350,7 @@ export function ExportTools({
           onChange={openProject}
         />
         <button
+          ref={fileButtonRef}
           className="secondary-button"
           aria-expanded={open || tourOpen}
           onClick={() => {
@@ -501,6 +480,15 @@ export function ExportTools({
             <p className="file-menu-section-label">Export</p>
             <button
               role="menuitem"
+              onClick={() => {
+                closeMenu();
+                setShareOpen(true);
+              }}
+            >
+              Share a link
+            </button>
+            <button
+              role="menuitem"
               aria-expanded={choosingChartImage}
               onClick={() => setChoosingChartImage((value) => !value)}
             >
@@ -601,6 +589,17 @@ export function ExportTools({
           </div>
         ) : null}
       </div>
+      {shareOpen && (
+        <DraftChartLinkDialog
+          chart={document}
+          tabId={tabId}
+          key={tabId}
+          onClose={() => {
+            setShareOpen(false);
+            fileButtonRef.current?.focus();
+          }}
+        />
+      )}
       <Link
         className="primary-button knit-mode-button chart-club-link"
         href="/chart-club"

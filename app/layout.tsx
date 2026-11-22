@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { accountsConfigured } from "@/lib/auth-config";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Analytics } from "@vercel/analytics/next";
+import { SiteAnalytics } from "@/components/site-analytics";
 import { knitplotFonts } from "./fonts";
 import "./globals.css";
 
@@ -18,7 +18,7 @@ export default function RootLayout({
     <html lang="en" className={knitplotFonts}>
       <body>
         {children}
-        <Analytics />
+        <SiteAnalytics />
       </body>
     </html>
   );

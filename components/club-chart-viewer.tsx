@@ -36,7 +36,7 @@ export function ClubChartViewer({
 }: {
   document: ChartDocument;
   coverView?: string;
-  heart: ReactNode;
+  heart?: ReactNode;
 }) {
   const yoke = document.yoke;
   const [view, setView] = useState<YokeView>("chart");

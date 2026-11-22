@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordUsage } from "./usage-analytics";
+import {
+  recordClubCopyEdited,
+  recordClubCopyOpened,
+  recordShareEvent,
+  recordUsage,
+} from "./usage-analytics";
 
 test("usage events are bounded, contain only coarse categories, and never block work", () => {
   const priorWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -10,10 +15,16 @@ test("usage events are bounded, contain only coarse categories, and never block 
   );
   const priorEnvironment = process.env.NODE_ENV;
   const events: unknown[] = [];
+  const sessionValues = new Map<string, string>();
   const browser = {
     location: { hostname: "knitplot.art" },
     vam: "production",
     va: (...args: unknown[]) => events.push(args),
+    sessionStorage: {
+      setItem: (key: string, value: string) => sessionValues.set(key, value),
+      getItem: (key: string) => sessionValues.get(key),
+      removeItem: (key: string) => sessionValues.delete(key),
+    },
   };
   const context = { account: "guest", chart_type: "regular" } as const;
   try {
@@ -27,7 +38,10 @@ test("usage events are bounded, contain only coarse categories, and never block 
     });
     Reflect.set(process.env, "NODE_ENV", "production");
     recordUsage(context);
+    recordShareEvent({ name: "Shared chart visited" });
+    recordClubCopyOpened("unused-tab", "shared_link");
     assert.equal(events.length, 0);
+    assert.equal(sessionValues.size, 0);
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
       value: { doNotTrack: "0" },
@@ -57,6 +71,31 @@ test("usage events are bounded, contain only coarse categories, and never block 
         data: { account: "guest", chart_type: "regular", format: "knitplot" },
       },
     ]);
+    events.length = 0;
+    recordShareEvent({ name: "Chart link copied", placement: "after_publish" });
+    recordShareEvent({ name: "Shared chart visited" });
+    recordClubCopyOpened("local-tab-not-for-analytics", "shared_link");
+    recordClubCopyEdited("another-tab");
+    recordClubCopyEdited("local-tab-not-for-analytics");
+    recordClubCopyEdited("local-tab-not-for-analytics");
+    recordShareEvent({
+      name: "Share image downloaded",
+      view: "sweater",
+      credit: false,
+    });
+    assert.deepEqual(
+      events.map((event) => (event as [string, { name: string }])[1].name),
+      [
+        "Chart link copied",
+        "Shared chart visited",
+        "Chart Club copy opened",
+        "Chart Club copy edited",
+        "Share image downloaded",
+      ],
+    );
+    assert.match(JSON.stringify(events), /"entry":"shared_link"/);
+    assert.doesNotMatch(JSON.stringify(events), /local-tab|another-tab/);
+    assert.equal(sessionValues.size, 0);
     browser.va = () => {
       throw new Error("Analytics unavailable");
     };

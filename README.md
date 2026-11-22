@@ -52,6 +52,7 @@ Anyone can browse public charts. With your existing KnitPlot account, choose a u
 - Open or download editable copies of public charts
 - Manage your posts in **My Charts → Published charts**
 - Report a public chart privately to the moderator
+- Copy a link with the chart’s knitted cover for sharing outside Chart Club
 
 Private edits never change a published snapshot. Authors can edit its title and description or remove the post; removing it cannot recall copies others already downloaded.
 
@@ -89,10 +90,13 @@ KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart st
 - Signed-in users can choose **Save to My Charts**. After the first cloud save, that chart is kept in sync while it remains open.
 - **File → Download editable chart** downloads the active chart as an editable `.knitplot` file. It does not bundle every open browser tab.
 - Image and PDF chart imports, including colour reduction and symbol matching, are processed in your browser.
+- **Knitted up → Share preview** creates a PNG in your browser, with optional KnitPlot credit. It does not publish or upload the chart or image.
 - The hosted site uses Vercel Web Analytics for aggregate site-usage statistics. Charts, uploaded images, and email addresses are not sent as analytics events.
 - On the official hosted site, **Chart edited** counts the first drawing change per chart type and guest/signed-in category per page load. **File downloaded** counts initiated chart-maker downloads, with the file format. No chart names, cells, measurements, account IDs, or file contents are included. These events respect Do Not Track and do not run on localhost or other self-hosted domains.
+- The same controls apply to sharing events: link copied, visit via a copied link, editable copy opened, first edit of that copy within 30 minutes, and share-image download initiated. The events use coarse labels such as the preview view and whether credit was included. They do not record where a link or image is shared.
 - These are activity counts, not a census of distinct knitters. Opening or restoring a chart does not count as editing; browser-local autosaves are not reported. A download event cannot confirm that the user ultimately kept the file. Blockers and offline use can cause undercounting. Custom events require a Vercel plan that supports them.
 - Chart Club is explicitly opt-in. Sharing publishes a separate chart snapshot, your chosen cover and post details, and your public creator profile. Your private library stays private. Review the sharing form before publishing, including whether to include yoke measurements.
+- **File → Export → Share a link** makes an unlisted snapshot of the open chart without an account or a cloud save. Links include the chart name and a six-character code. They don’t expire automatically; return to that chart tab in the same browser to turn its link off. **My Charts** also offers links tied to saved charts. Neither option posts to Chart Club; anyone with either link can open or download an editable copy without signing in. Don’t use these links for charts or measurements you want to keep private.
 
 Browser storage is convenient, but it is not a backup. Download important charts as `.knitplot` files.
 

@@ -3,16 +3,19 @@
 import { useState } from "react";
 import { responseJson } from "@/lib/http";
 import { readProject } from "@/lib/project-file";
+import { saveBrowserChartCopy } from "@/lib/browser-chart-copy";
 import {
-  MAX_CHART_TABS,
-  newChartTab,
-  readStoredWorkspace,
-  STORAGE_KEY,
-  workspaceSave,
-} from "@/lib/workspace";
-import { stringifyKnitplot } from "@/lib/yoke-program-wire";
+  recordClubCopyOpened,
+  type ChartClubEntry,
+} from "@/lib/usage-analytics";
 
-export function OpenClubCopy({ id }: { id: string }) {
+export function OpenClubCopy({
+  id,
+  entry = "chart_club",
+}: {
+  id: string;
+  entry?: ChartClubEntry;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -29,16 +32,8 @@ export function OpenClubCopy({ id }: { id: string }) {
               await fetch(`/api/chart-club/copy?id=${id}`),
             );
             const document = readProject(file);
-            const tabs = readStoredWorkspace(localStorage)?.tabs ?? [];
-            if (tabs.length >= MAX_CHART_TABS)
-              throw new Error(
-                "Close a chart tab before opening a copy. You can also download it now.",
-              );
-            const tab = newChartTab(document, `chart-${crypto.randomUUID()}`);
-            localStorage.setItem(
-              STORAGE_KEY,
-              stringifyKnitplot(workspaceSave([...tabs, tab], tab.id)),
-            );
+            const tabId = saveBrowserChartCopy(document);
+            recordClubCopyOpened(tabId, entry);
             // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Reload the saved workspace.
             window.location.assign("/");
           } catch (err) {
