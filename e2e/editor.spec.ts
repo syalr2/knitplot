@@ -266,6 +266,26 @@ test("a guest can open an unlisted snapshot without publishing or exposing the l
   );
 });
 
+test("the chart maker links straight to My Charts beside Chart Club on a phone", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/");
+  const toolbar = page.locator(".file-actions");
+  const club = toolbar.getByRole("link", { name: "Chart Club", exact: true });
+  const mine = toolbar.getByRole("link", { name: "My Charts", exact: true });
+  await expect(mine).toHaveAttribute("href", "/my-charts");
+  const clubBox = (await club.boundingBox())!;
+  const mineBox = (await mine.boundingBox())!;
+  expect(mineBox.x).toBeGreaterThan(clubBox.x + clubBox.width);
+  expect(mineBox.y).toBe(clubBox.y);
+  expect(mineBox.x + mineBox.width).toBeLessThanOrEqual(320);
+  await mine.click();
+  await expect(page).toHaveURL("/my-charts");
+  await expect(page.getByRole("heading", { name: "My Charts" })).toBeVisible();
+  await expect(page.getByText("Keep your charts together")).toBeVisible();
+});
+
 test("Chart Club navigation fits narrow phones with usable touch targets", async ({
   page,
 }) => {

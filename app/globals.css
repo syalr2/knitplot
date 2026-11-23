@@ -196,6 +196,12 @@ button {
   gap: 8px;
   margin-left: auto;
 }
+.file-actions > .chart-club-link {
+  white-space: nowrap;
+}
+.file-actions > .secondary-button {
+  color: var(--accent-deep);
+}
 .account-actions {
   align-items: center;
   display: flex;
@@ -5182,9 +5188,12 @@ select:focus {
   .file-actions {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-left: 0;
     width: 100%;
+  }
+  .file-actions > .chart-club-link {
+    padding-inline: 6px;
   }
   .file-actions .file-menu > button {
     width: 100%;

@@ -607,6 +607,13 @@ export function ExportTools({
       >
         Chart Club
       </Link>
+      <Link
+        className="secondary-button chart-club-link"
+        href="/my-charts"
+        onNavigate={onNavigateAway}
+      >
+        My Charts
+      </Link>
     </div>
   );
 }
