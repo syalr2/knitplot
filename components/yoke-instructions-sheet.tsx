@@ -48,6 +48,7 @@ export function YokeInstructionsSheet({
                 style={{ background: hex }}
               />
               <strong>{i === 0 ? "MC" : `CC${i}`}</strong>
+              <span>{project.paletteNames?.[i]}</span>
               <code>{hex.toUpperCase()}</code>
             </div>
           ))}

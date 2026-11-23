@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   cloneDocument,
+  createStitchActions,
   defaultDocument,
   type ChartDocument,
   type CellSelection,
@@ -11,6 +12,8 @@ import {
   reduceSelectionEdit,
   canRotateSelection,
 } from "./chart-selection";
+import { selectChartElement } from "./chart-element-selection";
+import { copyChartSelection, pasteChartSelection } from "./chart-clipboard";
 
 function fixture(): ChartDocument {
   const doc = cloneDocument(defaultDocument);
@@ -45,6 +48,178 @@ const square: CellSelection = {
   startColumn: 0,
   endColumn: 1,
 };
+
+function motif() {
+  const doc = fixture();
+  doc.palette[1] = { ...doc.palette[1], hex: "#a13344", name: "Berry" };
+  doc.cells = [
+    ["a", "background", "background", "background"],
+    ["background", "e", "background", "background"],
+    ["background", "background", "background", "g"],
+  ];
+  return doc;
+}
+
+test("element selection follows connected colours and leaves gaps and other motifs alone", () => {
+  const doc = motif();
+  const selection = selectChartElement(doc, 0, 0)!;
+  const mask = [
+    [true, false],
+    [false, true],
+  ];
+  assert.deepEqual(selection, { ...square, mask });
+  assert.equal(selectChartElement(doc, 0, 1), null);
+  assert.deepEqual(copySelectionBlock(doc, selection)?.mask, mask);
+  const next = reduceSelectionEdit(
+    { document: doc, selection },
+    { type: "cut" },
+  );
+  assert.deepEqual(next.document.cells, [
+    ["background", "background", "background", "background"],
+    ["background", "background", "background", "background"],
+    ["background", "background", "background", "g"],
+  ]);
+  assert.equal(next.document.stitchActions?.[0][1], "purl");
+  const rotated = reduceSelectionEdit(
+    { document: doc, selection },
+    { type: "transform", transform: "rotate" },
+  );
+  assert.deepEqual(rotated.selection?.mask, [
+    [false, true],
+    [true, false],
+  ]);
+  assert.equal(rotated.document.stitchActions?.[0][1], "m1l");
+});
+
+test("cross-chart paste remaps yarns, preserves stitch dimensions and leaves gaps transparent", () => {
+  const doc = motif();
+  const clip = copyChartSelection(
+    doc,
+    selectChartElement(doc, 0, 0),
+    "source",
+  )!;
+  const target = cloneDocument(defaultDocument);
+  // Same ID as the source, different hex. Another source hex already exists.
+  target.palette = [
+    { id: "background", hex: "#eeeeee" },
+    { id: "a", hex: "#123456" },
+  ];
+  target.gaugeStitches = 15;
+  target.gaugeRows = 30;
+  const anchor = { startRow: 1, endRow: 1, startColumn: 2, endColumn: 2 };
+  const next = pasteChartSelection(target, anchor, "target", clip);
+  assert.equal(next.document.palette.length, 3);
+  assert.equal(next.document.palette[2].name, "Berry");
+  assert.equal(next.document.cells[1][2], next.document.palette[2].id);
+  assert.equal(next.document.cells[2][3], "a");
+  assert.equal(next.document.cells[1][3], target.cells[1][3]);
+  assert.equal(next.document.cells[2][2], target.cells[2][2]);
+  assert.equal(next.document.stitchActions?.[1][2], "m1l");
+  assert.equal(next.document.stitchCellColors?.[1][2], "#112233");
+  assert.equal(next.document.gaugeStitches, 15);
+  assert.deepEqual(next.selection?.mask, [
+    [true, false],
+    [false, true],
+  ]);
+  assert.throws(
+    () =>
+      pasteChartSelection(
+        target,
+        {
+          startRow: 0,
+          endRow: 0,
+          startColumn: target.width - 1,
+          endColumn: target.width - 1,
+        },
+        "target",
+        clip,
+      ),
+    /won’t fit/,
+  );
+  const full = {
+    ...target,
+    palette: [
+      ...target.palette,
+      ...Array.from({ length: 18 }, (_, i) => ({
+        id: `extra-${i}`,
+        hex: "#ffffff",
+      })),
+    ],
+  };
+  assert.throws(
+    () => pasteChartSelection(full, anchor, "target", clip),
+    /exceed 20/,
+  );
+  assert.equal(full.palette.length, 20);
+});
+
+test("a painted backdrop is excluded even in interior gaps and restored when moving", () => {
+  const source = cloneDocument(defaultDocument);
+  const [white, ink, red] = source.palette.map(({ id }) => id);
+  source.cells = source.cells.map((row) => row.map(() => red));
+  source.cells[1][1] = ink;
+  source.cells[1][2] = white;
+  source.cells[2][1] = ink;
+  const selection = selectChartElement(source, 1, 1)!;
+  assert.deepEqual(selection.mask, [
+    [true, true],
+    [true, false],
+  ]);
+  assert.equal(selectChartElement(source, 2, 2), null);
+  const moved = reduceSelectionEdit(
+    { document: source, selection },
+    { type: "move", rows: 0, columns: 3 },
+  );
+  assert.equal(moved.document.cells[1][1], red);
+  assert.equal(moved.document.cells[1][2], red);
+  const target = cloneDocument(defaultDocument);
+  target.palette = [{ id: white, hex: "#111111" }, source.palette[1]];
+  const pasted = pasteChartSelection(
+    target,
+    null,
+    "target",
+    copyChartSelection(source, selection, "source")!,
+  );
+  assert.equal(pasted.document.cells[1][1], white);
+  assert.equal(
+    pasted.document.palette.some(({ hex }) => hex === source.palette[2].hex),
+    false,
+  );
+});
+
+test("a sampled red shade is transparent without removing other reds or altering the source", () => {
+  const source = cloneDocument(defaultDocument);
+  source.palette.push({ id: "red-gap", hex: "#9d2028" });
+  const [background, ink, accent] = source.palette.map(({ id }) => id);
+  source.cells = source.cells.map((row) => row.map(() => accent));
+  source.cells[1][1] = ink;
+  source.cells[1][2] = background;
+  source.cells[2][1] = ink;
+  source.cells[2][2] = "red-gap";
+  source.stitchActions = createStitchActions(source.width, source.height);
+  source.stitchActions[2][3] = "purl";
+  source.cells[2][3] = ink;
+  source.stitchCellColors = source.cells.map((row) =>
+    row.map(() => null as string | null),
+  );
+  source.stitchCellColors[2][3] = "#9d2028";
+  assert.equal(selectChartElement(source, 1, 1)!.endColumn, 3);
+  const selection = selectChartElement(source, 1, 1, ["#9D2028"])!;
+  assert.deepEqual(selection.mask, [
+    [true, true],
+    [true, false],
+  ]);
+  const destination = cloneDocument(defaultDocument);
+  const pasted = pasteChartSelection(
+    destination,
+    null,
+    "target",
+    copyChartSelection(source, selection, "source")!,
+  );
+  assert.equal(pasted.document.cells[1][1], destination.palette[0].id);
+  assert.ok(!pasted.document.palette.some(({ hex }) => hex === "#9d2028"));
+  assert.equal(source.cells[2][2], "red-gap");
+});
 function frozenState(selection: CellSelection | null = square) {
   const state = { document: fixture(), selection };
   function freeze(value: unknown) {

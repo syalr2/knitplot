@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PALETTE_COLOURS } from "./palette-colours";
+import { MAX_COLOUR_NAME_LENGTH, MAX_PALETTE_COLOURS } from "./palette-colours";
 import { repeatTargets, type YokeRepeatScope } from "./yoke-repeat-scope";
 import { planYokeShortRows, yokeShortRowsSchema } from "./yoke-short-rows";
 import { yokeStitchProgramSchema } from "./yoke-stitch-program-schema";
@@ -46,6 +46,10 @@ export const yokeProjectSchema = z
     events: z.array(increaseEventSchema).max(149),
     shortRows: yokeShortRowsSchema.optional(),
     palette: paletteSchema,
+    paletteNames: z
+      .array(z.string().trim().min(1).max(MAX_COLOUR_NAME_LENGTH).nullable())
+      .max(MAX_PALETTE_COLOURS)
+      .optional(),
     cells: z
       .array(
         z
@@ -62,6 +66,8 @@ export const yokeProjectSchema = z
   })
   .superRefine((project, ctx) => {
     try {
+      if ((project.paletteNames?.length ?? 0) > project.palette.length)
+        throw new Error("Yoke colour names do not match its palette.");
       if (project.shortRows)
         planYokeShortRows(project.measurements, project.shortRows);
       if (project.version === 2) {

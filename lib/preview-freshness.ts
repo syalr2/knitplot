@@ -44,7 +44,11 @@ export function samePreviewFabric(a: ChartDocument, b: ChartDocument) {
 
   return (
     a.width === b.width &&
-    sameContent(a.palette, b.palette) &&
+    a.palette.length === b.palette.length &&
+    a.palette.every(
+      ({ id, hex }, index) =>
+        id === b.palette[index].id && hex === b.palette[index].hex,
+    ) &&
     sameContent(a.cells, b.cells) &&
     (a.stitchActions && b.stitchActions
       ? sameContent(a.stitchActions, b.stitchActions)

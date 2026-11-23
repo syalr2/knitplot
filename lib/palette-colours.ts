@@ -1,4 +1,15 @@
 export const MAX_PALETTE_COLOURS = 20;
+export const MAX_COLOUR_NAME_LENGTH = 40;
+
+export function yokePaletteEntries(project: {
+  palette: readonly string[];
+  paletteNames?: readonly (string | null)[];
+}) {
+  return project.palette.map((hex, index) => {
+    const name = project.paletteNames?.[index];
+    return { id: `yarn-${index}`, hex, ...(name ? { name } : {}) };
+  });
+}
 
 const starterColours = [
   "#d6a84b",

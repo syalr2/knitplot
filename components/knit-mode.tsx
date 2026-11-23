@@ -59,6 +59,7 @@ type Props = {
   onProgressChange: (progress: KnitProgress) => void;
   onSettingsChange: (settings: InstructionSettings) => void;
   onClose: () => void;
+  onShowShortcuts?: () => void;
 };
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -130,6 +131,7 @@ export function KnitMode({
   onProgressChange,
   onSettingsChange,
   onClose,
+  onShowShortcuts,
 }: Props) {
   const [keepScreenAwake, setKeepScreenAwake] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(0);
@@ -442,6 +444,11 @@ export function KnitMode({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        window.document.querySelector("dialog.chart-shortcuts[open]")
+      )
+        return;
       if (event.key === "Escape") onClose();
       else if (
         event.target instanceof HTMLElement &&
@@ -451,6 +458,14 @@ export function KnitMode({
           (event.key === " " && event.target.closest("button")))
       )
         return;
+      else if (
+        event.key === "?" &&
+        onShowShortcuts &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      )
+        onShowShortcuts();
       else if (event.key === "ArrowRight" || event.key === " ") changeStitch(1);
       else if (event.key === "ArrowLeft") changeStitch(-1);
       else if (event.key === "ArrowUp") changeRow(1);

@@ -6,6 +6,8 @@ import {
   createStitchActions,
 } from "../lib/chart";
 import { newChartTab, STORAGE_KEY, workspaceSave } from "../lib/workspace";
+import { yokeDocument } from "../lib/yoke-document";
+import { makeYokeFixture } from "../lib/yoke-test-fixtures";
 
 test("retired service routes are absent in the public build", async ({
   request,
@@ -331,6 +333,67 @@ test("a 20-colour chart can use its last colour and preserves it after reload", 
   await expect(picker).toHaveValue("#a1b2c3");
   await expect(cell).toHaveAttribute("fill", "#a1b2c3");
 });
+
+for (const yoke of [false, true]) {
+  test(`colour names can be saved and reset in a ${yoke ? "yoke" : "regular chart"}`, async ({
+    page,
+  }) => {
+    if (yoke) {
+      const tab = newChartTab(
+        yokeDocument(makeYokeFixture()),
+        "named-yarn-yoke",
+      );
+      await page.addInitScript(
+        ({ key, workspace }) => {
+          if (!localStorage.getItem(key)) localStorage.setItem(key, workspace);
+        },
+        {
+          key: STORAGE_KEY,
+          workspace: JSON.stringify(workspaceSave([tab], tab.id)),
+        },
+      );
+    }
+    await page.goto("/");
+
+    const palette = page.locator(".palette-list");
+    const swatch = palette.getByRole("button", { name: "Use colour 2" });
+    const picker = palette.getByLabel("Change colour 2");
+    await expect(picker).toHaveAttribute("type", "color");
+    const hex = await picker.inputValue();
+    const dialog = page.getByRole("dialog", { name: "Rename colour" });
+    if (yoke) await swatch.dblclick();
+    else await swatch.press("F2");
+    await dialog
+      .getByRole("textbox", { name: "Colour name" })
+      .fill(" Midnight blue ");
+    await dialog.getByRole("button", { name: "Save name" }).click();
+    await expect(
+      palette.getByRole("button", { name: "Use Midnight blue" }),
+    ).toBeVisible();
+    await expect(picker).toHaveValue(hex);
+    await expect
+      .poll(() =>
+        page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+      )
+      .toContain("Midnight blue");
+    await page.reload();
+    const named = palette.getByRole("button", { name: "Use Midnight blue" });
+    await named.click({ modifiers: ["Control"] });
+    await expect(
+      dialog.getByRole("textbox", { name: "Colour name" }),
+    ).toHaveValue("Midnight blue");
+    await dialog.getByRole("textbox", { name: "Colour name" }).fill("");
+    await dialog.getByRole("button", { name: "Save name" }).click();
+    await expect(
+      palette.getByRole("button", { name: "Use colour 2" }),
+    ).toBeVisible();
+    await swatch.click();
+    await expect(dialog).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Rename selected colour" }),
+    ).toHaveCount(0);
+  });
+}
 
 test("chart cell boundaries stay visible at fractional sizes", async ({
   page,

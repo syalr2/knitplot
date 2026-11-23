@@ -10,11 +10,13 @@ import {
   type ChartDocument,
   type StitchAction,
 } from "./chart";
+import { elementBackground } from "./chart-element-selection";
 
 export type SelectionBlock = {
   cells: string[][];
   stitchActions: StitchAction[][];
   stitchCellColors: (string | null)[][];
+  mask?: boolean[][];
 };
 type SelectionState = {
   document: ChartDocument;
@@ -22,6 +24,7 @@ type SelectionState = {
 };
 export type SelectionEdit =
   | { type: "cut" }
+  | { type: "erase-yarn" }
   | { type: "paste"; block: SelectionBlock }
   | { type: "move"; rows: number; columns: number }
   | { type: "transform"; transform: "horizontal" | "vertical" | "rotate" }
@@ -31,6 +34,7 @@ export type SelectionEdit =
 function bounds(selection: CellSelection | null) {
   return (
     selection && {
+      ...selection,
       startRow: Math.min(selection.startRow, selection.endRow),
       endRow: Math.max(selection.startRow, selection.endRow),
       startColumn: Math.min(selection.startColumn, selection.endColumn),
@@ -50,7 +54,11 @@ function targets(area: CellSelection) {
   const cells: [number, number][] = [];
   for (let row = area.startRow; row <= area.endRow; row++)
     for (let column = area.startColumn; column <= area.endColumn; column++)
-      cells.push([row, column]);
+      if (
+        !area.mask ||
+        area.mask[row - area.startRow]?.[column - area.startColumn]
+      )
+        cells.push([row, column]);
   return cells;
 }
 export function copySelectionBlock(
@@ -60,6 +68,7 @@ export function copySelectionBlock(
   const area = bounds(selection);
   if (!area || !inside(document, area)) return null;
   return {
+    ...(area.mask ? { mask: area.mask.map((row) => [...row]) } : {}),
     cells: document.cells
       .slice(area.startRow, area.endRow + 1)
       .map((row) => row.slice(area.startColumn, area.endColumn + 1)),
@@ -124,6 +133,7 @@ function write(
     row.forEach((color, dx) => {
       const y = startRow + dy,
         x = startColumn + dx;
+      if (block.mask && !block.mask[dy]?.[dx]) return;
       if (layers.cells[y]?.[x] === undefined) return;
       layers.cells[y][x] = color;
       layers.stitchActions[y][x] = block.stitchActions[dy]?.[dx] ?? "knit";
@@ -141,6 +151,15 @@ export function reduceSelectionEdit(
   const area = bounds(state.selection);
   if (area && !inside(document, area)) return state;
   if (action.type !== "paste" && !area) return state;
+  if (action.type === "erase-yarn") {
+    const background = area!.mask
+      ? elementBackground(document)
+      : document.palette[0].id;
+    return {
+      ...state,
+      document: paintYarnCells(document, targets(area!), background),
+    };
+  }
   if (action.type === "fill-yarn" || action.type === "fill-stitch") {
     return {
       document:
@@ -152,7 +171,11 @@ export function reduceSelectionEdit(
   }
   let selection = state.selection;
   const layers = editableLayers(document);
-  if (action.type === "cut") clear(layers, area!, document.palette[0].id);
+  const background =
+    area?.mask && action.type !== "paste"
+      ? elementBackground(document)
+      : document.palette[0].id;
+  if (action.type === "cut") clear(layers, area!, background);
   else {
     let startRow = area?.startRow ?? 0,
       startColumn = area?.startColumn ?? 0;
@@ -162,16 +185,15 @@ export function reduceSelectionEdit(
         : copySelectionBlock(document, area)!;
     if (!block.cells.length || !block.cells[0]?.length) return state;
     if (action.type === "move") {
-      startRow += action.rows;
-      startColumn += action.columns;
-      if (
-        !inside(document, {
-          startRow,
-          startColumn,
-          endRow: area!.endRow + action.rows,
-          endColumn: area!.endColumn + action.columns,
-        })
-      )
+      startRow += Math.min(
+        document.height - 1 - area!.endRow,
+        Math.max(-startRow, action.rows),
+      );
+      startColumn += Math.min(
+        document.width - 1 - area!.endColumn,
+        Math.max(-startColumn, action.columns),
+      );
+      if (startRow === area!.startRow && startColumn === area!.startColumn)
         return state;
     }
     if (action.type === "transform") {
@@ -185,9 +207,10 @@ export function reduceSelectionEdit(
         cells: transform(block.cells),
         stitchActions: transform(block.stitchActions),
         stitchCellColors: transform(block.stitchCellColors),
+        ...(block.mask ? { mask: transform(block.mask) } : {}),
       };
     }
-    if (action.type !== "paste") clear(layers, area!, document.palette[0].id);
+    if (action.type !== "paste") clear(layers, area!, background);
     write(layers, block, startRow, startColumn);
     selection = {
       startRow,
@@ -198,6 +221,13 @@ export function reduceSelectionEdit(
         startColumn +
         Math.min(block.cells[0].length, document.width - startColumn) -
         1,
+      ...(block.mask
+        ? {
+            mask: block.mask
+              .slice(0, document.height - startRow)
+              .map((row) => row.slice(0, document.width - startColumn)),
+          }
+        : {}),
     };
   }
   return {

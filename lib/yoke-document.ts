@@ -50,6 +50,7 @@ export function reshapeYoke(
 ) {
   const next = createYokeProject(measurements, events);
   next.palette = [...source.palette];
+  if (source.paletteNames) next.paletteNames = [...source.paletteNames];
   const oldRepeats = source.measurements.repeats,
     newRepeats = measurements.repeats;
   const widths = yokeRepeatWidths(source);

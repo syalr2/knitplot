@@ -9,7 +9,7 @@ import { HttpError } from "./http";
 import { yokeProjectSchema } from "./yoke-project";
 import { yokeChart } from "./yoke-chart";
 import { gaugeMeasurementSchema } from "./gauge-schema";
-import { MAX_PALETTE_COLOURS } from "./palette-colours";
+import { MAX_COLOUR_NAME_LENGTH, MAX_PALETTE_COLOURS } from "./palette-colours";
 
 import { stitchActionSchema, stitchPaletteActionSchema } from "./stitch-schema";
 export { stitchActionSchema, stitchPaletteActionSchema } from "./stitch-schema";
@@ -46,7 +46,13 @@ export const chartDocumentSchema = z
       })
       .optional(),
     palette: z
-      .array(z.object({ id: z.string().min(1).max(200), hex }))
+      .array(
+        z.object({
+          id: z.string().min(1).max(200),
+          hex,
+          name: z.string().trim().min(1).max(MAX_COLOUR_NAME_LENGTH).optional(),
+        }),
+      )
       .min(2)
       .max(MAX_PALETTE_COLOURS),
     cells: z

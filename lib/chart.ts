@@ -8,11 +8,14 @@ export type CellSelection = {
   startColumn: number;
   endRow: number;
   endColumn: number;
+  /** Optional cell mask, relative to the normalized top-left corner. */
+  mask?: boolean[][];
 };
 
 export type PaletteColor = {
   id: string;
   hex: string;
+  name?: string;
 };
 
 export type StitchAction =

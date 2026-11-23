@@ -5,6 +5,12 @@ import { readProject } from "./project-file";
 import { readCloudChartPayload, readCloudChartRequest } from "./cloud-charts";
 import { readChartDocument } from "./chart-schema";
 import { newChartTab, readWorkspace, workspaceSave } from "./workspace";
+import { samePreviewFabric } from "./preview-freshness";
+import { reshapeYoke, yokeDocument } from "./yoke-document";
+import { makeYokeFixture } from "./yoke-test-fixtures";
+import { yokeProgramFromProject } from "./yoke-program-from-project";
+import { withYokeProgram } from "./yoke-program-state";
+import { stringifyKnitplot } from "./yoke-program-wire";
 
 const document = () => cloneDocument(defaultDocument);
 test("a tall imported chart with long palette IDs fits the cloud request budget", async () => {
@@ -62,6 +68,55 @@ test("project and cloud round trips preserve a chart", () => {
     chart,
   );
   assert.deepEqual(readCloudChartPayload({ document: chart }).document, chart);
+});
+
+test("colour names survive file, workspace, and cloud round trips without changing the fabric", () => {
+  const regular = document();
+  const plainYoke = makeYokeFixture();
+  const revisedYoke = withYokeProgram(
+    plainYoke,
+    yokeProgramFromProject(plainYoke),
+  );
+  for (const [original, renamed] of [
+    [
+      regular,
+      {
+        ...regular,
+        palette: regular.palette.map((entry, i) =>
+          i === 1 ? { ...entry, name: "Midnight blue" } : entry,
+        ),
+      },
+    ],
+    ...[plainYoke, revisedYoke].map(
+      (project) =>
+        [
+          yokeDocument(project),
+          yokeDocument({ ...project, paletteNames: [null, "Midnight blue"] }),
+        ] as const,
+    ),
+  ] as const) {
+    const file = { format: "colorwork-chart", version: 2, document: renamed };
+    assert.equal(
+      readProject(JSON.parse(stringifyKnitplot(file))).palette[1].name,
+      "Midnight blue",
+    );
+    assert.equal(
+      readCloudChartPayload({ document: renamed }).document.palette[1].name,
+      "Midnight blue",
+    );
+    const tab = newChartTab(renamed, "named-colours");
+    const reopened = readWorkspace(
+      JSON.parse(stringifyKnitplot(workspaceSave([tab], tab.id))),
+    ).workspace.tabs[0];
+    assert.equal(reopened.document.palette[1].name, "Midnight blue");
+    assert.equal(samePreviewFabric(original, reopened.document), true);
+  }
+  const named = { ...plainYoke, paletteNames: [null, "Midnight blue"] };
+  assert.equal(
+    yokeDocument(reshapeYoke(named, named.measurements, named.events, "keep"))
+      .palette[1].name,
+    "Midnight blue",
+  );
 });
 test("a 200 by 300 regular chart and last-row progress survive storage round trips", () => {
   const chart = cloneDocument({

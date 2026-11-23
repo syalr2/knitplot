@@ -2,6 +2,7 @@ import { cloneDocument, defaultDocument, type StitchAction } from "./chart";
 import { increasePositions } from "./yoke-plan";
 import type { YokeProject } from "./yoke-project";
 import { yokeProgramChart } from "./yoke-program-chart";
+import { yokePaletteEntries } from "./palette-colours";
 
 /** Follow stitch ancestry backwards: new stitches leave no-stitch placeholders below. */
 export function yokeChart(project: YokeProject, repeat = 0) {
@@ -54,10 +55,7 @@ export function yokeChart(project: YokeProject, repeat = 0) {
     stitchCellColors: undefined,
     stitchPalette: project.stitchPalette,
     stitchColors: project.stitchColors,
-    palette: project.palette.map((hex, index) => ({
-      id: `yarn-${index}`,
-      hex,
-    })),
+    palette: yokePaletteEntries(project),
     gaugeStitches: project.measurements.gaugeStitches,
     gaugeRows: project.measurements.gaugeRows,
     gaugeMeasure: project.measurements.gaugeMeasure,

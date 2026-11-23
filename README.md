@@ -13,8 +13,9 @@ Open the chart maker at [knitplot.art](https://knitplot.art), then choose **+ Ne
 ### Chart editor
 
 - Draw, erase, flood-fill, and fill rectangular selections
-- Move, copy, cut, paste, mirror, and rotate selections
-- Choose up to 20 custom colours
+- Select a rectangle with **Area** or a connected motif with **Element**. Drag or nudge a selection to move it, or mirror and rotate it.
+- Copy and paste between open regular charts. Element selections leave background gaps transparent, and pasted stitches keep their stitch count even at a different gauge.
+- Choose up to 20 custom colours. Double-click a colour name to rename it, or focus it and press `F2`.
 - Work with regular charts up to 200 stitches by 300 rows
 - Set stitch gauge, row gauge, and centimetres or inches
 - Zoom the editable chart and use optional live-symmetry guides
@@ -30,6 +31,8 @@ Open the chart maker at [knitplot.art](https://knitplot.art), then choose **+ Ne
 - Zoom and pan in Knit Mode, follow the row-direction arrow, split wide charts into manageable sections, and optionally keep the screen awake
 - Download chart and preview PNGs or save an editable `.knitplot` project file
 - Export an exact-size stitch bitmap PNG (one pixel per stitch, yarn colours only) for colourwork image import into other tools. Stitch actions and shaping are not encoded; no-stitch cells require an explicit fill-colour choice.
+
+Press `?` or choose **Keyboard shortcuts** in **Help and examples** for the full list. In a regular chart, use `D`, `F`, `E`, and `S` to switch drawing tools, `I` to pick a yarn colour from the chart, and `Shift` + arrow keys to move a selection by up to five cells.
 
 ### Circular yoke designer
 
@@ -118,7 +121,7 @@ npm run check
 
 ## Contributing
 
-Bug reports, feature ideas, documentation fixes, and code contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Please report sensitive security problems as described in [SECURITY.md](SECURITY.md).
+Bug reports, feature ideas, documentation fixes, and code contributions are welcome. From the chart maker, use **Request a feature or give feedback** at the bottom of the page. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Please report sensitive security problems as described in [SECURITY.md](SECURITY.md).
 
 ## Supporting KnitPlot
 

@@ -133,6 +133,7 @@ type Props = {
   tabsFull: boolean;
   onOpenExample: (id: TutorialExample["id"]) => void;
   onTourFileOpen: (open: boolean) => void;
+  onShowShortcuts: () => void;
 };
 
 type TargetRect = {
@@ -275,6 +276,7 @@ export function OnboardingTour({
   tabsFull,
   onOpenExample,
   onTourFileOpen,
+  onShowShortcuts,
 }: Props) {
   const [view, setView] = useState<"closed" | "welcome" | "tour">("closed");
   const [stepIndex, setStepIndex] = useState(0);
@@ -457,6 +459,15 @@ export function OnboardingTour({
                 </button>
                 <button onClick={closeTutorial}>I’ll explore myself</button>
               </div>
+              <button
+                className="tutorial-shortcuts-link text-button"
+                onClick={() => {
+                  closeTutorial();
+                  onShowShortcuts();
+                }}
+              >
+                Keyboard shortcuts
+              </button>
             </div>
             <div className="tutorial-examples">
               {tutorialExamples.map((example) => (

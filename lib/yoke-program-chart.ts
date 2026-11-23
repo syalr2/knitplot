@@ -3,6 +3,7 @@ import type { YokeProject } from "./yoke-project";
 import { resolvedYokeProgram } from "./yoke-program-state";
 import type { YokeStitchProgram } from "./yoke-stitch-program";
 import { yokeRepeatNumber } from "./yoke-repeat-labels";
+import { yokePaletteEntries } from "./palette-colours";
 import {
   isMirroredYokeSection,
   mirrorStitchAction,
@@ -174,7 +175,7 @@ function projectProgramChart(
     cells,
     stitchActions: actions,
     stitchCellColors: display,
-    palette: project.palette.map((hex, c) => ({ id: `yarn-${c}`, hex })),
+    palette: yokePaletteEntries(project),
     gaugeStitches: project.measurements.gaugeStitches,
     gaugeRows: project.measurements.gaugeRows,
     gaugeMeasure: project.measurements.gaugeMeasure,

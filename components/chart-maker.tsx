@@ -60,11 +60,14 @@ import {
 import type { Viewer } from "@/lib/auth";
 import {
   canRotateSelection,
-  copySelectionBlock,
   reduceSelectionEdit,
-  type SelectionBlock,
   type SelectionEdit,
 } from "@/lib/chart-selection";
+import {
+  copyChartSelection,
+  pasteChartSelection,
+  type ChartClipboard,
+} from "@/lib/chart-clipboard";
 import { cloudVersionToken } from "@/lib/cloud-revision";
 import {
   tutorialExampleDocument,
@@ -90,9 +93,10 @@ import { samePreviewFabric } from "@/lib/preview-freshness";
 import { useLocalWorkspace } from "@/components/use-local-workspace";
 import { useCloudRecovery } from "@/components/use-cloud-recovery";
 import { FeedbackForm } from "@/components/feedback-form";
+import { useChartEditorShortcuts } from "@/components/use-chart-editor-shortcuts";
+import { ChartShortcutsDialog } from "@/components/chart-shortcuts-dialog";
 
 type RepeatStyle = "normal" | "mirrored";
-type SelectionClipboard = SelectionBlock & { tabId: string };
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -162,9 +166,23 @@ export function ChartMaker({
   const preview = activeTab.preview;
   const previewDocument = previewDocuments[activeTabId] ?? document;
   const [chartZoom, setChartZoom] = useState(100);
+  const [pickingYarn, setPickingYarn] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [selection, setSelection] = useState<CellSelection | null>(null);
+  const [selectionMode, setSelectionMode] = useState<"area" | "element">(
+    "area",
+  );
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
+  const [pickingElementBackground, setPickingElementBackground] =
+    useState(false);
+  const [extraElementBackgroundColours, setExtraElementBackgroundColours] =
+    useState<string[]>([]);
+  const selectingElement = tool === "select" && selectionMode === "element";
+  const selectionMenuRef = useRef<HTMLDivElement>(null);
+  const selectionMenuButtonRef = useRef<HTMLButtonElement>(null);
   const [selectionClipboard, setSelectionClipboard] =
-    useState<SelectionClipboard | null>(null);
+    useState<ChartClipboard | null>(null);
+  const [pasteError, setPasteError] = useState("");
   const [knitModeOpen, setKnitModeOpen] = useState(false);
   const [newChartOpen, setNewChartOpen] = useState(false);
   const newChartMenuRef = useRef<HTMLDivElement>(null);
@@ -234,18 +252,20 @@ export function ChartMaker({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!newChartOpen) return;
+    if (!newChartOpen && !selectionMenuOpen) return;
     function dismissOutside(event: PointerEvent) {
-      if (
-        event.target instanceof Node &&
-        !newChartMenuRef.current?.contains(event.target)
-      ) {
+      if (!(event.target instanceof Node)) return;
+      if (newChartOpen && !newChartMenuRef.current?.contains(event.target))
         setNewChartOpen(false);
-      }
+      if (
+        selectionMenuOpen &&
+        !selectionMenuRef.current?.contains(event.target)
+      )
+        setSelectionMenuOpen(false);
     }
     window.addEventListener("pointerdown", dismissOutside);
     return () => window.removeEventListener("pointerdown", dismissOutside);
-  }, [newChartOpen]);
+  }, [newChartOpen, selectionMenuOpen]);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
   const past = history.past;
@@ -483,8 +503,9 @@ export function ChartMaker({
   }
 
   function copySelection() {
-    const block = copySelectionBlock(document, selection);
-    if (block) setSelectionClipboard({ ...block, tabId: activeTabId });
+    const copied = copyChartSelection(document, selection, activeTabId);
+    if (copied) setSelectionClipboard(copied);
+    setPasteError("");
   }
 
   function cutSelection() {
@@ -493,13 +514,161 @@ export function ChartMaker({
   }
 
   function pasteSelection() {
-    if (selectionClipboard?.tabId === activeTabId)
-      applySelectionEdit({ type: "paste", block: selectionClipboard });
+    if (!selectionClipboard) return;
+    try {
+      const next = pasteChartSelection(
+        document,
+        selection,
+        activeTabId,
+        selectionClipboard,
+      );
+      if (next.document !== document) commit(() => next.document);
+      setSelection(next.selection);
+      chooseDrawingTool("select");
+      setPasteError("");
+    } catch (error) {
+      setPasteError(
+        error instanceof Error ? error.message : "Couldn’t paste here.",
+      );
+    }
   }
 
   function moveSelection(rows: number, columns: number) {
     applySelectionEdit({ type: "move", rows, columns });
   }
+
+  function chooseDrawingTool(next: Tool) {
+    setTool(next);
+    setStitchPickerOpen(false);
+    if (next === "eraser") setStructureAction(null);
+    setPickingYarn(false);
+    setPickingElementBackground(false);
+  }
+
+  function changeChartZoom(step: number) {
+    setChartZoom((value) => clamp(value + step * 50, 100, 400));
+  }
+
+  useChartEditorShortcuts(loaded && !knitModeOpen, (event) => {
+    const key = event.key.toLowerCase();
+    if (key === "?" && !event.metaKey && !event.ctrlKey) {
+      setShortcutsOpen(true);
+      return true;
+    }
+    if (document.yoke) return false;
+    if (event.metaKey || event.ctrlKey) {
+      if (key === "z" || key === "y") {
+        if (key === "y" || event.shiftKey) redo();
+        else undo();
+        return true;
+      }
+      if (event.shiftKey) return false;
+      if (key === "a") {
+        setSelectionMode("area");
+        setSelectionMenuOpen(false);
+        chooseDrawingTool("select");
+        setSelection({
+          startRow: 0,
+          startColumn: 0,
+          endRow: document.height - 1,
+          endColumn: document.width - 1,
+        });
+        setPasteError("");
+        return true;
+      }
+      if (
+        (key === "c" || key === "x") &&
+        selection &&
+        !window.getSelection()?.toString()
+      ) {
+        if (key === "c") copySelection();
+        else cutSelection();
+        return true;
+      }
+      if (key === "v" && selectionClipboard) {
+        pasteSelection();
+        return true;
+      }
+      return false;
+    }
+    if (key === "escape" && pickingYarn) {
+      setPickingYarn(false);
+      return true;
+    }
+    if (key === "escape" && selectingElement && pickingElementBackground) {
+      setPickingElementBackground(false);
+      return true;
+    }
+    if (key === "escape" && selection) {
+      setSelection(null);
+      setPasteError("");
+      return true;
+    }
+    if (key === "[" || key === "]") {
+      const index = document.palette.findIndex(
+        ({ id }) => id === selectedColor,
+      );
+      const length = document.palette.length;
+      setSelectedColor(
+        document.palette[
+          (Math.max(0, index) + (key === "]" ? 1 : -1) + length) % length
+        ].id,
+      );
+      setStructureAction(null);
+      setStitchPickerOpen(false);
+      return true;
+    }
+    switch (key) {
+      case "d":
+      case "f":
+      case "e":
+      case "s":
+        chooseDrawingTool(
+          ({ d: "pencil", f: "fill", e: "eraser", s: "select" } as const)[key],
+        );
+        setSelectionMenuOpen(false);
+        return true;
+      case "i":
+        if (!event.repeat) {
+          setPickingYarn((active) => !active);
+          setPickingElementBackground(false);
+          setSelectionMenuOpen(false);
+        }
+        return true;
+      case "+":
+      case "=":
+        changeChartZoom(1);
+        return true;
+      case "-":
+        changeChartZoom(-1);
+        return true;
+      case "0":
+        setChartZoom(100);
+        return true;
+    }
+    if (!selection) return false;
+    const distance = event.shiftKey ? 5 : 1;
+    switch (key) {
+      case "backspace":
+      case "delete":
+        applySelectionEdit({ type: "erase-yarn" });
+        return true;
+      case "arrowup":
+        moveSelection(-distance, 0);
+        return true;
+      case "arrowdown":
+        moveSelection(distance, 0);
+        return true;
+      case "arrowleft":
+        moveSelection(0, -distance);
+        return true;
+      case "arrowright":
+        moveSelection(0, distance);
+        return true;
+      default:
+        return false;
+    }
+  });
 
   function selectionRotationFits() {
     return canRotateSelection(document, selection);
@@ -633,6 +802,15 @@ export function ChartMaker({
       ...current,
       palette: current.palette.map((color) =>
         color.id === id ? { ...color, hex } : color,
+      ),
+    }));
+  }
+
+  function renameColor(id: string, name: string | undefined) {
+    commit((current) => ({
+      ...current,
+      palette: current.palette.map((color) =>
+        color.id === id ? { ...color, name } : color,
       ),
     }));
   }
@@ -799,7 +977,12 @@ export function ChartMaker({
     setSelection(null);
     setChartZoom(100);
     setResizeDialogOpen(false);
-    setSelectionClipboard(null);
+    setSelectionMode("area");
+    setPickingElementBackground(false);
+    setPickingYarn(false);
+    setExtraElementBackgroundColours([]);
+    setSelectionMenuOpen(false);
+    setPasteError("");
   }
 
   function switchTab(id: string) {
@@ -1177,6 +1360,7 @@ export function ChartMaker({
             onTourFileOpen={setTourFileOpen}
             tabsFull={tabs.length >= MAX_CHART_TABS}
             onOpenExample={openTutorialExample}
+            onShowShortcuts={() => setShortcutsOpen(true)}
           />
           {accountsEnabled ? (
             <div className="account-actions">
@@ -1340,6 +1524,7 @@ export function ChartMaker({
                 setStitchPickerOpen={setStitchPickerOpen}
                 addColor={addColor}
                 changePaletteColor={changePaletteColor}
+                renameColor={renameColor}
                 removeColor={removeColor}
               />
               <StitchPalettePanel
@@ -1381,19 +1566,13 @@ export function ChartMaker({
                     >
                       <button
                         className={tool === "pencil" ? "active" : ""}
-                        onClick={() => {
-                          setTool("pencil");
-                          setStitchPickerOpen(false);
-                        }}
+                        onClick={() => chooseDrawingTool("pencil")}
                       >
                         Draw
                       </button>
                       <button
                         className={tool === "fill" ? "active" : ""}
-                        onClick={() => {
-                          setTool("fill");
-                          setStitchPickerOpen(false);
-                        }}
+                        onClick={() => chooseDrawingTool("fill")}
                       >
                         Fill
                       </button>
@@ -1401,20 +1580,106 @@ export function ChartMaker({
                         className={
                           tool === "eraser" && !structureAction ? "active" : ""
                         }
-                        onClick={() => {
-                          setTool("eraser");
-                          setStructureAction(null);
-                          setStitchPickerOpen(false);
-                        }}
+                        onClick={() => chooseDrawingTool("eraser")}
                       >
                         Erase
                       </button>
-                      <button
-                        className={tool === "select" ? "active" : ""}
-                        onClick={() => setTool("select")}
+                      <div
+                        className="file-menu"
+                        ref={selectionMenuRef}
+                        onBlur={(event) => {
+                          if (
+                            !event.currentTarget.contains(event.relatedTarget)
+                          )
+                            setSelectionMenuOpen(false);
+                        }}
+                        onKeyDown={(event) => {
+                          if (!selectionMenuOpen || event.key !== "Escape")
+                            return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setSelectionMenuOpen(false);
+                          selectionMenuButtonRef.current?.focus();
+                        }}
                       >
-                        Select
-                      </button>
+                        <button
+                          type="button"
+                          ref={selectionMenuButtonRef}
+                          className={tool === "select" ? "active" : ""}
+                          aria-expanded={selectionMenuOpen}
+                          aria-controls={
+                            selectionMenuOpen
+                              ? "selection-mode-options"
+                              : undefined
+                          }
+                          onClick={() => {
+                            chooseDrawingTool("select");
+                            setSelectionMenuOpen((open) => !open);
+                          }}
+                        >
+                          Select
+                        </button>
+                        {selectionMenuOpen ? (
+                          <div
+                            id="selection-mode-options"
+                            className="file-menu-popover new-chart-dropdown selection-mode-options"
+                            role="group"
+                            aria-label="Selection mode"
+                          >
+                            {(["area", "element"] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                aria-pressed={selectionMode === mode}
+                                onClick={() => {
+                                  if (selectionMode !== mode)
+                                    setSelection(null);
+                                  setSelectionMode(mode);
+                                  setPickingElementBackground(false);
+                                  setPasteError("");
+                                  setSelectionMenuOpen(false);
+                                  selectionMenuButtonRef.current?.focus();
+                                }}
+                              >
+                                {mode === "area" ? "Area" : "Element"}
+                                {selectionMode === mode ? (
+                                  <span aria-hidden="true">✓</span>
+                                ) : null}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                      {selectingElement ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-pressed={pickingElementBackground}
+                            onClick={() => {
+                              setPickingYarn(false);
+                              setPickingElementBackground(
+                                (picking) => !picking,
+                              );
+                            }}
+                          >
+                            {pickingElementBackground
+                              ? "Cancel pick"
+                              : "Pick background"}
+                          </button>
+                          {extraElementBackgroundColours.length ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExtraElementBackgroundColours([]);
+                                setPickingElementBackground(false);
+                                setSelection(null);
+                              }}
+                            >
+                              Reset background
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
                       {selection && !structureAction ? (
                         <button
                           className="selection-fill-button"
@@ -1442,10 +1707,10 @@ export function ChartMaker({
                       {selection ? (
                         <button onClick={cutSelection}>Cut</button>
                       ) : null}
-                      {selectionClipboard?.tabId === activeTabId ? (
+                      {selectionClipboard ? (
                         <button
                           onClick={pasteSelection}
-                          title="Paste at the top-left corner of the current selection"
+                          title="Paste stitch-for-stitch at the top left of the selection or chart"
                         >
                           Paste
                         </button>
@@ -1572,9 +1837,7 @@ export function ChartMaker({
                     <div className="zoom-controls" aria-label="Chart zoom">
                       <button
                         aria-label="Zoom out"
-                        onClick={() =>
-                          setChartZoom((value) => Math.max(100, value - 50))
-                        }
+                        onClick={() => changeChartZoom(-1)}
                         disabled={chartZoom === 100}
                       >
                         −
@@ -1582,9 +1845,7 @@ export function ChartMaker({
                       <span>{chartZoom}%</span>
                       <button
                         aria-label="Zoom in"
-                        onClick={() =>
-                          setChartZoom((value) => Math.min(400, value + 50))
-                        }
+                        onClick={() => changeChartZoom(1)}
                         disabled={chartZoom === 400}
                       >
                         +
@@ -1592,6 +1853,21 @@ export function ChartMaker({
                     </div>
                   </div>
                 </div>
+                {pasteError ? (
+                  <p className="selection-paste-error" role="alert">
+                    {pasteError}
+                  </p>
+                ) : null}
+                {selectingElement && pickingElementBackground ? (
+                  <p className="chart-hint" role="status">
+                    Click an unwanted background shade on the chart.
+                  </p>
+                ) : null}
+                {pickingYarn ? (
+                  <p className="chart-hint" role="status">
+                    Click a stitch to pick its yarn colour. Esc cancels.
+                  </p>
+                ) : null}
                 <ChartGrid
                   document={document}
                   tool={tool}
@@ -1599,7 +1875,35 @@ export function ChartMaker({
                   selectedColor={selectedColor}
                   zoom={chartZoom}
                   selection={selection}
-                  onSelectionChange={setSelection}
+                  selectionMode={selectionMode}
+                  extraElementBackgroundColours={extraElementBackgroundColours}
+                  onYarnPick={
+                    pickingYarn
+                      ? (id) => {
+                          setSelectedColor(id);
+                          setStructureAction(null);
+                          setStitchPickerOpen(false);
+                          setPickingYarn(false);
+                        }
+                      : undefined
+                  }
+                  onElementBackgroundPick={
+                    selectingElement && pickingElementBackground
+                      ? (hex) => {
+                          setExtraElementBackgroundColours((colours) =>
+                            colours.includes(hex) ? colours : [...colours, hex],
+                          );
+                          setPickingElementBackground(false);
+                          setSelection(null);
+                          setPasteError("");
+                        }
+                      : undefined
+                  }
+                  onSelectionMove={moveSelection}
+                  onSelectionChange={(next) => {
+                    setSelection(next);
+                    setPasteError("");
+                  }}
                   onStrokeStart={rememberCurrent}
                   onPaint={paint}
                 />
@@ -1797,7 +2101,15 @@ export function ChartMaker({
           progress={knitProgress}
           onProgressChange={updateKnitProgress}
           onSettingsChange={updateInstructionSettings}
+          onShowShortcuts={() => setShortcutsOpen(true)}
           onClose={() => setKnitModeOpen(false)}
+        />
+      ) : null}
+
+      {shortcutsOpen ? (
+        <ChartShortcutsDialog
+          mode={knitModeOpen ? "knit" : document.yoke ? "yoke" : "chart"}
+          onClose={() => setShortcutsOpen(false)}
         />
       ) : null}
 

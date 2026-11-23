@@ -1180,6 +1180,9 @@ button:disabled {
   color: var(--muted);
   font-size: 10px;
 }
+.instruction-colours > div > span:not(.instruction-swatch) {
+  overflow-wrap: anywhere;
+}
 .instruction-swatch {
   border: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 50%;
@@ -3351,6 +3354,14 @@ select:focus {
   font-family: var(--font-mono);
   font-size: 9px;
 }
+.palette-colour-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.swatch-button > .swatch {
+  flex-shrink: 0;
+}
 .palette-row input[type="color"] {
   background: transparent;
   border: 0;
@@ -3545,6 +3556,25 @@ select:focus {
   stroke: #526c9d;
   stroke-dasharray: 4 3;
   stroke-width: 2px;
+}
+.chart-element-selection {
+  fill: none;
+}
+.file-menu-popover.selection-mode-options {
+  min-width: 132px;
+}
+.tool-group .selection-mode-options button {
+  font: inherit;
+  justify-content: space-between;
+}
+.tool-group .selection-mode-options button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.selection-paste-error {
+  color: #8d443a;
+  font-size: 13px;
+  margin: 8px 20px 0;
 }
 .symmetry-guide-lines line {
   stroke: #526c9d;
@@ -3754,6 +3784,54 @@ select:focus {
 }
 .share-preview-dialog::backdrop {
   background: rgb(30 29 23 / 45%);
+}
+.tutorial-shortcuts-link {
+  margin-top: 10px;
+}
+.chart-shortcut-group {
+  margin-top: 16px;
+}
+.chart-shortcut-group h3 {
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+.chart-shortcut-group dl {
+  margin: 0;
+}
+.chart-shortcut-group dl > div {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 4px 12px;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.chart-shortcut-group dd {
+  margin: 0;
+}
+.chart-shortcuts kbd {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 1px 4px;
+}
+.chart-shortcuts-hint {
+  margin: 12px 0 0;
+}
+.palette-rename-dialog {
+  width: min(92vw, 340px);
+}
+.palette-rename-dialog input {
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 38px;
+  padding: 6px 10px;
+  width: 100%;
 }
 .feedback-dialog {
   background: var(--panel);

@@ -620,9 +620,10 @@ export function InstructionsView({ document, onSettingsChange }: Props) {
                         ) : null}
                         <strong>{index === 0 ? "MC" : `CC${index}`}</strong>
                         <span>
-                          {index === 0
-                            ? "Main/background colour"
-                            : `Contrast colour ${index}`}
+                          {color.name ??
+                            (index === 0
+                              ? "Main/background colour"
+                              : `Contrast colour ${index}`)}
                         </span>
                         <code>{color.hex.toUpperCase()}</code>
                       </div>

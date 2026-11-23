@@ -138,9 +138,25 @@ export function YokeEditor({
               ),
             })
           }
+          renameColor={(id, name) => {
+            const paletteNames = project.palette.map((_, i) =>
+              id === `yarn-${i}`
+                ? (name ?? null)
+                : (project.paletteNames?.[i] ?? null),
+            );
+            change({
+              ...project,
+              paletteNames: paletteNames.some(Boolean)
+                ? paletteNames
+                : undefined,
+            });
+          }}
           removeColor={(id) => {
             const index = Number(id.replace("yarn-", ""));
             const palette = project.palette.filter((_, i) => i !== index);
+            const paletteNames = project.paletteNames?.filter(
+              (_, i) => i !== index,
+            );
             if (project.program) {
               const program = structuredClone(project.program);
               program.rounds.forEach((round) =>
@@ -155,11 +171,14 @@ export function YokeEditor({
                   }),
                 ),
               );
-              change(withYokeProgram({ ...project, palette }, program));
+              change(
+                withYokeProgram({ ...project, palette, paletteNames }, program),
+              );
             } else
               change({
                 ...project,
                 palette,
+                paletteNames,
                 cells: project.cells.map((row) =>
                   row.map((c) => (c === index ? 0 : c > index ? c - 1 : c)),
                 ),
