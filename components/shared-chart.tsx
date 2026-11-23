@@ -8,6 +8,7 @@ import type { ChartDocument } from "@/lib/chart";
 import { chartLinkFromHash } from "@/lib/chart-links";
 import { responseJson } from "@/lib/http";
 import { readProject } from "@/lib/project-file";
+import { recordSharedChartVisit } from "@/lib/usage-analytics";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 
 const ChartViewer = dynamic(
@@ -21,7 +22,7 @@ export function SharedChart() {
   const [copyError, setCopyError] = useState("");
   useEffect(() => {
     let controller: AbortController | undefined;
-    async function load() {
+    async function load(isLanding = false) {
       controller?.abort();
       const attempt = new AbortController();
       controller = attempt;
@@ -35,7 +36,10 @@ export function SharedChart() {
           signal: attempt.signal,
         });
         const chart = readProject(await responseJson(response));
-        if (!attempt.signal.aborted) setState({ chart });
+        if (!attempt.signal.aborted) {
+          setState({ chart });
+          if (isLanding) recordSharedChartVisit(document.referrer);
+        }
       } catch (error) {
         if (!attempt.signal.aborted)
           setState({
@@ -51,7 +55,7 @@ export function SharedChart() {
       setCopyError("");
       void load();
     }
-    void load();
+    void load(true);
     window.addEventListener("hashchange", followHash);
     return () => {
       controller?.abort();

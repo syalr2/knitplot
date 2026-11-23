@@ -4,7 +4,9 @@ import {
   recordClubCopyEdited,
   recordClubCopyOpened,
   recordShareEvent,
+  recordSharedChartVisit,
   recordUsage,
+  sanitizeAnalyticsEvent,
 } from "./usage-analytics";
 
 test("usage events are bounded, contain only coarse categories, and never block work", () => {
@@ -38,7 +40,7 @@ test("usage events are bounded, contain only coarse categories, and never block 
     });
     Reflect.set(process.env, "NODE_ENV", "production");
     recordUsage(context);
-    recordShareEvent({ name: "Shared chart visited" });
+    recordSharedChartVisit("");
     recordClubCopyOpened("unused-tab", "shared_link");
     assert.equal(events.length, 0);
     assert.equal(sessionValues.size, 0);
@@ -48,6 +50,7 @@ test("usage events are bounded, contain only coarse categories, and never block 
     });
     browser.location.hostname = "localhost";
     recordUsage(context);
+    recordSharedChartVisit("");
     assert.equal(events.length, 0);
     browser.location.hostname = "knitplot.art";
     recordUsage(context);
@@ -73,7 +76,10 @@ test("usage events are bounded, contain only coarse categories, and never block 
     ]);
     events.length = 0;
     recordShareEvent({ name: "Chart link copied", placement: "after_publish" });
-    recordShareEvent({ name: "Shared chart visited" });
+    recordSharedChartVisit("https://knitplot.art/");
+    recordSharedChartVisit("https://www.knitplot.art/my-charts");
+    recordSharedChartVisit("https://example.com/chat");
+    recordSharedChartVisit("");
     recordClubCopyOpened("local-tab-not-for-analytics", "shared_link");
     recordClubCopyEdited("another-tab");
     recordClubCopyEdited("local-tab-not-for-analytics");
@@ -94,8 +100,11 @@ test("usage events are bounded, contain only coarse categories, and never block 
       ],
     );
     assert.match(JSON.stringify(events), /"entry":"shared_link"/);
-    assert.doesNotMatch(JSON.stringify(events), /local-tab|another-tab/);
-    assert.equal(sessionValues.size, 0);
+    assert.doesNotMatch(
+      JSON.stringify(events),
+      /local-tab|another-tab|example\.com/,
+    );
+    assert.deepEqual([...sessionValues], [["knitplot-shared-visit-v1", "1"]]);
     browser.va = () => {
       throw new Error("Analytics unavailable");
     };
@@ -110,4 +119,21 @@ test("usage events are bounded, contain only coarse categories, and never block 
       Reflect.deleteProperty(process.env, "NODE_ENV");
     else Reflect.set(process.env, "NODE_ENV", priorEnvironment);
   }
+});
+
+test("only sanitized custom events leave the unlisted chart viewer", () => {
+  const origin = "https://knitplot.art";
+  const url = "/shared-chart/?private=query#private-chart-name~aBc123";
+  assert.equal(sanitizeAnalyticsEvent({ type: "pageview", url }, origin), null);
+  assert.deepEqual(sanitizeAnalyticsEvent({ type: "event", url }, origin), {
+    type: "event",
+    url: `${origin}/shared-chart`,
+  });
+  assert.equal(
+    sanitizeAnalyticsEvent(
+      { type: "event", url: "/chart-links/private-chart-id" },
+      origin,
+    ),
+    null,
+  );
 });

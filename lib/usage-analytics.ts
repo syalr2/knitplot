@@ -1,4 +1,5 @@
-import { track } from "@vercel/analytics";
+import { track, type BeforeSendEvent } from "@vercel/analytics";
+import { sharedChartPath } from "./chart-links";
 
 type UsageContext = {
   account: "guest" | "signed_in";
@@ -12,12 +13,15 @@ export type DownloadFormat =
   | "knitted_preview";
 
 const edited = new Set<string>();
+const analyticsHosts = new Set(["knitplot.art", "www.knitplot.art"]);
+const SHARED_VISIT_KEY = "knitplot-shared-visit-v1";
+let sharedVisitRecorded = false;
 
 function canTrack() {
   return !(
     process.env.NODE_ENV !== "production" ||
     typeof window === "undefined" ||
-    !["knitplot.art", "www.knitplot.art"].includes(window.location.hostname) ||
+    !analyticsHosts.has(window.location.hostname) ||
     navigator.doNotTrack === "1"
   );
 }
@@ -61,6 +65,40 @@ export function recordShareEvent({ name, ...details }: ShareEvent) {
   } catch {
     // Analytics must not get in the way of copying, editing, or downloading.
   }
+}
+
+export function recordSharedChartVisit(referrer: string) {
+  if (!canTrack() || sharedVisitRecorded) return;
+  if (referrer) {
+    try {
+      if (analyticsHosts.has(new URL(referrer).hostname)) return;
+    } catch {
+      return;
+    }
+  }
+  // Store only a flag, so refreshing the same tab doesn't count as another
+  // arrival. If storage is blocked, still count once per document.
+  sharedVisitRecorded = true;
+  try {
+    if (window.sessionStorage.getItem(SHARED_VISIT_KEY)) return;
+    window.sessionStorage.setItem(SHARED_VISIT_KEY, "1");
+  } catch {
+    // Analytics must not depend on browser storage being available.
+  }
+  recordShareEvent({ name: "Shared chart visited" });
+}
+
+export function sanitizeAnalyticsEvent(event: BeforeSendEvent, origin: string) {
+  const url = new URL(event.url, origin);
+  if (url.pathname.startsWith("/chart-links/")) return null;
+  if (url.pathname.replace(/\/$/, "") === sharedChartPath) {
+    // Skip automatic pageviews (including broken links). Custom events only
+    // carry the canonical path, never the fragment or the query string.
+    if (event.type !== "event") return null;
+    return { ...event, url: new URL(sharedChartPath, origin).href };
+  }
+  url.hash = "";
+  return { ...event, url: url.href };
 }
 
 const COPY_ACTIVITY_KEY = "knitplot-club-copy-activity-v1";
