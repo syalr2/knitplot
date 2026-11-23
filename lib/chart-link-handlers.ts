@@ -13,6 +13,7 @@ import {
 import { errorResponse, HttpError, readJsonObject } from "./http";
 import { hasValidRequestOrigin } from "./security/origin";
 import { stringifyKnitplot } from "./yoke-program-wire";
+import { limitGuestLink } from "./guest-link-rate-limit";
 
 type Dependencies = {
   getViewer: () => Promise<Pick<Viewer, "id"> | null>;
@@ -138,6 +139,8 @@ export function createChartLinkHandlers({
         if (shortCode && !isChartLinkSlug(slug)) return notFound();
         const sql = getDatabase();
         if (!sql) return unavailable();
+        if (isDraftChartLinkToken(token))
+          await limitGuestLink(request, sql, "open");
         const [link] = isDraftChartLinkToken(token)
           ? await sql`
           select document from knitplot_draft_chart_links

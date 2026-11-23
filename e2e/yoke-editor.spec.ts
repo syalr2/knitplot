@@ -1170,10 +1170,8 @@ test("the main yoke stitch palette applies purl, recolours symbols and survives 
     .first();
   const purlX = Number(await purl.getAttribute("x"));
   const rects = page.locator(".chart-svg > g:first-child > rect");
-  const width = (await active(page)).document.width;
-  const aspect =
-    (await active(page)).document.gaugeRows /
-    (await active(page)).document.gaugeStitches;
+  const { width, gaugeRows, gaugeStitches } = (await active(page)).document;
+  const aspect = gaugeRows / gaugeStitches;
   const column = Math.floor(purlX / aspect);
   await rects.nth(column).click();
   await expect

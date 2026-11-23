@@ -49,9 +49,9 @@ export type SharePreviewView =
 type ShareEvent =
   | {
       name: "Chart link copied";
-      placement: "post" | "after_publish" | "editor";
+      placement: "post" | "after_publish" | "editor" | "library";
     }
-  | { name: "Shared chart visited" }
+  | { name: "Shared chart visited"; entry: "unlisted_link" | "chart_club_link" }
   | {
       name: "Chart Club copy opened" | "Chart Club copy edited";
       entry: ChartClubEntry;
@@ -67,7 +67,10 @@ export function recordShareEvent({ name, ...details }: ShareEvent) {
   }
 }
 
-export function recordSharedChartVisit(referrer: string) {
+export function recordSharedChartVisit(
+  referrer: string,
+  entry: "unlisted_link" | "chart_club_link" = "unlisted_link",
+) {
   if (!canTrack() || sharedVisitRecorded) return;
   if (referrer) {
     try {
@@ -85,7 +88,7 @@ export function recordSharedChartVisit(referrer: string) {
   } catch {
     // Analytics must not depend on browser storage being available.
   }
-  recordShareEvent({ name: "Shared chart visited" });
+  recordShareEvent({ name: "Shared chart visited", entry });
 }
 
 export function sanitizeAnalyticsEvent(event: BeforeSendEvent, origin: string) {
@@ -103,15 +106,39 @@ export function sanitizeAnalyticsEvent(event: BeforeSendEvent, origin: string) {
 
 const COPY_ACTIVITY_KEY = "knitplot-club-copy-activity-v1";
 const COPY_ACTIVITY_TTL = 30 * 60 * 1000;
+const maxCopyMarkers = 8;
+type CopyMarker = { tabId: string; entry: ChartClubEntry; until: number };
+
+function copyMarkers(): CopyMarker[] {
+  const raw = window.sessionStorage.getItem(COPY_ACTIVITY_KEY);
+  if (!raw) return [];
+  const saved = JSON.parse(raw);
+  // Older clients stored one marker, without the surrounding list.
+  return (Array.isArray(saved) ? saved : [saved]).filter(
+    (marker) =>
+      typeof marker?.tabId === "string" &&
+      (marker.entry === "shared_link" || marker.entry === "chart_club") &&
+      typeof marker.until === "number" &&
+      marker.until > Date.now(),
+  );
+}
+
+function saveCopyMarkers(markers: CopyMarker[]) {
+  if (!markers.length) window.sessionStorage.removeItem(COPY_ACTIVITY_KEY);
+  else
+    window.sessionStorage.setItem(COPY_ACTIVITY_KEY, JSON.stringify(markers));
+}
 
 export function recordClubCopyOpened(tabId: string, entry: ChartClubEntry) {
   if (!canTrack()) return;
   recordShareEvent({ name: "Chart Club copy opened", entry });
   try {
-    window.sessionStorage.setItem(
-      COPY_ACTIVITY_KEY,
-      JSON.stringify({ tabId, entry, until: Date.now() + COPY_ACTIVITY_TTL }),
-    );
+    saveCopyMarkers([
+      ...copyMarkers()
+        .filter((item) => item.tabId !== tabId)
+        .slice(-(maxCopyMarkers - 1)),
+      { tabId, entry, until: Date.now() + COPY_ACTIVITY_TTL },
+    ]);
   } catch {
     // The editable copy still works if session storage is unavailable.
   }
@@ -120,17 +147,11 @@ export function recordClubCopyOpened(tabId: string, entry: ChartClubEntry) {
 export function recordClubCopyEdited(tabId: string) {
   if (!canTrack()) return;
   try {
-    const raw = window.sessionStorage.getItem(COPY_ACTIVITY_KEY);
-    if (!raw) return;
-    const marker = JSON.parse(raw);
-    if (Date.now() >= marker.until) {
-      window.sessionStorage.removeItem(COPY_ACTIVITY_KEY);
-      return;
-    }
-    if (marker.tabId !== tabId) return;
-    window.sessionStorage.removeItem(COPY_ACTIVITY_KEY);
-    if (marker.entry === "shared_link" || marker.entry === "chart_club")
-      recordShareEvent({ name: "Chart Club copy edited", entry: marker.entry });
+    const markers = copyMarkers();
+    const marker = markers.find((item) => item.tabId === tabId);
+    if (!marker) return;
+    saveCopyMarkers(markers.filter((item) => item !== marker));
+    recordShareEvent({ name: "Chart Club copy edited", entry: marker.entry });
   } catch {
     // An unreadable marker must not interfere with a chart edit.
   }

@@ -81,9 +81,11 @@ test("usage events are bounded, contain only coarse categories, and never block 
     recordSharedChartVisit("https://example.com/chat");
     recordSharedChartVisit("");
     recordClubCopyOpened("local-tab-not-for-analytics", "shared_link");
+    recordClubCopyOpened("second-local-tab", "chart_club");
     recordClubCopyEdited("another-tab");
     recordClubCopyEdited("local-tab-not-for-analytics");
     recordClubCopyEdited("local-tab-not-for-analytics");
+    recordClubCopyEdited("second-local-tab");
     recordShareEvent({
       name: "Share image downloaded",
       view: "sweater",
@@ -95,11 +97,14 @@ test("usage events are bounded, contain only coarse categories, and never block 
         "Chart link copied",
         "Shared chart visited",
         "Chart Club copy opened",
+        "Chart Club copy opened",
+        "Chart Club copy edited",
         "Chart Club copy edited",
         "Share image downloaded",
       ],
     );
     assert.match(JSON.stringify(events), /"entry":"shared_link"/);
+    assert.match(JSON.stringify(events), /"entry":"unlisted_link"/);
     assert.doesNotMatch(
       JSON.stringify(events),
       /local-tab|another-tab|example\.com/,

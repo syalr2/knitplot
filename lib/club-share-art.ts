@@ -12,6 +12,7 @@ import { fitsSweaterPhoto, renderSweaterPhoto } from "./yoke-photo-preview";
 const maxWidth = 1072;
 const maxHeight = 438;
 const fabricBackground = "#f8f6ef";
+const maxChartCoverCells = 120_000;
 
 type Stitch = {
   x: number;
@@ -28,7 +29,18 @@ function chartCover(
   cover: Extract<ClubCoverSettings, { kind: "chart" }>,
 ): Fabric {
   const mirror = cover.style === "mirrored";
-  const expanded = expandPreviewDocument(document, cover.across, mirror);
+  const cells = document.width * document.height;
+  // Keep the entire design. Drop duplicate tiles rather than crop a large
+  // chart or build hundreds of thousands of SVG elements for a small image.
+  const across = Math.min(
+    cover.across,
+    Math.max(1, Math.floor(maxChartCoverCells / cells)),
+  );
+  const down = Math.min(
+    cover.down,
+    Math.max(1, Math.floor(maxChartCoverCells / (cells * across))),
+  );
+  const expanded = expandPreviewDocument(document, across, mirror);
   const rows = layoutPreviewRows(expanded);
   const width = Math.max(1, ...rows.map((row) => row.width));
   const pitch = document.gaugeStitches / document.gaugeRows;
@@ -36,7 +48,7 @@ function chartCover(
   const palette = new Map(document.palette.map(({ id, hex }) => [id, hex]));
 
   function* stitches(): Generator<Stitch> {
-    for (let tile = 0; tile < cover.down; tile++) {
+    for (let tile = 0; tile < down; tile++) {
       for (const [index, row] of rows.entries()) {
         const displayRow = mirror && tile % 2 ? rows.length - 1 - index : index;
         for (const loop of row.loops) {
@@ -54,7 +66,7 @@ function chartCover(
     }
   }
 
-  return { width, height: cover.down * tileHeight, stitches: stitches() };
+  return { width, height: down * tileHeight, stitches: stitches() };
 }
 
 function yokeCover(

@@ -25,6 +25,21 @@ export const getPublicClubPost = cache(async (id: string) => {
   };
 });
 
+/** Always check publication state, even when the image artwork is cached. */
+export async function getPublicClubShareMetadata(id: string) {
+  const sql = getDatabase();
+  if (!sql || !isUuid(id)) return null;
+  const [post] = await sql`
+    select p.title, c.handle
+    from knitplot_club_public_posts p
+    join knitplot_club_creators c on c.user_id = p.creator_id
+    where p.id = ${id}::uuid
+  `;
+  return post
+    ? { title: post.title as string, handle: post.handle as string }
+    : null;
+}
+
 export async function getClubPostActivity(id: string, viewerId: string) {
   const sql = getDatabase();
   if (!sql || !isUuid(id)) return null;

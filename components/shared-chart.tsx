@@ -8,7 +8,10 @@ import type { ChartDocument } from "@/lib/chart";
 import { chartLinkFromHash } from "@/lib/chart-links";
 import { responseJson } from "@/lib/http";
 import { readProject } from "@/lib/project-file";
-import { recordSharedChartVisit } from "@/lib/usage-analytics";
+import {
+  recordClubCopyOpened,
+  recordSharedChartVisit,
+} from "@/lib/usage-analytics";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 
 const ChartViewer = dynamic(
@@ -85,7 +88,8 @@ export function SharedChart() {
           type="button"
           onClick={() => {
             try {
-              saveBrowserChartCopy(chart);
+              const tabId = saveBrowserChartCopy(chart);
+              recordClubCopyOpened(tabId, "shared_link");
               // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Reload the saved workspace.
               window.location.assign("/");
             } catch (error) {

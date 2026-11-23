@@ -121,6 +121,15 @@ test("cross-chart paste remaps yarns, preserves stitch dimensions and leaves gap
     [true, false],
     [false, true],
   ]);
+  const replacement = pasteChartSelection(target, anchor, "source", clip);
+  assert.equal(
+    replacement.document.cells[1][2],
+    replacement.document.palette[2].id,
+  );
+  assert.equal(
+    replacement.document.palette[2].hex,
+    next.document.palette[2].hex,
+  );
   assert.throws(
     () =>
       pasteChartSelection(

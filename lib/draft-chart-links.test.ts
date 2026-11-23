@@ -20,7 +20,11 @@ function fixture(rows: Record<string, unknown>[]) {
   const queries: { text: string; values: unknown[] }[] = [];
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     queries.push({ text: strings.join("?"), values });
-    return rows;
+    return rows.map((row) =>
+      row.outcome === "created"
+        ? { token: values[0], slug: values[4], ...row }
+        : row,
+    );
   };
   const database = () =>
     sql as unknown as NonNullable<
@@ -62,6 +66,45 @@ test("an unsaved chart creates a permanent snapshot without ownership metadata",
   assert.doesNotMatch(String(snapshot), /privateExtra/);
   assert.equal(size, Buffer.byteLength(String(snapshot)));
   assert.equal(slug, "unsaved");
+});
+
+test("a retried create retains the first token and canonical slug", async () => {
+  const key = "r".repeat(32);
+  const { handlers, queries } = fixture([
+    { outcome: "existing", token: "k8J4qX", slug: "first-chart" },
+  ]);
+  const result = await handlers.POST(
+    request({
+      document: { ...defaultDocument, name: "Renamed chart" },
+      confirmRights: true,
+      revokeToken: key,
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), {
+    token: "k8J4qX",
+    slug: "first-chart",
+  });
+  assert.equal(
+    queries[0].values[1],
+    createHash("sha256").update(key).digest("hex"),
+  );
+});
+
+test("recovery uses the private key without requiring a chart or workspace tab", async () => {
+  const key = "r".repeat(32);
+  const { handlers, queries } = fixture([
+    { token: "k8J4qX", slug: "first-chart" },
+  ]);
+  const result = await handlers.PATCH(request({ revokeToken: key }, "PATCH"));
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), {
+    token: "k8J4qX",
+    slug: "first-chart",
+  });
+  assert.deepEqual(queries[0].values, [
+    createHash("sha256").update(key).digest("hex"),
+  ]);
 });
 
 test("origin, rights and yoke consent are checked before writing", async () => {
@@ -117,8 +160,9 @@ test("a full store refuses new links and does not change how existing links open
     204,
   );
   assert.deepEqual(active.queries[1].values, [
-    token,
     createHash("sha256").update(revoke).digest("hex"),
+    token,
+    token,
   ]);
   assert.equal(
     (await fixture([]).open(request({ token, slug: "another-swatch" }))).status,

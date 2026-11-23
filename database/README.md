@@ -111,3 +111,36 @@ association. Admission has a hard ceiling of 10,000 live links and 256 MiB of
 chart payloads; it rejects new requests at capacity instead of deleting
 existing links. Monitor storage before raising the cap. Leave the table and
 function in place if rolling back the app.
+
+### Guest link recovery and limits (013)
+
+Apply 013 before deploying the recovery dialog. In the Vercel project, set
+`KNITPLOT_LINK_RATE_SECRET` to a server-only random value of at least 32
+characters (for example, generate using `openssl rand -hex 32`). The production
+guest endpoints fail closed on Vercel without it. Existing URLs and recovery
+keys are unchanged. No links are deleted or expired by the migration.
+
+The app uses [Vercel’s client address](https://vercel.com/docs/headers/request-headers#x-vercel-forwarded-for)
+to calculate a short-lived HMAC bucket
+for guest rate limits. It does not store the raw address. Expired buckets are
+removed opportunistically. Self-hosted sites should put their own rate limits
+in front of `/api/chart-links/draft` and `/api/chart-links/open`; the app does not
+trust forwarded address headers from arbitrary self-hosted proxies.
+
+Set a log alert for the structured warning `guest_link_capacity_warning`. It
+fires when usage crosses 80% of either limit; it contains no chart, address,
+or token. On a warning or a report that sharing is full, check aggregate usage:
+
+```sql
+select count(*) as active_links,
+       coalesce(sum(payload_bytes), 0) as active_payload_bytes
+from knitplot_draft_chart_links;
+```
+
+Guest links are permanent by policy. Do not bulk-delete old links. For an
+approved abuse removal or owner support request, have the database operator
+locate the exact, verified code and slug from the share URL; verify that only
+the intended row matches, then delete that row in a transaction with an
+explicit `RETURNING` check. Do not retrieve or log the document or recovery
+hash. If no removals are appropriate, review trends and the storage budget
+before changing either cap. Leave migration 013 in place on application rollback.

@@ -48,6 +48,8 @@ export type ConnectedFabric = {
   unresolvedRows: number[];
   inferredRows: number[];
   inputCountDecreaseRows: number[];
+  /** Upper bound on solver passes; zero means the aligned fast path was used. */
+  relaxationBudget?: number;
 };
 
 export function expandPreviewDocument(
@@ -340,14 +342,10 @@ export function settleConnectedFabric(
   // Neighbour and through-loop constraints act in the local fabric frame.
   // Unlike a rigid row, adjacent loops can rotate around one another. A bar
   // birth is supported between parents but does not consume either parent.
-  for (
-    let iteration = 0;
-    iteration <
-    (needsRelaxation
-      ? Math.min(iterationLimit, all.length < 6000 ? 2400 : 700)
-      : 0);
-    iteration++
-  ) {
+  const relaxationBudget = needsRelaxation
+    ? Math.min(iterationLimit, all.length < 6000 ? 2400 : 700)
+    : 0;
+  for (let iteration = 0; iteration < relaxationBudget; iteration++) {
     for (const n of all) {
       const a = n.left === undefined ? n : all[n.left],
         b = n.right === undefined ? n : all[n.right];
@@ -458,6 +456,7 @@ export function settleConnectedFabric(
     minY,
     width: maxX - minX,
     height: maxY - minY,
+    relaxationBudget,
     ...diagnostics,
   };
 }

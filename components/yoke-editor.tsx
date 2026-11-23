@@ -23,6 +23,7 @@ import { MAX_PALETTE_COLOURS, nextPaletteColour } from "@/lib/palette-colours";
 export function YokeEditor({
   document,
   onChange,
+  onDrawingEdit,
   onCreate,
   onStrokeStart,
   undo,
@@ -42,6 +43,7 @@ export function YokeEditor({
   onViewChange: (view: YokeView) => void;
   document: ChartDocument;
   onChange: (document: ChartDocument) => void;
+  onDrawingEdit: () => void;
   onCreate: (document: ChartDocument) => boolean;
   children?: ReactNode;
   onStrokeStart: () => void;
@@ -63,7 +65,7 @@ export function YokeEditor({
   const tools = useYokeTools(
     project,
     view,
-    change,
+    changeDrawing,
     stitchDraft.edits.length > 0,
   );
   const stitches = useYokeStitches(
@@ -74,6 +76,7 @@ export function YokeEditor({
     onStrokeStart,
     stitchDraft,
     onStitchDraftChange,
+    onDrawingEdit,
   );
   function beginStroke() {
     if (stitches.action) stitches.begin();
@@ -99,6 +102,10 @@ export function YokeEditor({
     if (remember) onStrokeStart();
     onChange(yokeDocument(next, document.name));
   }
+  function changeDrawing(next: YokeProject, remember = true) {
+    change(next, remember);
+    onDrawingEdit();
+  }
   const moveIncreaseUnavailable =
     view !== "chart"
       ? "Switch to Standard chart to move increases."
@@ -111,7 +118,7 @@ export function YokeEditor({
     tools.repeat,
     tools.scope,
     moving && !moveIncreaseUnavailable,
-    change,
+    changeDrawing,
   );
   return (
     <>
@@ -131,7 +138,7 @@ export function YokeEditor({
             });
           }}
           changePaletteColor={(id, hex) =>
-            change({
+            changeDrawing({
               ...project,
               palette: project.palette.map((old, i) =>
                 id === `yarn-${i}` ? hex : old,
@@ -171,11 +178,11 @@ export function YokeEditor({
                   }),
                 ),
               );
-              change(
+              changeDrawing(
                 withYokeProgram({ ...project, palette, paletteNames }, program),
               );
             } else
-              change({
+              changeDrawing({
                 ...project,
                 palette,
                 paletteNames,
@@ -498,6 +505,7 @@ export function YokeEditor({
           onApply={(next) => {
             onStrokeStart();
             onChange(next);
+            onDrawingEdit();
             tools.setSelection(null);
             stitches.discard();
           }}

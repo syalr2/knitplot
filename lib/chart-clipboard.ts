@@ -56,11 +56,13 @@ export function pasteChartSelection(
       if (remapped) return remapped;
       const source = sourceById.get(id);
       if (!source) throw new Error("Couldn’t find a copied colour.");
+      const sourceHex = source.hex.toLowerCase();
       const destination =
-        (!crossChart && palette.find((entry) => entry.id === id)) ||
-        palette.find(
-          (entry) => entry.hex.toLowerCase() === source.hex.toLowerCase(),
-        );
+        (!crossChart &&
+          palette.find(
+            (entry) => entry.id === id && entry.hex.toLowerCase() === sourceHex,
+          )) ||
+        palette.find((entry) => entry.hex.toLowerCase() === sourceHex);
       if (destination) {
         ids.set(id, destination.id);
         return destination.id;

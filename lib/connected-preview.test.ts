@@ -383,8 +383,8 @@ test("maximum-size plain and purl charts preserve an exact grid without expensiv
           ),
         }
       : doc;
-    const start = performance.now(),
-      f = connectedFabric(input, 3);
+    const f = connectedFabric(input, 3);
+    assert.equal(f.relaxationBudget, 0);
     assert.equal(f.loops.length, 90000);
     assert.deepEqual(f.unresolvedRows, []);
     for (const n of f.loops) {
@@ -392,11 +392,6 @@ test("maximum-size plain and purl charts preserve an exact grid without expensiv
       assert.equal(n.y, n.row * (20 / 24));
       assert.equal(n.span, 1);
     }
-    const elapsed = performance.now() - start;
-    assert.ok(
-      elapsed < 5000,
-      `flat chart layout should not run a multi-second relaxation (${Math.round(elapsed)} ms)`,
-    );
   }
 });
 

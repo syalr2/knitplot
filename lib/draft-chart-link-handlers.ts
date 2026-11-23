@@ -9,6 +9,7 @@ import {
 import { errorResponse, HttpError, readJsonObject } from "./http";
 import { hasValidRequestOrigin } from "./security/origin";
 import { stringifyKnitplot } from "./yoke-program-wire";
+import { limitGuestLink } from "./guest-link-rate-limit";
 
 const maxBytes = 4_000_000;
 const tooLarge =
@@ -37,8 +38,18 @@ export function createDraftChartLinkHandlers(database: typeof getDatabase) {
       const sql = database();
       if (!sql) return unavailable();
       try {
-        const { document, shareYokeMeasurements, confirmRights } =
-          await readJsonObject(request, { bytes: maxBytes, message: tooLarge });
+        await limitGuestLink(request, sql, "create");
+        const {
+          document,
+          shareYokeMeasurements,
+          confirmRights,
+          revokeToken: key,
+        } = await readJsonObject(request, {
+          bytes: maxBytes,
+          message: tooLarge,
+        });
+        if (key !== undefined && !isChartLinkToken(key))
+          return errorResponse("The link recovery key is invalid.", 400);
         if (confirmRights !== true)
           return errorResponse(
             "Confirm that you made this chart or have permission to share it.",
@@ -54,19 +65,28 @@ export function createDraftChartLinkHandlers(database: typeof getDatabase) {
         const size = Buffer.byteLength(snapshot);
         if (size > maxBytes) return errorResponse(tooLarge, 413);
         const slug = chartLinkSlug(chart.name);
-        const revokeToken = randomBytes(24).toString("base64url");
+        const revokeToken = key ?? randomBytes(24).toString("base64url");
         const revokeHash = digest(revokeToken);
         for (let attempt = 0; attempt < 4; attempt++) {
           const token = newCode();
           const [result] = await sql`
-            select knitplot_create_draft_chart_link(
+            select * from knitplot_admit_guest_link(
               ${token}, ${revokeHash}, ${snapshot}::jsonb, ${size}::integer, ${slug}
-            ) as outcome
+            )
           `;
-          if (result?.outcome === "created")
+          if (result?.capacity_warning)
+            console.warn("guest_link_capacity_warning", {
+              thresholdPercent: 80,
+            });
+          if (result?.outcome === "created" || result?.outcome === "existing")
             return Response.json(
-              { token, revokeToken },
-              { status: 201, headers: noStore },
+              key === undefined
+                ? { token: result.token, revokeToken }
+                : { token: result.token, slug: result.slug },
+              {
+                status: result.outcome === "created" ? 201 : 200,
+                headers: noStore,
+              },
             );
           if (result?.outcome === "full")
             return errorResponse(
@@ -83,21 +103,59 @@ export function createDraftChartLinkHandlers(database: typeof getDatabase) {
       }
     },
 
+    async PATCH(request: Request) {
+      if (!hasValidRequestOrigin(request))
+        return errorResponse("Invalid request origin.", 403);
+      const sql = database();
+      if (!sql) return unavailable();
+      try {
+        await limitGuestLink(request, sql, "manage");
+        const { revokeToken } = await readJsonObject(request, {
+          bytes: 512,
+          message: "The link details are too large.",
+        });
+        if (!isChartLinkToken(revokeToken))
+          return errorResponse("The link recovery key is invalid.", 400);
+        const [link] = await sql`
+          select token, slug from knitplot_draft_chart_links
+          where revoke_hash = ${digest(revokeToken)}
+        `;
+        return link
+          ? Response.json(
+              { token: link.token, slug: link.slug },
+              { headers: noStore },
+            )
+          : errorResponse(
+              "No active link was found for this recovery key.",
+              404,
+            );
+      } catch (error) {
+        return error instanceof HttpError
+          ? errorResponse(error.message, error.status)
+          : unavailable();
+      }
+    },
+
     async DELETE(request: Request) {
       if (!hasValidRequestOrigin(request))
         return errorResponse("Invalid request origin.", 403);
       const sql = database();
       if (!sql) return unavailable();
       try {
+        await limitGuestLink(request, sql, "manage");
         const { token, revokeToken } = await readJsonObject(request, {
           bytes: 512,
           message: "The link details are too large.",
         });
-        if (!isDraftChartLinkToken(token) || !isChartLinkToken(revokeToken))
+        if (
+          (token !== undefined && !isDraftChartLinkToken(token)) ||
+          !isChartLinkToken(revokeToken)
+        )
           return errorResponse("That chart link is invalid.", 400);
         const [link] = await sql`
           delete from knitplot_draft_chart_links
-          where token = ${token} and revoke_hash = ${digest(revokeToken)}
+          where revoke_hash = ${digest(revokeToken)} and
+            (${token ?? null}::text is null or token = ${token ?? null})
           returning token
         `;
         return link

@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { chartLinkUrl } from "@/lib/chart-links";
 import { responseJson } from "@/lib/http";
+import { recordShareEvent } from "@/lib/usage-analytics";
 
 const subscribe = () => () => {};
 const browserOrigin = () => window.location.origin;
@@ -65,6 +66,7 @@ export function ChartLinkManager({
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
+      recordShareEvent({ name: "Chart link copied", placement: "library" });
       setStatus("Link copied.");
     } catch {
       setStatus("Select and copy the link from the field.");

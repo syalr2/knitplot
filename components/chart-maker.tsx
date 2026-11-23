@@ -3,7 +3,8 @@ import "@/app/yoke-designer/yoke.css";
 
 import Link from "next/link";
 import { MAX_PALETTE_COLOURS, nextPaletteColour } from "@/lib/palette-colours";
-import { useChartActivity } from "./use-chart-activity";
+import { useChartEditorState } from "./use-chart-editor-state";
+import { recordClubCopyEdited, recordUsage } from "@/lib/usage-analytics";
 import { SharePreview } from "./share-preview";
 import { stringifyKnitplot } from "@/lib/yoke-program-wire";
 import { useSyncedDraft } from "@/components/use-synced-draft";
@@ -33,7 +34,6 @@ import {
 import { OnboardingTour } from "@/components/onboarding-tour";
 import { PatternChartImporter } from "@/components/pattern-chart-importer";
 import {
-  CellSelection,
   ChartDocument,
   cloneDocument,
   copyStitchCellColors,
@@ -55,7 +55,6 @@ import {
   stitchPaletteFromActions,
   StitchAction,
   StitchPaletteAction,
-  Tool,
 } from "@/lib/chart";
 import type { Viewer } from "@/lib/auth";
 import {
@@ -63,11 +62,7 @@ import {
   reduceSelectionEdit,
   type SelectionEdit,
 } from "@/lib/chart-selection";
-import {
-  copyChartSelection,
-  pasteChartSelection,
-  type ChartClipboard,
-} from "@/lib/chart-clipboard";
+import { copyChartSelection, pasteChartSelection } from "@/lib/chart-clipboard";
 import { cloudVersionToken } from "@/lib/cloud-revision";
 import {
   tutorialExampleDocument,
@@ -149,14 +144,39 @@ export function ChartMaker({
   }, [hasPendingYokeStitches]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const document = activeTab.document;
-  const [tool, setTool] = useState<Tool>("pencil");
-  const [structureAction, setStructureAction] = useState<StitchAction | null>(
-    null,
-  );
-  const [stitchPickerOpen, setStitchPickerOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState(
-    defaultDocument.palette[1].id,
-  );
+  const {
+    tool,
+    setTool,
+    structureAction,
+    setStructureAction,
+    stitchPickerOpen,
+    setStitchPickerOpen,
+    selectedColor,
+    setSelectedColor,
+    chartZoom,
+    setChartZoom,
+    selection,
+    setSelection,
+    selectionMode,
+    setSelectionMode,
+    selectionMenuOpen,
+    setSelectionMenuOpen,
+    selectionMenuRef,
+    selectionMenuButtonRef,
+    selectionClipboard,
+    setSelectionClipboard,
+    pasteError,
+    setPasteError,
+    pickingYarn,
+    setPickingYarn,
+    pickingElementBackground,
+    setPickingElementBackground,
+    extraElementBackgroundColours,
+    setExtraElementBackgroundColours,
+    selectingElement,
+    chooseDrawingTool,
+    resetChartEditor,
+  } = useChartEditorState();
   const [histories, setHistories] = useState<Record<string, TabHistory>>({
     [INITIAL_TAB_ID]: { past: [], future: [] },
   });
@@ -165,24 +185,7 @@ export function ChartMaker({
   >(() => ({ [INITIAL_TAB_ID]: tabs[0].document }));
   const preview = activeTab.preview;
   const previewDocument = previewDocuments[activeTabId] ?? document;
-  const [chartZoom, setChartZoom] = useState(100);
-  const [pickingYarn, setPickingYarn] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [selection, setSelection] = useState<CellSelection | null>(null);
-  const [selectionMode, setSelectionMode] = useState<"area" | "element">(
-    "area",
-  );
-  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
-  const [pickingElementBackground, setPickingElementBackground] =
-    useState(false);
-  const [extraElementBackgroundColours, setExtraElementBackgroundColours] =
-    useState<string[]>([]);
-  const selectingElement = tool === "select" && selectionMode === "element";
-  const selectionMenuRef = useRef<HTMLDivElement>(null);
-  const selectionMenuButtonRef = useRef<HTMLButtonElement>(null);
-  const [selectionClipboard, setSelectionClipboard] =
-    useState<ChartClipboard | null>(null);
-  const [pasteError, setPasteError] = useState("");
   const [knitModeOpen, setKnitModeOpen] = useState(false);
   const [newChartOpen, setNewChartOpen] = useState(false);
   const newChartMenuRef = useRef<HTMLDivElement>(null);
@@ -209,7 +212,6 @@ export function ChartMaker({
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [closingBusy, setClosingBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  useChartActivity(document, activeTabId, loaded, Boolean(viewer));
   const [cloudSaveState, setCloudSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
@@ -265,7 +267,7 @@ export function ChartMaker({
     }
     window.addEventListener("pointerdown", dismissOutside);
     return () => window.removeEventListener("pointerdown", dismissOutside);
-  }, [newChartOpen, selectionMenuOpen]);
+  }, [newChartOpen, selectionMenuOpen, selectionMenuRef, setSelectionMenuOpen]);
 
   const history = histories[activeTabId] ?? { past: [], future: [] };
   const past = history.past;
@@ -354,7 +356,7 @@ export function ChartMaker({
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [setSelectedColor]);
 
   const stitchPalette =
     document.stitchPalette ?? stitchPaletteFromActions(document.stitchActions);
@@ -374,6 +376,19 @@ export function ChartMaker({
     setDocument((current) => update(current));
   }
 
+  function recordDrawingEdit() {
+    recordClubCopyEdited(activeTabId);
+    recordUsage({
+      account: viewer ? "signed_in" : "guest",
+      chart_type: document.yoke ? "yoke" : "regular",
+    });
+  }
+
+  function commitDrawing(update: (current: ChartDocument) => ChartDocument) {
+    commit(update);
+    recordDrawingEdit();
+  }
+
   function undo() {
     if (!past.length) return;
     const next = travelHistory(history, document, "undo");
@@ -389,6 +404,16 @@ export function ChartMaker({
   }
 
   function paint(row: number, column: number, shouldFill: boolean) {
+    // Record intentional chart edits, without serializing all cells on every render.
+    const colorId = tool === "eraser" ? document.palette[0].id : selectedColor;
+    if (
+      structureAction
+        ? (document.stitchActions?.[row]?.[column] ?? "knit") !==
+          structureAction
+        : document.cells[row]?.[column] !== colorId ||
+          document.stitchCellColors?.[row]?.[column]
+    )
+      recordDrawingEdit();
     if (structureAction) {
       setDocument((current) => {
         if (shouldFill) {
@@ -423,7 +448,6 @@ export function ChartMaker({
       });
       return;
     }
-    const colorId = tool === "eraser" ? document.palette[0].id : selectedColor;
     setDocument((current) => {
       if (shouldFill) {
         return paintYarnCells(
@@ -491,6 +515,7 @@ export function ChartMaker({
             .document,
     );
     setSelection(next.selection);
+    recordDrawingEdit();
   }
 
   function fillSelection() {
@@ -522,7 +547,7 @@ export function ChartMaker({
         activeTabId,
         selectionClipboard,
       );
-      if (next.document !== document) commit(() => next.document);
+      if (next.document !== document) commitDrawing(() => next.document);
       setSelection(next.selection);
       chooseDrawingTool("select");
       setPasteError("");
@@ -535,14 +560,6 @@ export function ChartMaker({
 
   function moveSelection(rows: number, columns: number) {
     applySelectionEdit({ type: "move", rows, columns });
-  }
-
-  function chooseDrawingTool(next: Tool) {
-    setTool(next);
-    setStitchPickerOpen(false);
-    if (next === "eraser") setStructureAction(null);
-    setPickingYarn(false);
-    setPickingElementBackground(false);
   }
 
   function changeChartZoom(step: number) {
@@ -683,7 +700,7 @@ export function ChartMaker({
       transformSelection(direction);
       return;
     }
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       cells: flipGrid(current.cells, direction),
       stitchCellColors: flipGrid(copyStitchCellColors(current), direction),
@@ -701,7 +718,7 @@ export function ChartMaker({
     }
     if (document.width > MAX_CHART_ROWS || document.height > MAX_CHART_STITCHES)
       return;
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       width: current.height,
       height: current.width,
@@ -754,7 +771,7 @@ export function ChartMaker({
   function applyResize(mode: "canvas" | "scale") {
     if (!dimensionsValid || !dimensionsChanged) return;
     if (mode === "scale" && document.stitchActions) return;
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       width: draftWidth,
       height: draftHeight,
@@ -798,7 +815,8 @@ export function ChartMaker({
   }
 
   function changePaletteColor(id: string, hex: string) {
-    commit((current) => ({
+    if (document.palette.find((color) => color.id === id)?.hex === hex) return;
+    commitDrawing((current) => ({
       ...current,
       palette: current.palette.map((color) =>
         color.id === id ? { ...color, hex } : color,
@@ -859,18 +877,19 @@ export function ChartMaker({
   }
 
   function changeStitchColor(action: StitchPaletteAction, hex: string) {
-    commit((current) => recolourStitchType(current, action, hex));
+    commitDrawing((current) => recolourStitchType(current, action, hex));
     selectStitchAction(action);
   }
 
   function resetStitchColor(action: StitchPaletteAction) {
-    commit((current) => recolourStitchType(current, action, null));
+    commitDrawing((current) => recolourStitchType(current, action, null));
     selectStitchAction(action);
   }
 
   function removeColor(id: string) {
     if (document.palette.length <= 2 || id === document.palette[0].id) return;
     const backgroundId = document.palette[0].id;
+    if (document.cells.some((row) => row.includes(id))) recordDrawingEdit();
     commit((current) => ({
       ...current,
       palette: current.palette.filter((color) => color.id !== id),
@@ -882,7 +901,7 @@ export function ChartMaker({
   }
 
   function clearChart() {
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       cells: current.cells.map((row) => row.map(() => current.palette[0].id)),
     }));
@@ -891,7 +910,7 @@ export function ChartMaker({
   function importImage(palette: ChartDocument["palette"], cells: string[][]) {
     const width = cells[0]?.length ?? document.width;
     const height = cells.length;
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       width,
       height,
@@ -908,11 +927,7 @@ export function ChartMaker({
       },
     }));
     clampActiveKnitProgress(width, height);
-    setSelectedColor(palette[1]?.id ?? palette[0].id);
-    setTool("pencil");
-    setStructureAction(null);
-    setStitchPickerOpen(false);
-    setSelection(null);
+    resetChartEditor(palette);
   }
 
   function importPatternChart(
@@ -924,7 +939,7 @@ export function ChartMaker({
   ) {
     const width = cells[0]?.length ?? document.width;
     const height = cells.length;
-    commit((current) => ({
+    commitDrawing((current) => ({
       ...current,
       name: name?.trim() || current.name,
       width,
@@ -945,12 +960,7 @@ export function ChartMaker({
       guides: { ...current.guides, repeatWidth: width, repeatHeight: height },
     }));
     clampActiveKnitProgress(width, height);
-    setSelectedColor(palette[1]?.id ?? palette[0].id);
-    setTool("pencil");
-    setStructureAction(null);
-    setStitchPickerOpen(false);
-    setChartZoom(100);
-    setSelection(null);
+    resetChartEditor(palette);
   }
 
   function openProject(nextDocument: ChartDocument) {
@@ -960,29 +970,13 @@ export function ChartMaker({
       return;
     }
     commit(() => cloneDocument(nextDocument));
-    setSelectedColor(nextDocument.palette[1]?.id ?? nextDocument.palette[0].id);
-    setTool("pencil");
-    setStructureAction(null);
-    setStitchPickerOpen(false);
-    setChartZoom(100);
-    setSelection(null);
+    prepareTabView(nextDocument);
     clampActiveKnitProgress(nextDocument.width, nextDocument.height);
   }
 
   function prepareTabView(nextDocument: ChartDocument) {
-    setSelectedColor(nextDocument.palette[1]?.id ?? nextDocument.palette[0].id);
-    setTool("pencil");
-    setStructureAction(null);
-    setStitchPickerOpen(false);
-    setSelection(null);
-    setChartZoom(100);
+    resetChartEditor(nextDocument.palette);
     setResizeDialogOpen(false);
-    setSelectionMode("area");
-    setPickingElementBackground(false);
-    setPickingYarn(false);
-    setExtraElementBackgroundColours([]);
-    setSelectionMenuOpen(false);
-    setPasteError("");
   }
 
   function switchTab(id: string) {
@@ -1493,6 +1487,7 @@ export function ChartMaker({
               }
               document={document}
               onChange={setDocument}
+              onDrawingEdit={recordDrawingEdit}
               onCreate={addDocumentTab}
               onStrokeStart={rememberCurrent}
               undo={undo}

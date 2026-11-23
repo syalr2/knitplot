@@ -23,6 +23,7 @@ export function YokeTourScene({ scene }: { scene: YokeTourSceneName }) {
             <h2>{example.title} · tutorial preview</h2>
             <div className="workspace">
               <YokeEditor
+                onDrawingEdit={() => {}}
                 document={example.document}
                 view="chart"
                 onViewChange={noChange}

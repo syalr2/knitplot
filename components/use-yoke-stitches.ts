@@ -42,6 +42,7 @@ export function useYokeStitches(
   onRemember: () => void,
   draft: YokeStitchDraft,
   onDraftChange: (next: YokeStitchDraft) => void,
+  onDrawingEdit: () => void,
 ) {
   const project = document.yoke!;
   const program = useMemo(() => yokeProgramFromProject(project), [project]);
@@ -156,6 +157,7 @@ export function useYokeStitches(
         );
         onRemember();
         onChange(next);
+        onDrawingEdit();
       } else {
         const combined = new Map(
           draft.edits.map((edit) => [

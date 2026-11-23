@@ -443,6 +443,17 @@ test(
       const { token, revokeToken } = await create.json();
       const slug = "friend-swatch";
       assert.match(token, /^[A-Za-z0-9]{6}$/);
+      const retry = await draft.POST(
+        request({
+          document: { ...defaultDocument, name: "New title" },
+          confirmRights: true,
+          revokeToken,
+        }),
+      );
+      assert.equal(retry.status, 200);
+      assert.deepEqual(await retry.json(), { token, slug });
+      const recovered = await draft.PATCH(request({ revokeToken }, "PATCH"));
+      assert.deepEqual(await recovered.json(), { token, slug });
       await client.query(
         "update knitplot_draft_chart_links set created_at = now() - interval '10 years' where token = $1",
         [token],
@@ -470,6 +481,38 @@ test(
         204,
       );
       assert.equal((await guest.open(request({ token, slug }))).status, 404);
+    } finally {
+      await client.query("rollback");
+      await client.end();
+    }
+  },
+);
+
+test(
+  "guest link limits cap a bucket, without sharing counts across clients",
+  { skip: !connectionString },
+  async () => {
+    const client = new pg.Client({ connectionString });
+    await client.connect();
+    try {
+      await client.query("begin");
+      const key = randomUUID();
+      async function take(bucket) {
+        const { rows } = await client.query(
+          "select knitplot_take_guest_link_request($1, 2, 300) as allowed",
+          [bucket],
+        );
+        return rows[0].allowed;
+      }
+      assert.equal(await take(key), true);
+      assert.equal(await take(key), true);
+      assert.equal(await take(key), false);
+      assert.equal(await take(randomUUID()), true);
+      await client.query(
+        "update knitplot_guest_link_limits set expires_at = now() - interval '1 minute' where bucket = $1",
+        [key],
+      );
+      assert.equal(await take(key), true);
     } finally {
       await client.query("rollback");
       await client.end();

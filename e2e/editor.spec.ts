@@ -168,7 +168,7 @@ test("the File menu lets a signed-out editor share an unsaved chart", async ({
   page,
 }) => {
   const token = "k8J4qX";
-  const revokeToken = "b".repeat(32);
+  let revokeToken: string;
   let active = false;
   await page.route("**/api/chart-links/draft", (route) => {
     const payload = route.request().postDataJSON();
@@ -176,10 +176,12 @@ test("the File menu lets a signed-out editor share an unsaved chart", async ({
       expect(payload.document.name).toBe("Unsaved swatch");
       expect(payload.confirmRights).toBe(true);
       expect(payload.sourceId).toBeUndefined();
+      expect(payload.revokeToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+      revokeToken = payload.revokeToken;
       active = true;
       return route.fulfill({
         status: 201,
-        json: { token, revokeToken },
+        json: { token, slug: "unsaved-swatch" },
       });
     }
     expect(payload).toEqual({ token, revokeToken });
@@ -228,6 +230,76 @@ test("the File menu lets a signed-out editor share an unsaved chart", async ({
     .click();
   await expect(dialog.getByRole("status")).toHaveText("Link turned off.");
   expect(active).toBe(false);
+});
+
+test("a lost guest-link response can be recovered from another chart or a private file", async ({
+  page,
+}) => {
+  const token = "k8J4qX";
+  const slug = "recovery-swatch";
+  let key = "";
+  await page.route("**/api/chart-links/draft", async (route) => {
+    const request = route.request();
+    const payload = request.postDataJSON();
+    if (request.method() === "POST") {
+      key = payload.revokeToken;
+      const savedKey = await page.evaluate(() =>
+        Object.keys(localStorage).find((key) =>
+          key.startsWith("knitplot-guest-link-v2:"),
+        ),
+      );
+      expect(savedKey).toBe("knitplot-guest-link-v2:" + key);
+      await route.abort();
+      return;
+    }
+    expect(payload.revokeToken).toBe(key);
+    return route.fulfill({ json: { token, slug } });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("textbox", { name: "Chart name" })
+    .fill("Recovery swatch");
+  async function open() {
+    await page.getByRole("button", { name: "File", exact: true }).click();
+    await page
+      .getByRole("menuitem", { name: "Share a link", exact: true })
+      .click();
+    return page.getByRole("dialog", { name: "Share a link" });
+  }
+  let dialog = await open();
+  await dialog.getByRole("checkbox", { name: /permission/ }).check();
+  await dialog.getByRole("button", { name: "Create link" }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close share link" }).click();
+  await page.getByRole("button", { name: "+ New chart", exact: true }).click();
+  await page.getByRole("button", { name: "Blank chart", exact: true }).click();
+  dialog = await open();
+  await dialog.getByText("Manage links", { exact: true }).click();
+  await dialog
+    .getByLabel("Links from this browser")
+    .selectOption({ label: "Recovery swatch (pending)" });
+  await dialog.getByRole("button", { name: "Check pending link" }).click();
+  await expect(
+    dialog.getByRole("textbox", { name: "Unlisted chart link" }),
+  ).toHaveValue(new RegExp(`#${slug}~${token}$`));
+  const downloaded = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Download recovery file" }).click();
+  const payload = await readFile((await (await downloaded).path())!);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  dialog = await open();
+  await dialog.getByText("Manage links", { exact: true }).click();
+  await dialog
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "link.json",
+      mimeType: "application/json",
+      buffer: payload,
+    });
+  await expect(dialog.getByRole("status")).toHaveText("Link recovered.");
+  await expect(
+    dialog.getByRole("textbox", { name: "Unlisted chart link" }),
+  ).toHaveValue(new RegExp(`#${slug}~${token}$`));
 });
 
 test("a guest can open an unlisted snapshot without publishing or exposing the link in a request URL", async ({

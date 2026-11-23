@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { clubShareLink } from "@/lib/club-share-link";
-import { recordShareEvent } from "@/lib/usage-analytics";
+import {
+  recordShareEvent,
+  recordSharedChartVisit,
+} from "@/lib/usage-analytics";
 
 export function ClubCopyLink({
   id,
@@ -20,7 +23,7 @@ export function ClubCopyLink({
   useEffect(() => {
     if (!sharedVisit || trackedVisit.current === id) return;
     trackedVisit.current = id;
-    recordShareEvent({ name: "Shared chart visited" });
+    recordSharedChartVisit(document.referrer, "chart_club_link");
   }, [id, sharedVisit]);
 
   async function copyLink() {

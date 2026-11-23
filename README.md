@@ -99,7 +99,7 @@ KnitPlot uses Clerk for optional accounts and Neon Postgres for private chart st
 - The same controls apply to sharing events: link copied, visit via a copied link, editable copy opened, first edit of that copy within 30 minutes, and share-image download initiated. The events use coarse labels such as the preview view and whether credit was included. They do not record where a link or image is shared.
 - These are activity counts, not a census of distinct knitters. Opening or restoring a chart does not count as editing; browser-local autosaves are not reported. A download event cannot confirm that the user ultimately kept the file. Blockers and offline use can cause undercounting. Custom events require a Vercel plan that supports them.
 - Chart Club is explicitly opt-in. Sharing publishes a separate chart snapshot, your chosen cover and post details, and your public creator profile. Your private library stays private. Review the sharing form before publishing, including whether to include yoke measurements.
-- **File → Export → Share a link** makes an unlisted snapshot of the open chart without an account or a cloud save. Links include the chart name and a six-character code. They don’t expire automatically; return to that chart tab in the same browser to turn its link off. **My Charts** also offers links tied to saved charts. Neither option posts to Chart Club; anyone with either link can open or download an editable copy without signing in. Don’t use these links for charts or measurements you want to keep private.
+- **File → Export → Share a link** makes an unlisted snapshot of the open chart without an account or a cloud save. Links include the chart name and a six-character code. They don’t expire automatically. Use **Manage links** from any chart in the same browser to turn a link off, or download a private recovery file and keep it somewhere safe. **My Charts** also offers links tied to saved charts. Neither option posts to Chart Club; anyone with either link can open or download an editable copy without signing in. Don’t use these links for charts or measurements you want to keep private, and never share your recovery file.
 
 Browser storage is convenient, but it is not a backup. Download important charts as `.knitplot` files.
 
@@ -118,6 +118,9 @@ Run all checks with:
 ```bash
 npm run check
 ```
+
+To measure chart layout on your machine without a CI timing assertion, run
+`node --import tsx scripts/benchmark-chart-layout.ts`.
 
 ## Contributing
 
