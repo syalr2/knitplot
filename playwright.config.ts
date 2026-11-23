@@ -37,7 +37,10 @@ export default defineConfig({
       command: "npm run start -- --hostname 127.0.0.1 --port 3108",
       url: "http://127.0.0.1:3108",
       reuseExistingServer: false,
-      env: isolatedEnvironment,
+      env: {
+        ...isolatedEnvironment,
+        KNITPLOT_FEEDBACK_FORM_ID: "feedbackTest",
+      },
     },
     {
       command: "npx next dev e2e/harness --hostname 127.0.0.1 --port 3109",

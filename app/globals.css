@@ -73,18 +73,35 @@ button {
 }
 
 .support-footer {
+  align-items: center;
   border-top: 1px solid var(--line-soft);
   color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
   font-size: 12px;
+  gap: 12px 24px;
   line-height: 1.6;
   padding: 20px 24px;
-  text-align: right;
 }
 .support-footer p {
   margin: 0;
 }
-.support-footer p + p {
-  margin-top: 4px;
+.support-footer-note {
+  margin-inline-start: auto;
+  text-align: end;
+}
+.support-footer > .feedback-trigger {
+  color: var(--accent-deep);
+  font: inherit;
+  min-height: 36px;
+  padding: 6px 12px;
+}
+@media (max-width: 520px) {
+  .support-footer-note {
+    margin-inline-start: 0;
+    text-align: start;
+    width: 100%;
+  }
 }
 .support-footer a {
   color: var(--accent-deep);
@@ -3737,6 +3754,80 @@ select:focus {
 }
 .share-preview-dialog::backdrop {
   background: rgb(30 29 23 / 45%);
+}
+.feedback-dialog {
+  background: var(--panel);
+  box-shadow: 0 14px 44px rgb(47 41 30 / 16%);
+  font-family: var(--font-ui);
+  line-height: 1.45;
+  max-height: 90dvh;
+  padding: clamp(16px, 4vw, 24px);
+  text-align: start;
+  width: min(92vw, 440px);
+}
+.feedback-dialog .share-preview-heading button {
+  flex: none;
+  font: 18px/1 var(--font-ui);
+  min-width: 34px;
+  padding: 4px;
+}
+.support-footer .feedback-dialog p {
+  color: var(--accent-deep);
+  font-size: 13px;
+  margin-block: 8px 16px;
+}
+.support-footer .feedback-dialog p[role="alert"] {
+  color: #8d443a;
+  margin-block: 10px 0;
+}
+.support-footer .feedback-dialog p[role="status"] {
+  margin-block: 10px 0;
+}
+.feedback-dialog .feedback-fields {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.share-preview-dialog .feedback-fields label {
+  display: grid;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 5px;
+}
+.feedback-field-hint {
+  color: var(--accent-deep);
+  font-weight: 400;
+}
+.feedback-fields :is(input, textarea, select) {
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font: 400 14px/1.4 var(--font-ui);
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+.feedback-fields :is(input, textarea, select):focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent-soft);
+}
+@media (max-width: 600px) {
+  .feedback-fields :is(input, textarea, select) {
+    font-size: 16px;
+  }
+}
+.feedback-fields textarea {
+  resize: vertical;
+}
+.feedback-fields button {
+  font: 600 13px/1.4 var(--font-ui);
+  justify-self: start;
+  min-height: 38px;
 }
 .share-preview-dialog canvas {
   display: block;

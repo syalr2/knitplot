@@ -26,6 +26,59 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("a guest can send feedback from the footer and retry without losing their message", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route("https://formspree.io/f/feedbackTest", (route) => {
+    const request = route.request();
+    requests += 1;
+    expect(request.method()).toBe("POST");
+    expect(request.headers().accept).toBe("application/json");
+    expect(request.postData()).toContain("Bug report");
+    expect(request.postData()).toContain("The stitch preview is blank.");
+    return route.fulfill({
+      headers: { "access-control-allow-origin": "*" },
+      status: requests === 1 ? 503 : 200,
+      json: { ok: requests > 1 },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const footer = page.locator(".support-footer");
+  await expect(
+    footer.getByRole("link", { name: "buy me a coffee" }),
+  ).toBeVisible();
+  const trigger = footer.getByRole("button", {
+    name: "Request a feature or give feedback",
+  });
+  await trigger.click();
+  const form = page.getByRole("dialog", { name: "KnitPlot feedback" });
+  const message = form.getByRole("textbox", { name: "Message" });
+  const submit = form.getByRole("button", { name: "Send feedback" });
+  await form.getByLabel("Topic").selectOption("Bug report");
+  await message.fill("   ");
+  await submit.click();
+  await expect(form.getByRole("alert")).toHaveText(
+    "Enter a message before sending.",
+  );
+  expect(requests).toBe(0);
+  await message.fill("The stitch preview is blank.");
+  await submit.click();
+  await expect(form.getByRole("alert")).toContainText(
+    "Couldn’t send your feedback",
+  );
+  await expect(message).toHaveValue("The stitch preview is blank.");
+  await submit.click();
+  await expect(form.getByRole("status")).toHaveText("Thanks for the feedback!");
+  await expect(message).toHaveValue("");
+  await expect(page).toHaveURL("/");
+  expect(requests).toBe(2);
+  await page.keyboard.press("Escape");
+  await expect(form).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+});
+
 test("a guest can preview and download an uncredited share image without posting", async ({
   page,
 }) => {

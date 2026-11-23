@@ -89,6 +89,7 @@ import { tabSnapshot, workspaceSave } from "@/lib/workspace";
 import { samePreviewFabric } from "@/lib/preview-freshness";
 import { useLocalWorkspace } from "@/components/use-local-workspace";
 import { useCloudRecovery } from "@/components/use-cloud-recovery";
+import { FeedbackForm } from "@/components/feedback-form";
 
 type RepeatStyle = "normal" | "mirrored";
 type SelectionClipboard = SelectionBlock & { tabId: string };
@@ -99,12 +100,14 @@ function clamp(value: number, min: number, max: number) {
 type ChartMakerProps = {
   viewer: Viewer | null;
   accountsEnabled: boolean;
+  feedbackFormId?: string;
   localTestChart?: ChartDocument;
 };
 
 export function ChartMaker({
   viewer,
   accountsEnabled,
+  feedbackFormId,
   localTestChart,
 }: ChartMakerProps) {
   const [tabs, setTabs] = useState<ChartTab[]>([
@@ -1715,20 +1718,19 @@ export function ChartMaker({
 
       {!knitModeOpen ? (
         <footer className="support-footer">
-          <p>
-            I am committed to keeping KnitPlot completely free and open source.
-          </p>
-          <p>
-            If you’re enjoying it, you can{" "}
-            <a
-              href="https://ko-fi.com/syalr2"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              buy me a coffee <span aria-hidden="true">☕</span>
-            </a>
-            .
-          </p>
+          {feedbackFormId && <FeedbackForm formId={feedbackFormId} />}
+          <div className="support-footer-note">
+            <p>KnitPlot is free and open source.</p>
+            <p>
+              <a
+                href="https://ko-fi.com/syalr2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                buy me a coffee <span aria-hidden="true">☕</span>
+              </a>
+            </p>
+          </div>
         </footer>
       ) : null}
 
