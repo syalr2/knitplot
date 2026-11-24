@@ -289,13 +289,11 @@ test("a lost guest-link response can be recovered from another chart or a privat
   await page.reload();
   dialog = await open();
   await dialog.getByText("Manage links", { exact: true }).click();
-  await dialog
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "link.json",
-      mimeType: "application/json",
-      buffer: payload,
-    });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "link.json",
+    mimeType: "application/json",
+    buffer: payload,
+  });
   await expect(dialog.getByRole("status")).toHaveText("Link recovered.");
   await expect(
     dialog.getByRole("textbox", { name: "Unlisted chart link" }),
